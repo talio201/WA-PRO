@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="pt-BR">
+
+<head>
+  <meta charset="UTF-8" />
+  <title>EmidiaWhats</title>
+  <link rel="stylesheet" href="css/dashboard.css">
+  <style>
+    body {
+      margin: 0;
+      width: 340px;
+      color: var(--text-main);
+      background: var(--bg-app);
+    }
+
+    h1 {
+      font-size: 14px;
+      margin: 0;
+      letter-spacing: -0.02em;
+    }
+
+    .popup-wrap {
+      padding: 14px;
+    }
+
+    textarea {
+      width: 100%;
+      box-sizing: border-box;
+      margin-top: 10px;
+      height: 140px;
+      font-size: 12px;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      padding: 10px;
+      background: var(--bg-card);
+      color: var(--text-main);
+    }
+
+    .row {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .small {
+      font-size: 12px;
+      color: #475569;
+      margin-top: 4px;
+    }
+
+    .ok {
+      color: #15803d;
+      font-weight: 600;
+    }
+
+    .err {
+      color: #b91c1c;
+      font-weight: 600;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="popup-wrap">
+    <div class="row" style="justify-content: space-between;">
+      <h1>EmidiaWhats</h1>
+      <span id="status" class="small"></span>
+    </div>
+
+    <p class="small">1. Abra <strong>web.whatsapp.com</strong> na aba ativa.<br>2. Clique em <strong>Extrair contatos</strong>.</p>
+
+    <div class="row" style="margin-top: 10px;">
+      <button class="btn btn-sm btn-primary" id="extractBtn" style="flex: 1;">Extrair contatos (+55)</button>
+    </div>
+
+    <textarea id="output" placeholder="Resultado CONTATOS_EXTRAIDOS aparecerá aqui"></textarea>
+
+    <div class="row" style="margin-top: 10px;">
+      <button class="btn btn-sm btn-secondary" id="copyBtn" disabled style="flex: 1;">Copiar</button>
+      <button class="btn btn-sm btn-secondary" id="downloadBtn" disabled style="flex: 1;">Baixar JSON</button>
+    </div>
+
+    <p class="small">Dica: use o painel (Atendimentos/Campanhas) para operar direto pelo WhatsApp Web real.</p>
+  </div>
+  <script src="popup.js"></script>
+</body>
+
+</html>
