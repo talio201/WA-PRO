@@ -1,0 +1,38 @@
+{
+    "manifest_version": 3,
+    "name": "WhatsApp Campaign Manager",
+    "version": "1.0",
+    "description": "Automação humana de controle de campanhas para WhatsApp.",
+    "permissions": [
+        "alarms",
+        "storage",
+        "activeTab",
+        "scripting",
+        "tabs"
+    ],
+    "host_permissions": [
+        "*://web.whatsapp.com/*",
+        "http://localhost/*",
+        "http://127.0.0.1/*"
+    ],
+    "background": {
+        "service_worker": "src/background/index.js",
+        "type": "module"
+    },
+    "content_scripts": [
+        {
+            "matches": [
+                "*://web.whatsapp.com/*"
+            ],
+            "js": [
+                "src/content/index.js"
+            ],
+            "run_at": "document_idle"
+        }
+    ],
+    "action": {
+        "default_popup": "index.html",
+        "default_title": "Campaign Manager"
+    },
+    "options_page": "options.html"
+}

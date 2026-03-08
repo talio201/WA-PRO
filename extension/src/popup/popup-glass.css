@@ -1,0 +1,230 @@
+﻿.popup-glass-root {
+  position: relative;
+  min-height: 420px;
+  padding: 10px;
+  color: #1b1f2c;
+  overflow: hidden;
+  font-family: "Avenir Next", "SF Pro Display", "Segoe UI Variable", "Segoe UI", sans-serif;
+}
+
+.popup-glass-ambient {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.popup-blob {
+  position: absolute;
+  border-radius: 999px;
+  filter: blur(70px);
+  opacity: 0.72;
+}
+
+.popup-blob-a {
+  width: 240px;
+  height: 240px;
+  top: -90px;
+  left: -40px;
+  background: radial-gradient(circle at center, rgba(107, 193, 255, 0.62) 0%, rgba(107, 193, 255, 0.14) 72%);
+}
+
+.popup-blob-b {
+  width: 260px;
+  height: 260px;
+  bottom: -140px;
+  right: -70px;
+  background: radial-gradient(circle at center, rgba(149, 132, 255, 0.58) 0%, rgba(149, 132, 255, 0.12) 75%);
+}
+
+.popup-shell {
+  position: relative;
+  z-index: 1;
+  border: 1px solid rgba(255, 255, 255, 0.58);
+  background: rgba(255, 255, 255, 0.58);
+  backdrop-filter: blur(22px);
+  -webkit-backdrop-filter: blur(22px);
+  border-radius: 20px;
+  box-shadow: 0 22px 45px -32px rgba(15, 23, 42, 0.85);
+  padding: 14px;
+}
+
+.popup-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 10px;
+}
+
+.popup-header h1 {
+  margin: 0;
+  font-size: 18px;
+  letter-spacing: -0.02em;
+}
+
+.popup-header p {
+  margin: 2px 0 0;
+  font-size: 11px;
+  color: #59617a;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.popup-icon-btn {
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.75);
+  background: rgba(255, 255, 255, 0.65);
+  color: #47506a;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.popup-icon-btn:hover {
+  background: rgba(255, 255, 255, 0.9);
+}
+
+.popup-runtime-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 999px;
+  padding: 5px 10px;
+  font-size: 11px;
+  font-weight: 700;
+  border: 1px solid rgba(255, 255, 255, 0.7);
+}
+
+.popup-runtime-badge.is-online {
+  background: rgba(52, 199, 89, 0.15);
+  color: #146b25;
+  border-color: rgba(52, 199, 89, 0.34);
+}
+
+.popup-runtime-badge.is-connecting {
+  background: rgba(14, 165, 233, 0.15);
+  color: #0c5f84;
+  border-color: rgba(14, 165, 233, 0.3);
+}
+
+.popup-runtime-badge.is-offline {
+  background: rgba(245, 158, 11, 0.13);
+  color: #8f4c0d;
+  border-color: rgba(245, 158, 11, 0.3);
+}
+
+.pulse-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.9;
+  animation: popupPulse 1.7s ease-in-out infinite;
+}
+
+@keyframes popupPulse {
+  0%,
+  100% {
+    transform: scale(0.9);
+    opacity: 0.55;
+  }
+
+  50% {
+    transform: scale(1.2);
+    opacity: 1;
+  }
+}
+
+.popup-main {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.popup-card {
+  border: 1px solid rgba(255, 255, 255, 0.68);
+  background: rgba(255, 255, 255, 0.62);
+  border-radius: 14px;
+  padding: 10px;
+}
+
+.popup-card-hero {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: center;
+}
+
+.popup-card h2 {
+  margin: 3px 0;
+  font-size: 16px;
+}
+
+.popup-card strong {
+  font-size: 20px;
+  color: #1e2538;
+}
+
+.muted {
+  margin: 0;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #5f6780;
+}
+
+.small-muted {
+  margin: 0;
+  font-size: 11px;
+  color: #5f6780;
+}
+
+.popup-primary-btn {
+  border: none;
+  border-radius: 12px;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 10px 12px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.popup-primary-btn.start {
+  background: linear-gradient(135deg, #007aff 0%, #5856d6 100%);
+}
+
+.popup-primary-btn.stop {
+  background: linear-gradient(135deg, #ff453a 0%, #ff2d55 100%);
+}
+
+.popup-grid {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.popup-secondary-btn {
+  border: 1px solid rgba(255, 255, 255, 0.72);
+  background: rgba(255, 255, 255, 0.62);
+  border-radius: 12px;
+  padding: 10px 12px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #3e4862;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  cursor: pointer;
+}
+
+.popup-secondary-btn:hover {
+  background: rgba(255, 255, 255, 0.86);
+}

@@ -1,0 +1,465 @@
+@import "tailwindcss";
+@source "./**/*.{js,jsx,ts,tsx}";
+@source "../index.html";
+@source "../options.html";
+
+:root {
+  --glass-bg: rgba(255, 255, 255, 0.58);
+  --glass-bg-strong: rgba(255, 255, 255, 0.78);
+  --glass-bg-dark: rgba(19, 24, 39, 0.68);
+  --glass-border: rgba(255, 255, 255, 0.52);
+  --glass-border-dark: rgba(255, 255, 255, 0.16);
+  --glass-shadow: 0 18px 45px -30px rgba(15, 23, 42, 0.85);
+  --accent-solid: #007aff;
+  --accent-gradient: linear-gradient(135deg, #007aff 0%, #5856d6 100%);
+  --ok-color: #34c759;
+  --warn-color: #f59e0b;
+  --danger-color: #ff3b30;
+}
+
+body {
+  margin: 0;
+  font-family: "SF Pro Display", "Avenir Next", "Segoe UI Variable", "Segoe UI", sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body.popup-glass-body {
+  min-width: 360px;
+  min-height: 420px;
+  overflow: hidden;
+}
+
+code {
+  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
+    monospace;
+}
+
+/* Custom Scrollbar for Sidebar */
+aside::-webkit-scrollbar {
+  width: 6px;
+}
+aside::-webkit-scrollbar-track {
+  background: #0f172a; 
+}
+aside::-webkit-scrollbar-thumb {
+  background: #334155; 
+  border-radius: 3px;
+}
+aside::-webkit-scrollbar-thumb:hover {
+  background: #475569; 
+}
+
+.campaigns-page {
+  position: relative;
+  isolation: isolate;
+}
+
+.campaigns-page--glass::before,
+.campaigns-page--glass::after {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  pointer-events: none;
+  border-radius: 9999px;
+  filter: blur(70px);
+  opacity: 0.55;
+}
+
+.campaigns-page--glass::before {
+  width: 340px;
+  height: 340px;
+  top: -110px;
+  right: -100px;
+  background: radial-gradient(circle at center, #6ee7b7 0%, rgba(110, 231, 183, 0.08) 68%);
+}
+
+.campaigns-page--glass::after {
+  width: 360px;
+  height: 360px;
+  left: -120px;
+  bottom: -160px;
+  background: radial-gradient(circle at center, #93c5fd 0%, rgba(147, 197, 253, 0.08) 68%);
+}
+
+.campaigns-page--glass .campaigns-table tbody tr {
+  transition: background-color 0.2s ease;
+}
+
+.campaigns-page--glass .campaigns-table tbody tr:hover {
+  background: rgba(255, 255, 255, 0.45);
+}
+
+.contacts-page {
+  position: relative;
+  isolation: isolate;
+}
+
+.contacts-page--glass::before,
+.contacts-page--glass::after {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  pointer-events: none;
+  border-radius: 9999px;
+  filter: blur(72px);
+  opacity: 0.52;
+}
+
+.contacts-page--glass::before {
+  width: 300px;
+  height: 300px;
+  top: -90px;
+  right: -110px;
+  background: radial-gradient(circle at center, rgba(59, 130, 246, 0.64) 0%, rgba(59, 130, 246, 0.08) 70%);
+}
+
+.contacts-page--glass::after {
+  width: 340px;
+  height: 340px;
+  bottom: -180px;
+  left: -110px;
+  background: radial-gradient(circle at center, rgba(52, 211, 153, 0.62) 0%, rgba(52, 211, 153, 0.08) 70%);
+}
+
+.contacts-panel {
+  border-radius: 24px;
+  border: 1px solid rgba(255, 255, 255, 0.62);
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.74) 0%, rgba(255, 255, 255, 0.5) 100%);
+  box-shadow: 0 24px 52px -38px rgba(15, 23, 42, 0.85);
+  backdrop-filter: blur(22px);
+  -webkit-backdrop-filter: blur(22px);
+}
+
+.contacts-eyebrow {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: rgba(5, 150, 105, 0.9);
+}
+
+.contacts-stat-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 9999px;
+  border: 1px solid rgba(16, 185, 129, 0.22);
+  background: rgba(255, 255, 255, 0.78);
+  padding: 7px 12px;
+  font-size: 12px;
+  font-weight: 700;
+  color: rgb(6, 95, 70);
+}
+
+.contacts-refresh-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 9999px;
+  border: 1px solid rgba(255, 255, 255, 0.72);
+  background: rgba(255, 255, 255, 0.72);
+  padding: 7px 12px;
+  font-size: 12px;
+  font-weight: 700;
+  color: rgb(51, 65, 85);
+  transition: all 0.2s ease;
+  backdrop-filter: blur(10px);
+}
+
+.contacts-refresh-button:hover {
+  background: rgba(255, 255, 255, 0.96);
+  transform: translateY(-1px);
+}
+
+.contacts-realtime {
+  border: 1px solid transparent;
+}
+
+.contacts-realtime--connected {
+  border-color: rgba(16, 185, 129, 0.25);
+  background: rgba(16, 185, 129, 0.14);
+  color: rgb(6, 95, 70);
+}
+
+.contacts-realtime--connecting {
+  border-color: rgba(14, 165, 233, 0.27);
+  background: rgba(14, 165, 233, 0.14);
+  color: rgb(12, 74, 110);
+}
+
+.contacts-realtime--fallback {
+  border-color: rgba(245, 158, 11, 0.3);
+  background: rgba(245, 158, 11, 0.14);
+  color: rgb(120, 53, 15);
+}
+
+.contacts-filter-chip {
+  border-radius: 9999px;
+  border: 1px solid rgba(255, 255, 255, 0.64);
+  background: rgba(255, 255, 255, 0.66);
+  padding: 7px 13px;
+  font-size: 12px;
+  font-weight: 700;
+  color: rgb(51, 65, 85);
+  transition: all 0.2s ease;
+  backdrop-filter: blur(8px);
+}
+
+.contacts-filter-chip:hover {
+  background: rgba(255, 255, 255, 0.9);
+}
+
+.contacts-filter-chip--active {
+  border-color: rgba(16, 185, 129, 0.44);
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.92) 0%, rgba(5, 150, 105, 0.94) 100%);
+  color: #fff;
+  box-shadow: 0 12px 24px -16px rgba(16, 185, 129, 0.78);
+}
+
+.contacts-search-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border-radius: 13px;
+  border: 1px solid rgba(255, 255, 255, 0.66);
+  background: rgba(255, 255, 255, 0.68);
+  padding: 8px 12px;
+  color: rgb(100, 116, 139);
+  transition: border-color 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
+}
+
+.contacts-search-field:focus-within {
+  border-color: rgba(16, 185, 129, 0.38);
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 0 0 4px rgba(16, 185, 129, 0.12);
+}
+
+.contacts-search-field input {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  font-size: 14px;
+  color: rgb(30, 41, 59);
+  outline: none;
+}
+
+.contacts-table-panel {
+  padding: 4px;
+}
+
+.contacts-table-wrap {
+  border-radius: 20px;
+}
+
+.contacts-table {
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.contacts-table-head {
+  background: linear-gradient(160deg, rgba(255, 255, 255, 0.74) 0%, rgba(255, 255, 255, 0.48) 100%);
+}
+
+.contacts-table-row td {
+  border-top: 1px solid rgba(148, 163, 184, 0.2);
+}
+
+.contacts-table-row:first-child td {
+  border-top: 0;
+}
+
+.contacts-table-row {
+  transition: background-color 0.2s ease;
+}
+
+.contacts-table-row:hover {
+  background: rgba(255, 255, 255, 0.42);
+}
+
+.contacts-status-pill {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 9999px;
+  padding: 5px 9px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.contacts-status-pill--sent {
+  background: rgba(16, 185, 129, 0.17);
+  color: rgb(6, 95, 70);
+}
+
+.contacts-status-pill--failed {
+  background: rgba(239, 68, 68, 0.18);
+  color: rgb(153, 27, 27);
+}
+
+.contacts-status-pill--pending {
+  background: rgba(148, 163, 184, 0.2);
+  color: rgb(51, 65, 85);
+}
+
+.new-campaign-page {
+  position: relative;
+  isolation: isolate;
+}
+
+.new-campaign-shell {
+  border-color: rgba(255, 255, 255, 0.6);
+  background:
+    linear-gradient(140deg, rgba(255, 255, 255, 0.76) 0%, rgba(255, 255, 255, 0.5) 50%, rgba(226, 232, 240, 0.42) 100%);
+  box-shadow: 0 34px 70px -44px rgba(15, 23, 42, 0.9);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+}
+
+.new-campaign-main {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.24) 0%, rgba(248, 250, 252, 0.08) 100%);
+}
+
+.new-campaign-preview-pane {
+  border-left-color: rgba(255, 255, 255, 0.62);
+  background: rgba(255, 255, 255, 0.44);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
+
+.new-campaign-surface,
+.new-campaign-kpi {
+  border-color: rgba(255, 255, 255, 0.65);
+  background: linear-gradient(150deg, rgba(255, 255, 255, 0.77) 0%, rgba(255, 255, 255, 0.54) 100%);
+  box-shadow: 0 16px 36px -30px rgba(15, 23, 42, 0.7);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+}
+
+.new-campaign-input {
+  border-color: rgba(255, 255, 255, 0.7);
+  background: rgba(255, 255, 255, 0.78);
+  color: rgb(15, 23, 42);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+}
+
+.new-campaign-input::placeholder {
+  color: rgb(100, 116, 139);
+}
+
+.new-campaign-input:focus {
+  border-color: rgba(16, 185, 129, 0.42);
+  background: rgba(255, 255, 255, 0.95);
+  box-shadow: 0 0 0 4px rgba(16, 185, 129, 0.14);
+}
+
+.new-campaign-btn-primary,
+.new-campaign-btn-secondary,
+.new-campaign-source-chip {
+  border: 1px solid rgba(255, 255, 255, 0.65);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  transition: transform 0.2s ease, box-shadow 0.2s ease, filter 0.2s ease;
+}
+
+.new-campaign-btn-primary:hover,
+.new-campaign-btn-secondary:hover,
+.new-campaign-source-chip:hover {
+  transform: translateY(-1px);
+}
+
+.new-campaign-btn-primary {
+  box-shadow: 0 16px 30px -18px rgba(16, 185, 129, 0.8);
+}
+
+.new-campaign-btn-submit {
+  border-color: rgba(16, 185, 129, 0.38);
+}
+
+.new-campaign-btn-submit:not(.bg-slate-400) {
+  background-image: linear-gradient(135deg, #0891b2 0%, #059669 46%, #047857 100%);
+}
+
+.new-campaign-btn-submit.bg-slate-400 {
+  background-image: none;
+  box-shadow: none;
+}
+
+.new-campaign-btn-secondary {
+  box-shadow: 0 12px 25px -20px rgba(15, 23, 42, 0.7);
+}
+
+.new-campaign-source-chip {
+  box-shadow: 0 12px 25px -22px rgba(15, 23, 42, 0.72);
+}
+
+.new-campaign-source-chip--active {
+  border-color: rgba(16, 185, 129, 0.46);
+  box-shadow: 0 16px 30px -20px rgba(16, 185, 129, 0.72);
+}
+
+.new-campaign-link-btn {
+  transition: color 0.2s ease, opacity 0.2s ease;
+}
+
+.new-campaign-link-btn:hover {
+  opacity: 0.78;
+}
+
+.new-campaign-dropzone {
+  border-color: rgba(148, 163, 184, 0.38);
+  background: rgba(255, 255, 255, 0.48);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.new-campaign-dropzone:hover {
+  border-color: rgba(16, 185, 129, 0.44);
+  background: rgba(255, 255, 255, 0.74);
+}
+
+.new-campaign-details {
+  border-color: rgba(255, 255, 255, 0.6);
+  background: rgba(248, 250, 252, 0.55);
+}
+
+.new-campaign-contact-row {
+  transition: background-color 0.2s ease;
+}
+
+.new-campaign-contact-row:hover {
+  background: rgba(255, 255, 255, 0.6);
+}
+
+.new-campaign-contact-row input[type='checkbox'] {
+  accent-color: #059669;
+}
+
+.new-campaign-variant {
+  border-color: rgba(16, 185, 129, 0.24);
+  background: rgba(16, 185, 129, 0.08);
+}
+
+@media (max-width: 1279px) {
+  .new-campaign-preview-pane {
+    border-left: 0;
+    border-top: 1px solid rgba(255, 255, 255, 0.62);
+  }
+}
+
+@media (max-width: 960px) {
+  .contacts-search-field {
+    min-width: 100%;
+  }
+}
+
+@media (max-width: 760px) {
+  .contacts-panel {
+    border-radius: 20px;
+  }
+
+  .contacts-table {
+    min-width: 760px;
+  }
+}
