@@ -7,7 +7,7 @@ from dotenv import load_dotenv
 from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeoutError
 load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '..', 'backend', '.env'))
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-API_BASE_URL = "http://localhost:3000/api"
+API_BASE_URL = os.getenv("API_BASE_URL", "http://localhost:3000/api")
 API_SECRET_KEY = os.getenv("API_SECRET_KEY", "")
 API_HEADERS = { "Authorization": f"Bearer {API_SECRET_KEY}" }
 WHATSAPP_URL = "https://web.whatsapp.com"
@@ -278,9 +278,12 @@ def main():
                         logging.info("Atendimento despachado instantaneamente. Indo checar o próximo da fila...")
                 else:
                     update_job_status(job_id, "failed", error_reason)
-                    stop_campaign(campaign_id, f"Falha ao enviar para {phone}: {error_reason}")
-                    logging.critical(f"Paralisando toda a fila devido ao erro na campanha {campaign_id}.")
-                    time.sleep(60) 
+                    if "Número inválido" in error_reason:
+                        logging.warning(f"Número inválido ({phone}). Pulando e continuando a fila normalmente.")
+                    else:
+                        stop_campaign(campaign_id, f"Falha ao enviar para {phone}: {error_reason}")
+                        logging.critical(f"Pausando a fila por alguns segundos devido a possível erro de conexão ou instabilidade ({error_reason}).")
+                        time.sleep(30)
             except Exception as e:
                 logging.error(f"Erro inesperado no loop principal: {str(e)}")
                 time.sleep(10)
