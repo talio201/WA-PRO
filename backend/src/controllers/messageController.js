@@ -180,6 +180,26 @@ function isHistoryDuplicate(existingMessage, candidate = {}) {
     return Math.abs(existingAt - candidateAt) <= 90 * 1000;
 }
 
+async function getOrCreateSystemCampaignId() {
+    try {
+        const CampaignModel = require('../models/Campaign'); // Require in-place to avoid circular if any
+        let system = await CampaignModel.findOne({ name: '[System] Atendimento Avulso' });
+        if (!system) {
+            system = new CampaignModel({
+                name: '[System] Atendimento Avulso',
+                messageTemplate: 'SYSTEM_DUMMY_TEMPLATE',
+                status: 'completed', // Status completed para não aparecer como Executando no Dashboard
+                stats: { total: 0, sent: 0, failed: 0 }
+            });
+            await system.save();
+        }
+        return system._id;
+    } catch(err) {
+        console.warn('Erro ao criar SystemCampaign:', err);
+        return null;
+    }
+}
+
 async function ensureConversationOwnership({ normalizedPhone, agentId }) {
     if (!agentId) {
         const error = new Error('agentId is required.');
@@ -244,7 +264,10 @@ async function resolveRelatedCampaignId({
             return false;
         });
 
-    return fuzzyMatch?.campaign || null;
+    if (fuzzyMatch?.campaign) return fuzzyMatch.campaign;
+
+    // Supabase strict schema bypass: Sempre retorna uma campanha (A do Sistema) se for um contato totalmente orgânico.
+    return await getOrCreateSystemCampaignId();
 }
 
 // @desc    List message logs for dashboard/inbox
@@ -1177,7 +1200,58 @@ exports.getNextJob = async (req, res) => {
     } catch (err) {
         console.error(err.message);
         const errorResponse = buildServerErrorResponse(err);
-        res.status(errorResponse.statusCode).json(errorResponse.body);
+        return res.status(errorResponse.statusCode).json(errorResponse.body);
+    }
+};
+
+// @desc    Request asynchronous history sync via Bot Queue
+// @route   POST /api/messages/history/request-sync
+exports.requestHistorySync = async (req, res) => {
+    try {
+        const normalizedPhone = toSafePhone(req.body?.phone);
+        const agentId = resolveAgentIdFromRequest(req);
+
+        if (!normalizedPhone) {
+            return res.status(400).json({ msg: 'Phone is required for sync.' });
+        }
+
+        const dummyCampaignId = await getOrCreateSystemCampaignId();
+        const payload = {
+            campaign: dummyCampaignId,
+            phone: normalizedPhone,
+            phoneOriginal: normalizedPhone,
+            searchTerms: normalizePhone(normalizedPhone).searchTerms,
+            name: req.body?.name || '',
+            variables: null,
+            processedMessage: '[SYSTEM: REQUEST SYNC]',
+            status: 'pending',
+            direction: 'outbound',
+            attemptCount: -2, // Prioridade suprema para sincronização
+            action: 'history_sync', // Nova chave p/ o Bot não tentar Enviar mensagem
+            error: null,
+            lastError: null,
+            audit: [
+                {
+                    at: new Date(),
+                    action: 'history_sync_requested',
+                    details: 'Sincronizacao de historico agendada pelo Atendimento.',
+                    meta: {
+                        agentId
+                    },
+                },
+            ],
+            createdAt: new Date(),
+            updatedAt: new Date(),
+        };
+
+        const newItem = new Message(payload);
+        await newItem.save();
+
+        res.json({ success: true, msg: 'Sync request queued successfully.' });
+    } catch (err) {
+        console.error(err.message);
+        const errorResponse = buildServerErrorResponse(err);
+        return res.status(errorResponse.statusCode).json(errorResponse.body);
     }
 };
 

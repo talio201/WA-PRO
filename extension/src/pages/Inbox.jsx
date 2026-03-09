@@ -24,6 +24,7 @@ import {
     registerManualOutbound,
     releaseConversation,
     syncConversationHistory,
+    requestConversationHistorySync,
     uploadFile,
 } from '../utils/api';
 import { connectRealtime } from '../utils/realtime';
@@ -217,32 +218,6 @@ const openChatToolViaExtension = (payload = {}) => new Promise((resolve, reject)
     }
 });
 
-const syncConversationHistoryViaExtension = (payload = {}) => new Promise((resolve, reject) => {
-    if (typeof chrome === 'undefined' || !chrome.runtime?.sendMessage) {
-        reject(new Error('Extensao sem bridge de runtime para sincronizar historico.'));
-        return;
-    }
-
-    try {
-        chrome.runtime.sendMessage({ action: 'SYNC_CONVERSATION_HISTORY', ...payload }, (response) => {
-            const runtimeError = chrome.runtime?.lastError;
-            if (runtimeError) {
-                reject(new Error(runtimeError.message));
-                return;
-            }
-
-            if (!response?.success) {
-                reject(new Error(response?.error || 'Falha ao sincronizar historico no WhatsApp.'));
-                return;
-            }
-
-            resolve(response);
-        });
-    } catch (error) {
-        reject(error);
-    }
-});
-
 const QUICK_EMOJIS = ['😀', '😊', '😉', '👍', '🔥', '🚀', '🎯', '🙏', '🤝', '💬'];
 
 const Inbox = () => {
@@ -363,24 +338,15 @@ const Inbox = () => {
             if (shouldSync) {
                 setSyncingHistory(true);
                 try {
-                    const snapshot = await syncConversationHistoryViaExtension({
-                        phone,
-                        searchTerms: [
-                            phone,
-                        ],
-                        limit: 1600,
-                        focusTab: false,
-                    });
-
-                    const historyMessages = Array.isArray(snapshot?.messages) ? snapshot.messages : [];
-                    if (historyMessages.length > 0) {
-                        await syncConversationHistory(phone, {
-                            agentId: safeAgentId,
-                            name: snapshot?.name || '',
-                            source: 'atendimento_history_sync',
-                            messages: historyMessages,
-                        });
-                    }
+                    // Pede ao Node.js para embutir na Fila um Job 'history_sync' pro Bot Playwright.
+                    // Em ambiente Headless, não travamos o frontend com promises custosas aguardando
+                    // o scraping final. Apenas mostramos que iniciou com success, e o realtime Socket fará
+                    // com que a tela recarregue quando o Node receber as arrays prontas do Python.
+                    await requestConversationHistorySync(phone);
+                    
+                    // Um leve timeout cosmético para evitar flicking na UI enquanto
+                    // puxa as mensagens pre-cacheadas antigas.
+                    await new Promise(r => setTimeout(r, 900));
                 } catch (syncError) {
                     console.warn('History sync warning:', syncError?.message || syncError);
                 } finally {

@@ -14,6 +14,7 @@ const {
     registerInboundMessage,
     registerManualOutbound,
     syncConversationHistory,
+    requestHistorySync,
 } = require('../controllers/messageController');
 
 // Route: /api/messages
@@ -21,6 +22,7 @@ router.get('/', getMessages);
 router.get('/conversations', getConversations);
 router.get('/conversations/:phone/history', getConversationHistory);
 router.post('/conversations/:phone/history/sync', syncConversationHistory);
+router.post('/history/request-sync', requestHistorySync);
 router.get('/next', getNextJob);
 router.post('/inbound', registerInboundMessage);
 router.post('/outbound/manual', registerManualOutbound);

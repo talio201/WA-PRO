@@ -20,19 +20,32 @@ WHATSAPP_URL = "https://web.whatsapp.com"
 MAX_WAIT_TIME = 60000 # 60 segundos
 
 def type_like_human(page, text, is_priority=False):
-    """Digita o texto, se for prioridade (atendimento), digita com atraso muito curto."""
+    """Digita o texto simulando digitação humana, com velocidade crível para ativar o indicador 'digitando...'."""
     logging.info("Iniciando digitação...")
-    for char in text:
-        # Se for atendimento em tempo real, digita super rapido mas nao instataneo
-        if is_priority:
-            delay = random.uniform(0.01, 0.05)
-        else:
-            delay = random.uniform(0.05, 0.25)
-            # Pausa maior em pontuações ou espaços
-            if char in [' ', '.', ',', '!', '?']:
-                delay += random.uniform(0.1, 0.4)
+    
+    if text:
+        # Dá a primeira teclada para registrar a atividade de input pra rede do WhatsApp
+        page.keyboard.type(text[0])
         
-        page.keyboard.type(char, delay=int(delay * 1000))
+        # Faz uma leve pausa (como se o atendente estivesse raciocinando) antes de jorrar texto.
+        # Isso dá tempo da rede propagar pro outro celular o status de 'digitando...'
+        time.sleep(random.uniform(0.6, 1.2))
+        
+        for char in text[1:]:
+            if is_priority:
+                # Digitação "Turbo Humana" de atendente real (150-250 ms)
+                delay = random.uniform(0.05, 0.15)
+                if char in [' ', '.', ',', '!', '?']:
+                    delay += random.uniform(0.05, 0.1)
+            else:
+                # Digitação preguiçosa de Spammer disfarçado de campanha
+                delay = random.uniform(0.08, 0.25)
+                if char in [' ', '.', ',', '!', '?']:
+                    delay += random.uniform(0.1, 0.3)
+            
+            page.keyboard.type(char)
+            time.sleep(delay)
+            
     logging.info("Digitação concluída.")
 
 def check_invalid_number_modal(page):
@@ -201,6 +214,110 @@ def check_inbound_messages(page):
     except Exception as e:
         pass # Falhas de dom não devem quebrar o bot
 
+def scrape_history_for_job(page, phone):
+    """Abre o chat, lê as últimas mensagens da tela e envia de volta ao Node.js (History Sync)."""
+    logging.info(f"Iniciando raspagem de historico para o numero {phone}")
+    
+    dom_success = False
+    try:
+        new_chat_btn = page.locator('div[title="Nova conversa"], span[data-icon="chat"]').first
+        new_chat_btn.click(timeout=5000)
+        page.wait_for_timeout(1000)
+        
+        page.keyboard.type(phone)
+        page.wait_for_timeout(3000)
+        
+        page.keyboard.press("Enter")
+        page.wait_for_timeout(1500)
+        
+        chat_box = page.locator('div[role="textbox"]').last
+        if not chat_box.is_visible():
+            first_contact = page.locator('div[role="listitem"]').first
+            if first_contact.is_visible():
+                first_contact.click(timeout=2000)
+                page.wait_for_timeout(1500)
+            else:
+                page.keyboard.press("Escape")
+                raise Exception("Sem resultados na busca.")
+                
+        if chat_box.is_visible():
+            dom_success = True
+            
+    except Exception as e:
+        logging.warning("Nao conseguiu abrir o chat pra historico via DOM. Tentando Fallback URL...")
+
+    if not dom_success:
+        chat_url = f"{WHATSAPP_URL}/send/?phone={phone}"
+        page.goto(chat_url)
+        try:
+            page.wait_for_selector('div[role="textbox"]', timeout=MAX_WAIT_TIME)
+            if check_invalid_number_modal(page):
+                return False, "Número inválido ou sem WhatsApp."
+        except PlaywrightTimeoutError:
+            if check_invalid_number_modal(page):
+                return False, "Número inválido ou sem WhatsApp."
+            return False, "Timeout ao abrir o chat para historico."
+
+    logging.info("Chat aberto para historico. Rolando para carregar mensagens passadas...")
+    page.wait_for_timeout(2000)
+    
+    try:
+        # Clica na area de chat para focar a scroll wheel
+        chat_box = page.locator('div[role="textbox"]').last
+        chat_box.click()
+        # Escorrega um pouco p/ cima para carregar um bloco de histórico maior se existir
+        for _ in range(4):
+             page.mouse.wheel(0, -3500)
+             page.wait_for_timeout(800)
+    except:
+        pass
+        
+    messages_data = []
+    
+    # Extrai tanto inbound (cli) quanto outbound (agent)
+    msg_elements = page.query_selector_all('div.message-in, div.message-out')
+    
+    for el in msg_elements:
+        try:
+            direction = "inbound" if "message-in" in el.get_attribute("class") else "outbound"
+            
+            text_el = el.query_selector('.copyable-text span[dir="ltr"]')
+            if not text_el:
+                continue
+            
+            text = text_el.inner_text().strip()
+            if not text:
+                continue
+                
+            meta_el = el.query_selector('[data-pre-plain-text]')
+            meta_text = meta_el.get_attribute('data-pre-plain-text') if meta_el else ""
+            
+            messages_data.append({
+                "direction": direction,
+                "text": text,
+                "fingerprint": f"{direction}|{text}|{meta_text}",
+                "at": meta_text 
+            })
+        except Exception as e:
+            continue
+            
+    if not messages_data:
+        return True, "Nenhuma mensagem legivel encontrada na tela."
+        
+    payload = {
+        "phone": phone,
+        "source": "python_history_sync",
+        "messages": messages_data
+    }
+    
+    try:
+        res = requests.post(f"{API_BASE_URL}/messages/conversations/{phone}/history/sync", json=payload)
+        res.raise_for_status()
+        logging.info(f"{len(messages_data)} itens de historico lidos e despachados com sucesso para o BD.")
+        return True, "Historico raspado com sucesso."
+    except Exception as e:
+        logging.error(f"Erro ao enviar historico para API Node.js: {e}")
+        return False, "Falha ao enviar historico para o backend Node."
 
 def main():
     logging.info("Iniciando o Worker Python do WhatsApp...")
@@ -211,7 +328,14 @@ def main():
         user_data_dir = os.path.join(os.getcwd(), "whatsapp_session")
         browser = p.chromium.launch_persistent_context(
             user_data_dir=user_data_dir,
-            headless=False # Mantenha False durante o desenvolvimento/testes
+            headless=False, # Não altere para True no Whatsapp Web, a meta detecta instâncias Headless pesadamente
+            bypass_csp=True, 
+            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+            args=[
+                "--disable-blink-features=AutomationControlled", # Flag Crucial Anti-Ban: Oculta o navigator.webdriver
+                "--disable-web-security",
+                "--disable-features=IsolateOrigins,site-per-process",
+            ]
         )
         
         page = browser.new_page()
@@ -250,12 +374,18 @@ def main():
                 phone = job.get("phone")
                 message_text = job.get("processedMessage", "Mensagem vazia")
                 campaign_id = job.get("campaign")
+                action = job.get("action", "send_message")
                 
                 # O Backend express, ao dar return do json("job"), automaticamente
                 # já marca ela como "processing" no backend via o getNextJob. 
-                logging.info(f"Iniciando job {job_id} para {phone} (Prioridade: {is_priority})")
+                logging.info(f"Iniciando job {job_id} para {phone} (Prioridade: {is_priority}) (Acao: {action})")
                 
-                # 2. Executa o envio
+                if action == "history_sync":
+                    success, error_reason = scrape_history_for_job(page, phone)
+                    update_job_status(job_id, "sent" if success else "failed", error_reason if not success else None)
+                    continue
+                
+                # 2. Executa o envio normal de campanha/atendimento
                 success, error_reason = send_message(page, phone, message_text, is_priority)
                 
                 if success:

@@ -208,3 +208,18 @@ export const generateMessageVariants = async ({ message, count = 5 }) => request
     },
     'Failed to generate message variants'
 );
+
+export const requestConversationHistorySync = async (phone) => {
+    const safePhone = String(phone || '').trim();
+    if (!safePhone) throw new Error('Phone is required.');
+
+    return requestJson(
+        `${API_URL}/messages/history/request-sync`,
+        {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ phone: safePhone }),
+        },
+        'Failed to request conversation history sync'
+    );
+};
