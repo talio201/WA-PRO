@@ -5,10 +5,7 @@
     "description": "Automação humana de controle de campanhas para WhatsApp.",
     "permissions": [
         "alarms",
-        "storage",
-        "activeTab",
-        "scripting",
-        "tabs"
+        "storage"
     ],
     "host_permissions": [
         "*://web.whatsapp.com/*",
@@ -19,17 +16,6 @@
         "service_worker": "src/background/index.js",
         "type": "module"
     },
-    "content_scripts": [
-        {
-            "matches": [
-                "*://web.whatsapp.com/*"
-            ],
-            "js": [
-                "src/content/index.js"
-            ],
-            "run_at": "document_idle"
-        }
-    ],
     "action": {
         "default_popup": "index.html",
         "default_title": "Campaign Manager"
