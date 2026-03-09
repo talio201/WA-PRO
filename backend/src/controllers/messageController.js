@@ -985,19 +985,19 @@ exports.registerManualOutbound = async (req, res) => {
         }
 
         const payload = {
-            campaign: relatedCampaignId,
+            campaign: relatedCampaignId, // Restaurado o vínculo com a campanha para não quebrar o NOT NULL
             phone: normalizedPhone,
             phoneOriginal: String(rawPhone || ''),
             searchTerms: normalized.searchTerms,
             name,
             variables: null,
             processedMessage: text,
-            status: 'sent',
+            status: 'pending', // Alterado para pending em vez de sent para que o Python a envie.
             direction: 'outbound',
-            attemptCount: 1,
+            attemptCount: -1, // SINALIZADOR DA FILA RÁPIDA: -1 significa prioridade
             lastError: null,
             error: null,
-            sentAt: messageDate,
+            sentAt: null, // Evitar salvar data de envio antes de ser pego pelo Bot
             updatedAt: messageDate,
             audit: [
                 {
@@ -1073,10 +1073,9 @@ exports.getNextJob = async (req, res) => {
                 .filter((item) => {
                     const reference = item.lastAttemptAt || item.updatedAt || item.sentAt || item.createdAt || 0;
                     const startedAt = new Date(reference).getTime();
-                    if (!Number.isFinite(startedAt) || startedAt <= 0) return false;
+                    if (!Number.isFinite(startedAt) || startedAt <= 0) return true; // Se não tem data, force reciclar
                     return (now - startedAt) > staleProcessingTimeoutMs;
-                })
-                .slice(0, 25);
+                });
 
             for (const candidate of staleCandidates) {
                 const stuck = await Message.findById(candidate._id);
@@ -1106,17 +1105,38 @@ exports.getNextJob = async (req, res) => {
             // Best-effort only. If it fails, the queue still works for normal pending jobs.
         }
 
-        // Step 2: Reserve next pending job (FIFO)
-        const job = await Message.findOneAndUpdate(
+        // Step 2: Reserve next pending job (Priority to Manual/Atendimento)
+        // Tentamos buscar primeiro qualquer mensagem que tenha sido flagada como attemptCount: -1 (Sinal de atendimento manual rápido)
+        let job = await Message.findOneAndUpdate(
             {
                 status: 'pending',
-                campaign: { $in: eligibleCampaignIds },
+                attemptCount: -1
             },
-            {
-                status: 'processing',
-            },
+            { status: 'processing' },
             { sort: { _id: 1 }, new: true }
-        ).populate('campaign', 'name antiBan media');
+        );
+        let isPriority = false;
+
+        // Se nao houver manual pendente, busca da fila de Campanhas normal
+        if (job) {
+             isPriority = true;
+             // Seta o count pra 0 para normalizar o log após a primeira passagem
+             job.attemptCount = 0; 
+        } else {
+             job = await Message.findOneAndUpdate(
+                {
+                    status: 'pending',
+                    campaign: { $in: eligibleCampaignIds },
+                },
+                {
+                    status: 'processing',
+                },
+                { sort: { _id: 1 }, new: true }
+            );
+            if (job && typeof job.populate === 'function') {
+               job = await job.populate('campaign', 'name antiBan media');
+            }
+        }
 
         if (!job) {
             return res.json({ job: null });
@@ -1146,13 +1166,14 @@ exports.getNextJob = async (req, res) => {
 
         emitRealtimeEvent('messages.queue.reserved', {
             messageId: job._id,
-            campaignId: extractCampaignIdFromPayload(job.campaign),
+            campaignId: job.campaign ? extractCampaignIdFromPayload(job.campaign) : null,
             phone: job.phone,
             status: job.status,
+            isPriority,
             attemptCount: job.attemptCount || 0,
         });
 
-        res.json({ job });
+        res.json({ job, isPriority });
     } catch (err) {
         console.error(err.message);
         const errorResponse = buildServerErrorResponse(err);

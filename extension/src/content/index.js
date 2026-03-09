@@ -1,4 +1,4 @@
-﻿console.log('WA Campaign Manager: Content Script Loaded');
+console.log('WA Campaign Manager: Content Script Loaded');
 
 const SELECTORS = {
   sendButton: 'span[data-icon="send"], span[data-icon="send-filled"], button[aria-label*="Send" i], button[aria-label*="Enviar" i], div[role="button"][aria-label*="Send" i], div[role="button"][aria-label*="Enviar" i]',
@@ -53,276 +53,7 @@ function safeSendRuntimeMessage(payload = {}) {
 }
 
 function ensureGlassStyles() {
-  if (document.getElementById('wa-manager-glass-style')) return;
-
-  const style = document.createElement('style');
-  style.id = 'wa-manager-glass-style';
-  style.textContent = `
-    #wa-manager-glass-root {
-      position: fixed;
-      top: 16px;
-      right: 16px;
-      z-index: 2147483646;
-      font-family: "Avenir Next", "SF Pro Display", "Segoe UI Variable", "Segoe UI", sans-serif;
-      color: #1f2937;
-    }
-
-    #wa-manager-glass-root * {
-      box-sizing: border-box;
-    }
-
-    #wa-manager-glass-root .wa-glass-pill {
-      border: 1px solid rgba(255, 255, 255, 0.7);
-      background: rgba(255, 255, 255, 0.56);
-      backdrop-filter: blur(18px);
-      -webkit-backdrop-filter: blur(18px);
-      border-radius: 999px;
-      padding: 8px 12px;
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
-      cursor: pointer;
-      box-shadow: 0 14px 32px -24px rgba(15, 23, 42, 0.9);
-      font-size: 12px;
-      font-weight: 700;
-      color: #2b354a;
-    }
-
-    #wa-manager-glass-root .wa-pill-dot {
-      width: 9px;
-      height: 9px;
-      border-radius: 999px;
-      background: #f59e0b;
-      box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.5);
-      animation: waPulseDot 1.8s infinite;
-    }
-
-    #wa-manager-glass-root .wa-pill-dot.is-online {
-      background: #34c759;
-      box-shadow: 0 0 0 0 rgba(52, 199, 89, 0.5);
-    }
-
-    #wa-manager-glass-root .wa-pill-dot.is-connecting {
-      background: #0ea5e9;
-      box-shadow: 0 0 0 0 rgba(14, 165, 233, 0.5);
-    }
-
-    @keyframes waPulseDot {
-      0%, 100% { transform: scale(0.95); opacity: 0.6; }
-      50% { transform: scale(1.25); opacity: 1; }
-    }
-
-    #wa-manager-glass-root .wa-pill-count {
-      min-width: 18px;
-      height: 18px;
-      border-radius: 999px;
-      background: rgba(255, 45, 85, 0.9);
-      color: white;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 10px;
-      font-weight: 700;
-      padding: 0 6px;
-    }
-
-    #wa-manager-glass-root .wa-glass-backdrop {
-      position: fixed;
-      inset: 0;
-      pointer-events: none;
-      opacity: 0;
-      transition: opacity 0.25s ease;
-      backdrop-filter: blur(0px);
-      -webkit-backdrop-filter: blur(0px);
-    }
-
-    #wa-manager-glass-root.is-open .wa-glass-backdrop {
-      pointer-events: auto;
-      opacity: 1;
-      backdrop-filter: blur(2px);
-      -webkit-backdrop-filter: blur(2px);
-      background: rgba(8, 15, 30, 0.06);
-    }
-
-    #wa-manager-glass-root .wa-glass-panel {
-      margin-top: 10px;
-      width: 320px;
-      border: 1px solid rgba(255, 255, 255, 0.66);
-      background: rgba(255, 255, 255, 0.62);
-      backdrop-filter: blur(24px);
-      -webkit-backdrop-filter: blur(24px);
-      border-radius: 18px;
-      box-shadow: 0 24px 45px -34px rgba(15, 23, 42, 0.9);
-      padding: 12px;
-      transform: translateY(-8px) scale(0.96);
-      opacity: 0;
-      pointer-events: none;
-      transition: opacity 0.22s ease, transform 0.22s ease;
-    }
-
-    #wa-manager-glass-root.is-open .wa-glass-panel {
-      transform: translateY(0) scale(1);
-      opacity: 1;
-      pointer-events: auto;
-    }
-
-    #wa-manager-glass-root .wa-panel-head h4 {
-      margin: 0;
-      font-size: 15px;
-      color: #1f2937;
-      letter-spacing: -0.01em;
-    }
-
-    #wa-manager-glass-root .wa-panel-head p {
-      margin: 3px 0 0;
-      font-size: 11px;
-      color: #56617a;
-    }
-
-    #wa-manager-glass-root .wa-panel-stats {
-      margin-top: 10px;
-      display: grid;
-      gap: 8px;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-
-    #wa-manager-glass-root .wa-stat {
-      border: 1px solid rgba(255, 255, 255, 0.7);
-      background: rgba(255, 255, 255, 0.62);
-      border-radius: 12px;
-      padding: 8px;
-    }
-
-    #wa-manager-glass-root .wa-stat span {
-      display: block;
-      font-size: 11px;
-      color: #5c6780;
-      margin-bottom: 4px;
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
-    }
-
-    #wa-manager-glass-root .wa-stat strong {
-      font-size: 12px;
-      color: #1f2937;
-    }
-
-    #wa-manager-glass-root .wa-panel-actions {
-      margin-top: 10px;
-      display: flex;
-      gap: 8px;
-    }
-
-    #wa-manager-glass-root .wa-btn {
-      flex: 1;
-      border-radius: 10px;
-      border: 1px solid rgba(255, 255, 255, 0.72);
-      padding: 9px 10px;
-      font-size: 12px;
-      font-weight: 700;
-      cursor: pointer;
-      color: #374151;
-      background: rgba(255, 255, 255, 0.68);
-    }
-
-    #wa-manager-glass-root .wa-btn.primary {
-      color: #fff;
-      border-color: transparent;
-      background: linear-gradient(135deg, #007aff 0%, #5856d6 100%);
-    }
-
-    #wa-manager-glass-root .wa-event-list {
-      margin-top: 10px;
-      max-height: 130px;
-      overflow: auto;
-      display: flex;
-      flex-direction: column;
-      gap: 6px;
-      padding-right: 2px;
-    }
-
-    #wa-manager-glass-root .wa-event-list::-webkit-scrollbar {
-      width: 5px;
-    }
-
-    #wa-manager-glass-root .wa-event-list::-webkit-scrollbar-thumb {
-      background: rgba(51, 65, 85, 0.25);
-      border-radius: 999px;
-    }
-
-    #wa-manager-glass-root .wa-event-item {
-      border: 1px solid rgba(255, 255, 255, 0.68);
-      background: rgba(255, 255, 255, 0.6);
-      border-radius: 10px;
-      padding: 7px 8px;
-      font-size: 11px;
-      color: #2f374a;
-    }
-
-    #wa-manager-glass-toast-wrap {
-      position: fixed;
-      top: 20px;
-      right: 20px;
-      z-index: 2147483647;
-      display: flex;
-      flex-direction: column;
-      gap: 10px;
-      pointer-events: none;
-    }
-
-    .wa-glass-toast {
-      min-width: 280px;
-      max-width: 360px;
-      background: rgba(25, 25, 35, 0.62);
-      backdrop-filter: blur(16px);
-      -webkit-backdrop-filter: blur(16px);
-      border: 1px solid rgba(255, 255, 255, 0.14);
-      padding: 12px 14px;
-      border-radius: 14px;
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      color: white;
-      box-shadow: 0 12px 30px rgba(0, 0, 0, 0.28);
-      animation: waToastIn 0.32s ease-out;
-    }
-
-    .wa-glass-toast .icon {
-      width: 28px;
-      height: 28px;
-      border-radius: 999px;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 14px;
-      background: rgba(255, 255, 255, 0.16);
-      flex-shrink: 0;
-    }
-
-    .wa-glass-toast strong {
-      display: block;
-      font-size: 13px;
-      margin-bottom: 2px;
-      letter-spacing: -0.01em;
-    }
-
-    .wa-glass-toast p {
-      margin: 0;
-      font-size: 12px;
-      opacity: 0.82;
-    }
-
-    .wa-glass-toast.tone-success .icon { background: rgba(52, 199, 89, 0.26); }
-    .wa-glass-toast.tone-warning .icon { background: rgba(245, 158, 11, 0.26); }
-    .wa-glass-toast.tone-error .icon { background: rgba(255, 59, 48, 0.26); }
-
-    @keyframes waToastIn {
-      from { transform: translateX(80px); opacity: 0; }
-      to { transform: translateX(0); opacity: 1; }
-    }
-  `;
-
-  document.head.appendChild(style);
+  // Removed Glass Styles
 }
 
 function appendIslandEvent(text) {
@@ -396,30 +127,7 @@ function updateGlassUi() {
 }
 
 function showGlassToast(payload = {}) {
-  const wrapperId = 'wa-manager-glass-toast-wrap';
-  let wrapper = document.getElementById(wrapperId);
-  if (!wrapper) {
-    wrapper = document.createElement('div');
-    wrapper.id = wrapperId;
-    document.body.appendChild(wrapper);
-  }
-
-  const tone = String(payload.tone || 'info').trim().toLowerCase();
-  const icon = tone === 'success' ? '✅' : tone === 'warning' ? '⚠️' : tone === 'error' ? '⛔' : '🚀';
-  const toast = document.createElement('div');
-  toast.className = `wa-glass-toast tone-${tone}`;
-  toast.innerHTML = `
-    <div class=\"icon\">${icon}</div>
-    <div>
-      <strong>${String(payload.title || 'Atualização')}</strong>
-      <p>${String(payload.message || '')}</p>
-    </div>
-  `;
-
-  wrapper.appendChild(toast);
-  setTimeout(() => {
-    toast.remove();
-  }, 3600);
+  // Toast removed
 }
 
 function updateRuntimeState(nextState = {}) {
@@ -446,78 +154,7 @@ function updateRuntimeState(nextState = {}) {
 }
 
 function createGlassIsland() {
-  if (glassRoot) return;
-  ensureGlassStyles();
-
-  glassRoot = document.createElement('div');
-  glassRoot.id = 'wa-manager-glass-root';
-  glassRoot.innerHTML = `
-    <button type=\"button\" class=\"wa-glass-pill\" aria-label=\"Abrir painel WA Manager\">
-      <span class=\"wa-pill-dot\"></span>
-      <span class=\"wa-pill-label\">Fila pausada</span>
-      <span class=\"wa-pill-count\" style=\"display:none;\">0</span>
-    </button>
-    <div class=\"wa-glass-backdrop\"></div>
-    <aside class=\"wa-glass-panel\">
-      <div class=\"wa-panel-head\">
-        <h4>WA Manager Island</h4>
-        <p>Controle rápido em vidro</p>
-      </div>
-      <div class=\"wa-panel-stats\">
-        <div class=\"wa-stat\"><span>Realtime</span><strong data-ref=\"realtime\">-</strong></div>
-        <div class=\"wa-stat\"><span>Fila</span><strong data-ref=\"queue\">-</strong></div>
-        <div class=\"wa-stat\"><span>Último evento</span><strong data-ref=\"last-event\">-</strong></div>
-        <div class=\"wa-stat\"><span>Painel</span><strong data-ref=\"blur-mode\">Blur: ON</strong></div>
-      </div>
-      <div class=\"wa-panel-actions\">
-        <button type=\"button\" class=\"wa-btn primary\" data-action=\"toggle-queue\">Ativar fila</button>
-        <button type=\"button\" class=\"wa-btn\" data-action=\"open-options\">Configurações</button>
-      </div>
-      <div class=\"wa-event-list\"></div>
-    </aside>
-  `;
-
-  document.body.appendChild(glassRoot);
-
-  glassRefs = {
-    root: glassRoot,
-    pill: glassRoot.querySelector('.wa-glass-pill'),
-    pillDot: glassRoot.querySelector('.wa-pill-dot'),
-    pillLabel: glassRoot.querySelector('.wa-pill-label'),
-    pillCount: glassRoot.querySelector('.wa-pill-count'),
-    backdrop: glassRoot.querySelector('.wa-glass-backdrop'),
-    realtimeText: glassRoot.querySelector('[data-ref=\"realtime\"]'),
-    queueText: glassRoot.querySelector('[data-ref=\"queue\"]'),
-    lastEventText: glassRoot.querySelector('[data-ref=\"last-event\"]'),
-    blurText: glassRoot.querySelector('[data-ref=\"blur-mode\"]'),
-    toggleQueueBtn: glassRoot.querySelector('[data-action=\"toggle-queue\"]'),
-    openOptionsBtn: glassRoot.querySelector('[data-action=\"open-options\"]'),
-    eventList: glassRoot.querySelector('.wa-event-list'),
-  };
-
-  const toggleOpen = () => {
-    UI_STATE.isOpen = !UI_STATE.isOpen;
-    if (UI_STATE.isOpen) {
-      UI_STATE.unreadEvents = 0;
-    }
-    updateGlassUi();
-  };
-
-  glassRefs.pill.addEventListener('click', toggleOpen);
-  glassRefs.backdrop.addEventListener('click', toggleOpen);
-
-  glassRefs.toggleQueueBtn.addEventListener('click', async () => {
-    const isActive = Boolean(UI_STATE.runtime?.isActive);
-    await safeSendRuntimeMessage({ action: 'TOGGLE_STATUS', value: !isActive });
-    appendIslandEvent(!isActive ? 'Solicitado: iniciar fila' : 'Solicitado: pausar fila');
-    updateGlassUi();
-  });
-
-  glassRefs.openOptionsBtn.addEventListener('click', async () => {
-    await safeSendRuntimeMessage({ action: 'OPEN_OPTIONS_PAGE' });
-  });
-
-  updateGlassUi();
+  // Island UI Removed
 }
 
 // Utils
@@ -908,49 +545,7 @@ function normalizeEditableText(value) {
 }
 
 async function typeInEditable(target, text, options = {}) {
-  const humanized = options.humanized !== false;
-
-  // Validate if the target is visible and editable
-  if (!target || target.offsetParent === null || !target.isContentEditable) {
-    console.error('Target is not editable or not visible');
-    return { success: false, error: 'Target is not editable or not visible' };
-  }
-
-  target.focus();
-
-  for (let index = 0; index < text.length; index += 1) {
-    const char = text[index];
-    document.execCommand('insertText', false, char);
-
-    let delay = getTypingDelayMs(char, humanized);
-
-    if (humanized && index > 0 && index % 12 === 0) {
-      delay += Math.random() * 220 + 120;
-    }
-
-    await sleep(delay);
-  }
-
-  const expectedText = normalizeEditableText(text);
-  let currentText = normalizeEditableText(target.textContent);
-
-  // Confirm the text was inserted correctly (normalized).
-  if (currentText !== expectedText) {
-    console.warn('Text insertion validation failed. Retrying...');
-    clearEditable(target);
-    await sleep(200);
-    target.focus();
-    document.execCommand('insertText', false, text);
-    // Retry once and re-check.
-    await sleep(120);
-    currentText = normalizeEditableText(target.textContent);
-    if (currentText !== expectedText) {
-      console.error('Text insertion failed after retry. Aborting further attempts.');
-      return { success: false, error: 'Text insertion failed after retry' };
-    }
-  }
-
-  return { success: true };
+  return { success: false, error: 'Disabled' };
 }
 
 function getElement(selector, timeout = 5000) {
@@ -1047,13 +642,17 @@ async function handleOpenChat(phone, searchTerms = []) {
       const ariaLabel = String(item.getAttribute('aria-label') || '').trim();
       const ariaDigits = digitsOnly(ariaLabel);
 
-      // Verificar match por dígitos (últimos 10 para tolerar DDI variante)
-      const matchesText = termTail && itemDigits && itemDigits.includes(termTail);
-      const matchesAria = termTail && ariaDigits && ariaDigits.includes(termTail);
-      // Fallback: match por nome (quando term não é número)
+      // Validar contatos levando em conta nono dígito (Brasil)
+      // Extrai os últimos 8-9 dígitos
+      const itemTail = itemDigits.slice(-8);
+      const searchTail = termTail.slice(-8);
+
+      const matchesText = searchTail && itemTail && itemTail === searchTail;
+      const matchesAria = searchTail && ariaDigits && ariaDigits.slice(-8) === searchTail;
+      // Fallback: match por nome (quando term não é número) ou termo solto
       const matchesName = !termDigits && itemText.toLowerCase().includes(term.toLowerCase());
 
-      if (matchesText || matchesAria || matchesName) {
+      if (matchesText || matchesAria || matchesName || (termDigits && itemText.includes(term))) {
         console.log('[handleOpenChat] Found matching contact item, clicking:', itemText.slice(0, 60));
         item.click();
         clickedItem = item;
@@ -1068,12 +667,11 @@ async function handleOpenChat(phone, searchTerms = []) {
   }
 
   if (!clickedItem) {
-    // Fallback: se não encontrou item na lista, tentar Enter (comportamento anterior)
-    console.warn('[handleOpenChat] No matching contact found in list — falling back to Enter key.');
-    box.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', which: 13, keyCode: 13, bubbles: true }));
+    console.warn('[handleOpenChat] No matching contact found in list. Aborting to avoid wrong chat.');
+    return { success: false, error: 'Contact not found in search results.' };
   }
 
-  await sleep(900);
+  await sleep(400);
 
   // Aguarda a abertura da conversa verificando o message box
   const msgBox = await getElement(SELECTORS.messageBox, 8000);
@@ -1184,45 +782,7 @@ async function waitForChatPhone(targetPhone, timeoutMs = 10000) {
 }
 
 function clickElementCenterLeft(element) {
-  if (!element || !isVisibleElement(element)) {
-    return false;
-  }
-
-  const rect = element.getBoundingClientRect();
-  if (!rect || rect.width <= 0 || rect.height <= 0) {
-    return false;
-  }
-
-  const clientX = rect.left + (rect.width / 2);
-  const clientY = rect.top + (rect.height / 2);
-  const target = document.elementFromPoint(clientX, clientY) || element;
-
-  const eventInit = {
-    bubbles: true,
-    cancelable: true,
-    composed: true,
-    button: 0,
-    buttons: 1,
-    clientX,
-    clientY,
-  };
-
-  try {
-    target.dispatchEvent(new MouseEvent('mousemove', eventInit));
-    target.dispatchEvent(new MouseEvent('mouseover', eventInit));
-    target.dispatchEvent(new MouseEvent('mouseenter', eventInit));
-    target.dispatchEvent(new MouseEvent('mousedown', eventInit));
-    target.dispatchEvent(new MouseEvent('mouseup', eventInit));
-    target.dispatchEvent(new MouseEvent('click', eventInit));
-    return true;
-  } catch (error) {
-    try {
-      element.click();
-      return true;
-    } catch (clickError) {
-      return false;
-    }
-  }
+  return false;
 }
 
 function getNodeCompactText(node) {
@@ -1413,242 +973,19 @@ async function clickRecentPhoneFromSelfChat(targetPhone, timeoutMs = 10000) {
 }
 
 async function handleOpenChatViaAgentBridge(agentPhone, targetPhone, options = {}) {
-  const agentDigits = digitsOnly(agentPhone);
-  const targetDigits = digitsOnly(targetPhone);
-  const shouldHumanize = options.humanized !== false;
-  const agentSearchTerms = Array.isArray(options.agentSearchTerms) ? options.agentSearchTerms : [];
-  const agentQuery = String(options.agentQuery || '').trim();
-
-  const openAgentTerms = [
-    ...(agentQuery ? [agentQuery] : []),
-    ...agentSearchTerms,
-  ].filter(Boolean);
-
-  if (!agentDigits && openAgentTerms.length === 0) {
-    return { success: false, error: 'Agent bridge chat is required.' };
-  }
-
-  if (!targetDigits) {
-    return { success: false, error: 'Target phone is required.' };
-  }
-
-  let openAgentResult = await handleOpenChat(agentDigits || '', openAgentTerms);
-  if (!openAgentResult?.success && agentQuery) {
-    // Some accounts don't match contacts by number; retry using chat query only.
-    openAgentResult = await handleOpenChat('', [agentQuery]);
-  }
-  if (!openAgentResult?.success) {
-    return {
-      success: false,
-      error: openAgentResult?.error || 'Failed to open agent bridge chat.',
-      step: 'open_agent_chat',
-    };
-  }
-
-  await sleep(550);
-  const openedAgentContext = extractChatContext('');
-  const agentContextRef = {
-    agentDigits,
-    agentName: String(openedAgentContext?.name || '').trim(),
-  };
-
-  const bridgeMessage = `+${targetDigits}`;
-  const bridgeSendResult = await handleClickSend(bridgeMessage, { humanized: shouldHumanize, paste: true });
-  if (!bridgeSendResult?.success) {
-    return {
-      success: false,
-      error: bridgeSendResult?.error || 'Failed to send bridge number message.',
-      step: 'send_bridge_message',
-    };
-  }
-
-  await sleep(650);
-
-  const clickPhoneResult = await clickRecentPhoneFromSelfChat(targetDigits, 12000);
-  if (!clickPhoneResult?.success) {
-    return {
-      success: false,
-      error: clickPhoneResult?.error || 'Failed to click phone bridge message.',
-      step: 'click_bridge_phone',
-    };
-  }
-
-  if (!clickPhoneResult.openedDirectly) {
-    const chooseConversationResult = await clickConversationWithNumberOption(targetDigits, 9000);
-    if (!chooseConversationResult?.success) {
-      // WA can open the target chat directly after clicking the phone message, without
-      // rendering the context menu option. If composer is ready and we're no longer in
-      // the agent chat, continue instead of failing.
-      const fallbackComposer = await waitForMessageComposer(2200);
-      const fallbackContext = extractChatContext('');
-      const movedToTarget = isLikelyTargetChatContext(fallbackContext, targetDigits);
-      const stillOnAgentFallback = isLikelyAgentChatContext(fallbackContext, agentContextRef);
-
-      if (!(fallbackComposer && (movedToTarget || !stillOnAgentFallback))) {
-        return {
-          success: false,
-          error: chooseConversationResult?.error || 'Failed to choose "Conversar com numero".',
-          step: 'choose_conversation_option',
-        };
-      }
-    }
-  }
-
-  const chatReady = await waitForChatPhone(targetDigits, 12000);
-  const composerReady = await waitForMessageComposer(12000);
-  const finalContext = extractChatContext('');
-  const stillAgentChat = isLikelyAgentChatContext(finalContext, agentContextRef);
-
-  if (!composerReady || stillAgentChat) {
-    return {
-      success: false,
-      error: stillAgentChat
-        ? 'Bridge flow stayed in agent chat after clicking target.'
-        : 'Message composer not ready after opening target chat.',
-      step: stillAgentChat ? 'wait_target_chat' : 'wait_target_composer',
-    };
-  }
-
-  if (!chatReady) {
-    // Some WA variants don't expose the target phone in URL/title immediately.
-    // If composer is ready and we're not in the agent chat anymore, proceed.
-    return {
-      success: true,
-      agentPhone: agentDigits,
-      targetPhone: targetDigits,
-      inferredTargetChat: true,
-    };
-  }
-
-  return {
-    success: true,
-    agentPhone: agentDigits,
-    targetPhone: targetDigits,
-  };
+  return { success: false, error: 'Disabled' };
 }
 
 async function handleClickSend(message, options = {}) {
-  console.log('Attempting to find Send button...');
-  const shouldHumanize = options.humanized !== false;
-  const shouldPaste = Boolean(options.paste);
-  let msgBox = null;
-
-  if (message) {
-    msgBox = await waitForMessageComposer(12000);
-    if (msgBox) {
-      msgBox.focus();
-      if (shouldPaste) {
-        clearEditable(msgBox);
-        document.execCommand('insertText', false, String(message));
-        await sleep(shouldHumanize ? (Math.random() * 240 + 180) : 120);
-      } else {
-        const typeResult = await typeInEditable(msgBox, message, { humanized: shouldHumanize });
-        await sleep(shouldHumanize ? (Math.random() * 700 + 300) : 500);
-        if (!typeResult || typeResult.success !== true) {
-          return { success: false, error: typeResult.error || 'Text insertion failed' };
-        }
-      }
-
-      const expectedText = normalizeEditableText(message);
-      const currentText = normalizeEditableText(msgBox.textContent || '');
-      if (expectedText && !currentText.includes(expectedText)) {
-        return { success: false, error: 'Message text not present in composer' };
-      }
-    } else {
-      return { success: false, error: 'Message box not found' };
-    }
-  }
-
-  const sendBtn = await getElement(SELECTORS.sendButton, 9000);
-
-  if (sendBtn && isVisibleElement(sendBtn)) {
-    console.log('Send button found. Clicking...');
-    await sleep(shouldHumanize ? (Math.random() * 650 + 260) : (Math.random() * 500 + 200));
-    const clicked = clickElementCenterLeft(sendBtn);
-    if (!clicked) {
-      return { success: false, error: 'Failed to click send button' };
-    }
-    await sleep(2000);
-    return { success: true };
-  }
-
-  // Fallback: if message is already in composer and the send button did not render yet, press Enter.
-  if (message && msgBox) {
-    msgBox.focus();
-    msgBox.dispatchEvent(new KeyboardEvent('keydown', {
-      key: 'Enter',
-      code: 'Enter',
-      which: 13,
-      keyCode: 13,
-      bubbles: true,
-    }));
-    await sleep(1400);
-    return { success: true, fallback: 'enter' };
-  }
-
-  const invalidModal = document.querySelector(SELECTORS.invalidNumber);
-  if (invalidModal) {
-    const okBtn = invalidModal.querySelector('div[role="button"]');
-    if (okBtn) okBtn.click();
-    return { success: false, error: 'Invalid Number' };
-  }
-
-  return { success: false, error: 'Send button not found' };
+  return { success: false, error: 'Disabled' };
 }
 
 async function handlePasteMedia(media) {
-  console.log('Attempting to paste media:', media);
-
-  try {
-    const response = await fetch(media.fileUrl);
-    const blob = await response.blob();
-
-    if (media.mimetype.startsWith('image/')) {
-      const item = new ClipboardItem({ [media.mimetype]: blob });
-      await navigator.clipboard.write([item]);
-      console.log('Image copied to clipboard.');
-
-      const msgBox = await waitForMessageComposer(10000);
-      if (msgBox) {
-        msgBox.focus();
-        document.execCommand('paste');
-        await sleep(2000);
-        return { success: true };
-      }
-    } else {
-      console.warn('Non-image media paste not fully supported yet in this version.');
-      return { success: false, error: 'Only images supported for now' };
-    }
-  } catch (e) {
-    console.error('Paste failed:', e);
-    return { success: false, error: e.message };
-  }
-
-  return { success: false, error: 'Unknown media error' };
+  return { success: false, error: 'Disabled' };
 }
 
 async function handleFocusChatTool(tool) {
-  const normalizedTool = String(tool || '').trim().toLowerCase();
-
-  const selectorMap = {
-    emoji: SELECTORS.emojiButton,
-    attach: SELECTORS.attachButton,
-    mic: SELECTORS.micButton,
-  };
-
-  const selector = selectorMap[normalizedTool];
-  if (!selector) {
-    return { success: false, error: 'Unsupported chat tool' };
-  }
-
-  const target = await getElement(selector, 5000);
-  if (!target) {
-    return { success: false, error: `Tool button not found: ${normalizedTool}` };
-  }
-
-  target.click();
-  await sleep(350);
-  return { success: true, tool: normalizedTool };
+  return { success: false, error: 'Disabled' };
 }
 
 initContentGlassUi();

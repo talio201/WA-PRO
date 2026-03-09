@@ -1,4 +1,4 @@
-﻿import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
     ClipboardPaste,
     Copy,
@@ -740,7 +740,7 @@ const Inbox = () => {
 
         await sendDirectMessageViaExtension({
             phone: safePhone,
-            message: safeText,
+            text: safeText,
             searchTerms: Array.isArray(searchTerms) ? searchTerms.filter(Boolean) : [],
             source,
             focusTab: false,

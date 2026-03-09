@@ -444,6 +444,11 @@ class LocalDB {
                 return;
             }
 
+            if (expected === null) {
+                request = request.is(dbField, null);
+                return;
+            }
+
             request = request.eq(dbField, stripFunctionsDeep(expected));
         });
 

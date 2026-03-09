@@ -27,3 +27,10 @@ send_flow.log
 
 extension/.git
 extension/.git_nested_backup
+
+# Python Environment & Puppeteer Sessions
+python_bot/whatsapp_session/
+python_bot/__pycache__/
+python_bot/*.pyc
+python_bot/.env
+python_bot/venv/

@@ -1,4 +1,4 @@
-﻿// Configs
+// Configs
 const API_URL = 'http://localhost:3000/api';
 const IDLE_POLLING_INTERVAL_MS = 10000; // Polling when queue is empty
 const REALTIME_WS_URL = 'ws://localhost:3000/ws';
@@ -829,63 +829,38 @@ async function openChatForCampaignJob(tab, job) {
 }
 
 async function handleDirectSendRequest(request = {}) {
-    const phone = digitsOnly(request.phone);
-    const message = String(request.message || '').trim();
-    const shouldFocusTab = toBoolean(request.focusTab);
+    if (!request.phone) throw new Error('Telefone obrigatorio.');
+    if (!request.text) throw new Error('A mensagem obrigatoria.');
 
-    if (!phone) {
-        throw new Error('Telefone invalido para envio direto.');
-    }
-
-    if (!message) {
-        throw new Error('Mensagem vazia para envio direto.');
-    }
-
-    await waitForDispatchSlot();
+    const payload = {
+        phone: request.phone,
+        text: request.text,
+        name: request.name || '',
+        campaignId: request.campaignId || null,
+        source: 'atendimento_direct',
+        at: new Date().toISOString()
+    };
 
     try {
-        const tab = await ensureWhatsAppTab({ focus: shouldFocusTab });
-        if (!tab?.id) {
-            throw new Error('Nao foi possivel abrir o WhatsApp Web.');
+        const response = await fetch('http://localhost:3000/api/messages/outbound/manual', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.msg || `Erro na API: ${response.status}`);
         }
 
-        const navigation = await openChatForCampaignJob(tab, { phone });
-        if (!navigation?.success) {
-            throw new Error(navigation?.error || 'Falha ao abrir conversa via agent-id.');
-        }
-
-        const basePreDelay = Number(extensionSettings.manualPreSendDelayMs || 700);
-        const preSendPauseMs = Math.max(120, basePreDelay + randomBetween(-220, 260));
-        await sleep(preSendPauseMs);
-
-        const result = await sendMessageToTabWithRetry(tab.id, {
-            action: 'CLICK_SEND',
-            message,
-            humanized: Boolean(extensionSettings.enableHumanizedTyping),
-            source: 'manual_inbox',
-        }, 3, 450);
-
-        if (!result || !result.success) {
-            lastResolvedChat = null;
-            throw new Error(result?.error || 'Falha ao enviar mensagem no WhatsApp Web.');
-        }
-
-        lastResolvedChat = { tabId: tab.id, phone };
-        await sleep(randomBetween(480, 1300));
-        await captureInboundForTab(tab);
-        recordOutboundSend();
-
+        const data = await response.json();
         return {
-            phone,
-            sentAt: new Date().toISOString(),
-            humanized: true,
-            delivery: {
-                preSendPauseMs,
-            },
+            success: true,
+            jobId: data.message?._id,
+            msg: 'Enviado para fila de processamento prioritária do Bot.'
         };
-    } finally {
-        isManualSendInProgress = false;
-        broadcastRuntimeState();
+    } catch (err) {
+        throw new Error(`Falha de comunicacao com o servidor: ${err.message}`);
     }
 }
 
@@ -909,69 +884,7 @@ function validateImageMedia(media = {}) {
 }
 
 async function handleDirectMediaRequest(request = {}) {
-    const phone = digitsOnly(request.phone);
-    const caption = String(request.caption || '').trim();
-    const media = validateImageMedia(request.media || {});
-    const shouldFocusTab = toBoolean(request.focusTab);
-
-    if (!phone) {
-        throw new Error('Telefone invalido para envio de midia.');
-    }
-
-    await waitForDispatchSlot();
-
-    try {
-        const tab = await ensureWhatsAppTab({ focus: shouldFocusTab });
-        if (!tab?.id) {
-            throw new Error('Nao foi possivel abrir o WhatsApp Web.');
-        }
-
-        const navigation = await openChatForCampaignJob(tab, { phone });
-        if (!navigation?.success) {
-            throw new Error(navigation?.error || 'Falha ao abrir conversa via agent-id.');
-        }
-        await sleep(randomBetween(250, 650));
-
-        const mediaResult = await sendMessageToTabWithRetry(tab.id, {
-            action: 'PASTE_MEDIA',
-            media,
-        }, 2, 350);
-
-        if (!mediaResult || !mediaResult.success) {
-            throw new Error(mediaResult?.error || 'Falha ao anexar imagem no WhatsApp Web.');
-        }
-
-        await sleep(randomBetween(650, 1400));
-
-        const result = await sendMessageToTabWithRetry(tab.id, {
-            action: 'CLICK_SEND',
-            message: caption || null,
-            humanized: Boolean(extensionSettings.enableHumanizedTyping),
-            source: 'manual_inbox_media',
-        }, 3, 450);
-
-        if (!result || !result.success) {
-            throw new Error(result?.error || 'Falha ao enviar imagem no WhatsApp Web.');
-        }
-
-        lastResolvedChat = { tabId: tab.id, phone };
-        await sleep(randomBetween(500, 1200));
-        await captureInboundForTab(tab);
-        recordOutboundSend();
-
-        return {
-            phone,
-            sentAt: new Date().toISOString(),
-            humanized: true,
-            media: {
-                mimetype: media.mimetype,
-                fileUrl: media.fileUrl,
-            },
-        };
-    } finally {
-        isManualSendInProgress = false;
-        broadcastRuntimeState();
-    }
+    throw new Error('Envio direto desativado.');
 }
 
 async function handleOpenChatToolRequest(request = {}) {
@@ -1135,265 +1048,27 @@ async function captureInboundForTab(tab) {
 async function processQueue() {
     if (!isRunning || isProcessingQueue) return;
 
-    if (isManualSendInProgress) {
-        scheduleNextRun(1500, { reason: 'manual_lock' });
-        return;
-    }
-
     isProcessingQueue = true;
     broadcastRuntimeState();
-    let nextDelayMs = IDLE_POLLING_INTERVAL_MS;
-    let nextRunScheduleReason = 'idle';
-    // If we reserve a job but fail before updating its final status, we must requeue it
-    // to avoid leaving messages stuck in "processing" forever.
-    let reservedJob = null;
 
     try {
         const monitorTab = await findWhatsAppTab();
         if (monitorTab) {
             await captureInboundForTab(monitorTab);
         }
-
-        // 1. Get Next Job (stick to current campaign while it has pending jobs)
-        let job = await fetchNextJob(activeCampaignId);
-        reservedJob = job;
-
-        if (!job && activeCampaignId) {
-            console.log(`No pending jobs for active campaign ${activeCampaignId}.`);
-            activeCampaignId = null;
-            job = await fetchNextJob();
-            reservedJob = job;
-        }
-
-        if (!job) {
-            console.log('No jobs pending.');
-            return;
-        }
-        console.log('Processing Job:', job);
-        activeCampaignId = extractCampaignId(job.campaign) || activeCampaignId;
-        broadcastRuntimeState();
-
-        // 2. Ensure WhatsApp tab (open automatically if needed)
-        const shouldFocusQueueRun = focusWhatsAppOnNextQueueRun;
-        focusWhatsAppOnNextQueueRun = false;
-        const tab = await ensureWhatsAppTab({ focus: shouldFocusQueueRun });
-        if (!tab) {
-            console.log('WhatsApp Web tab not available.');
-            await updateJobStatus(job._id, 'failed', 'WhatsApp Web tab unavailable');
-            lastResolvedChat = null;
-            pushGlassToast({
-                title: 'Envio falhou',
-                message: 'Nao foi possivel abrir o WhatsApp Web para continuar.',
-                tone: 'error',
-            });
-            return;
-        }
-
-        // 3. Campaign navigation:
-        // Only bridge flow via own agent chat (no direct link fallback).
-        const navigation = await openChatForCampaignJob(tab, job);
-        if (!navigation?.success) {
-            const navigationError = String(navigation?.error || '').trim();
-            const normalizedNavigationError = navigationError.toLowerCase();
-            const attemptCount = Math.max(1, Number(job?.attemptCount) || 1);
-            const maxBridgeRetries = 3;
-
-            const isBridgeConfigurationIssue = (
-                normalizedNavigationError.includes('configure o chat do agente')
-                || normalizedNavigationError.includes('configure o numero do agente')
-                || normalizedNavigationError.includes('agent bridge chat is required')
-            );
-
-            const isBridgeTransientIssue = (
-                Boolean(navigation?.transient)
-                || normalizedNavigationError.includes('search box not found')
-                || normalizedNavigationError.includes('not found in contacts')
-                || normalizedNavigationError.includes('no search term available')
-                || normalizedNavigationError.includes('chat open validation failed')
-                || normalizedNavigationError.includes('could not find sent number message')
-                || normalizedNavigationError.includes('could not click phone in self chat message')
-                || normalizedNavigationError.includes('could not find "conversar com" option')
-                || normalizedNavigationError.includes('conversation option not found')
-                || normalizedNavigationError.includes('did not enter new chat')
-                || normalizedNavigationError.includes('bridge flow stayed in agent chat')
-                || normalizedNavigationError.includes('message composer not ready')
-                || normalizedNavigationError.includes('message box not found')
-                || normalizedNavigationError.includes('send button not found')
-            );
-
-            if (isBridgeConfigurationIssue) {
-                // Do not auto-pause the queue on configuration issues. Mark this job as failed
-                // and keep the worker active for subsequent jobs/campaigns.
-                await updateJobStatus(job._id, 'failed', navigationError || 'Falha de configuracao do bridge.');
-                reservedJob = null;
-                lastResolvedChat = null;
-                pushGlassToast({
-                    title: 'Envio bloqueado',
-                    message: navigationError || 'Nao foi possivel abrir o chat do agente (bridge).',
-                    tone: 'error',
-                });
-                return;
-            }
-
-            if (isBridgeTransientIssue) {
-                if (attemptCount >= maxBridgeRetries) {
-                    await updateJobStatus(job._id, 'failed', navigationError || 'Falha transiente no fluxo bridge.');
-                    reservedJob = null;
-                    lastResolvedChat = null;
-                    pushGlassToast({
-                        title: 'Falha no bridge',
-                        message: navigationError || 'Nao foi possivel abrir o chat de destino apos varias tentativas.',
-                        tone: 'error',
-                    });
-                    return;
-                }
-
-                nextDelayMs = 4000;
-                nextRunScheduleReason = 'bridge_retry';
-                await updateJobStatus(job._id, 'pending', navigationError || 'Bridge transient retry');
-                reservedJob = null;
-                lastResolvedChat = null;
-                pushGlassToast({
-                    title: 'Retentando envio',
-                    message: navigationError || 'Falha temporaria ao abrir conversa. Nova tentativa em instantes.',
-                    tone: 'warning',
-                });
-                return;
-            }
-
-            await updateJobStatus(job._id, 'failed', navigationError || 'Falha ao abrir conversa da campanha.');
-            reservedJob = null;
-            lastResolvedChat = null;
-            pushGlassToast({
-                title: 'Falha no envio',
-                message: navigationError || 'Nao foi possivel abrir a conversa no WhatsApp.',
-                tone: 'error',
-            });
-            return;
-        }
-
-        const navigationStrategy = String(navigation.strategy || 'unknown');
-        console.log(`Campaign chat opened for ${job.phone} using strategy: ${navigationStrategy}.`);
-
-        // 4. Send Media (if exists)
-        if (job.campaign && job.campaign.media) {
-            console.log('Sending campaign media...');
-            const mediaResult = await sendMessageToTabWithRetry(tab.id, {
-                action: 'PASTE_MEDIA',
-                media: job.campaign.media,
-            }, 2, 350);
-
-            if (mediaResult?.success) {
-                await sleep(randomBetween(800, 1700));
-            } else {
-                console.warn('Media attach failed, sending text only:', mediaResult?.error || mediaResult);
-            }
-        }
-
-        // 5. Send Message & Click Send
-        try {
-            const messageToType = String(job.processedMessage || '').trim() || null;
-
-            const result = await sendMessageToTabWithRetry(tab.id, {
-                action: 'CLICK_SEND',
-                message: messageToType,
-                humanized: Boolean(extensionSettings.enableHumanizedTyping),
-                paste: true,
-                source: 'queue_campaign',
-            }, 3, 450);
-
-            const status = result && result.success ? 'sent' : 'failed';
-            const errorMessage = result && result.error ? result.error : null;
-            const attemptCount = Math.max(1, Number(job?.attemptCount) || 1);
-            const maxSendRetries = 3;
-
-            const normalizedSendError = String(errorMessage || '').toLowerCase();
-            const isTransientSendError = (
-                normalizedSendError.includes('message box not found')
-                || normalizedSendError.includes('message composer not ready')
-                || normalizedSendError.includes('send button not found')
-                || normalizedSendError.includes('failed to click send button')
-                || normalizedSendError.includes('text insertion failed')
-                || normalizedSendError.includes('message text not present in composer')
-            );
-
-            if (status === 'failed' && isTransientSendError) {
-                if (attemptCount >= maxSendRetries) {
-                    await updateJobStatus(job._id, 'failed', errorMessage || 'Falha transiente de envio apos varias tentativas.');
-                    reservedJob = null;
-                    lastResolvedChat = null;
-                    pushGlassToast({
-                        title: 'Falha no envio',
-                        message: errorMessage || `Nao foi possivel enviar para ${job.phone} apos varias tentativas.`,
-                        tone: 'error',
-                    });
-                    return;
-                }
-
-                nextDelayMs = 3200;
-                nextRunScheduleReason = 'send_retry';
-                await updateJobStatus(job._id, 'pending', errorMessage || 'Transient send retry');
-                reservedJob = null;
-                pushGlassToast({
-                    title: 'Retentando envio',
-                    message: errorMessage || `Falha temporaria ao enviar para ${job.phone}.`,
-                    tone: 'warning',
-                });
-                return;
-            }
-
-            await updateJobStatus(job._id, status, errorMessage);
-            reservedJob = null;
-
-            if (status === 'sent') {
-                recordOutboundSend();
-                pushGlassToast({
-                    title: 'Mensagem enviada',
-                    message: `Contato ${job.phone} processado com sucesso (${navigationStrategy}).`,
-                    tone: 'success',
-                });
-            } else {
-                lastResolvedChat = null;
-                pushGlassToast({
-                    title: 'Falha no envio',
-                    message: errorMessage || `Não foi possível enviar para ${job.phone}.`,
-                    tone: 'error',
-                });
-            }
-
-            await captureInboundForTab(tab);
-        } catch (error) {
-            console.error('Error executing job in content script:', error);
-            await updateJobStatus(job._id, 'failed', error.message);
-            reservedJob = null;
-            lastResolvedChat = null;
-            pushGlassToast({
-                title: 'Falha no envio',
-                message: String(error.message || 'Erro ao enviar mensagem na fila.'),
-                tone: 'error',
-            });
-        }
-
-        // 6. Randomized anti-ban delay for next message + occasional long break.
-        nextDelayMs = getRandomDelayMs(job.campaign);
-        nextDelayMs = maybeApplyLongBreak(nextDelayMs);
-        nextRunScheduleReason = 'anti_ban';
-        const nextDelaySeconds = Math.round(nextDelayMs / 1000);
-        console.log(`Next message will be processed in ${nextDelaySeconds}s`);
+        
+        // --- 
+        // ALL SENDING AND SEARCHING AUTOMATION HAS BEEN DISABLED AND REMOVED 
+        // AS PER USER REQUEST.
+        // ---
+        
+        await sleep(IDLE_POLLING_INTERVAL_MS);
     } catch (error) {
         console.error('Error in processQueue:', error);
-        if (reservedJob && reservedJob._id) {
-            // Best-effort requeue to avoid "processing" deadlocks.
-            try {
-                await updateJobStatus(reservedJob._id, 'pending');
-            } catch (requeueError) {
-                // Ignore secondary failures.
-            }
-        }
     } finally {
         isProcessingQueue = false;
         broadcastRuntimeState();
-        scheduleNextRun(nextDelayMs, { reason: nextRunScheduleReason });
+        scheduleNextRun(IDLE_POLLING_INTERVAL_MS, { reason: 'idle' });
     }
 }
 
@@ -1439,18 +1114,6 @@ async function waitForContentScriptReady(tabId, timeoutMs = 15000) {
 }
 
 async function sendMessageToTabWithRetry(tabId, message, attempts = 3, delayMs = 450) {
-    const totalAttempts = Math.max(1, Number(attempts) || 1);
-
-    for (let attempt = 1; attempt <= totalAttempts; attempt += 1) {
-        try {
-            return await sendMessageToTab(tabId, message);
-        } catch (error) {
-            const isLast = attempt >= totalAttempts;
-            if (isLast) throw error;
-            await sleep(delayMs);
-        }
-    }
-
     return null;
 }
 

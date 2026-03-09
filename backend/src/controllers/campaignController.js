@@ -63,7 +63,7 @@ exports.createCampaign = async (req, res) => {
 
         const antiBanSettings = sanitizeAntiBanSettings(antiBan);
         const sanitizedVariants = sanitizeMessageVariants(messageVariants, messageTemplate);
-        const shouldRotateVariants = Boolean(turboMode) && sanitizedVariants.length > 1 && contacts.length > 1;
+        const shouldRotateVariants = Boolean(turboMode) && sanitizedVariants.length > 1;
 
         const campaign = new Campaign({
             name,
@@ -87,7 +87,7 @@ exports.createCampaign = async (req, res) => {
             const phoneNormalization = normalizePhone(contact.phone);
             const normalizedPhone = phoneNormalization.normalized || String(contact.phone || '').replace(/\D/g, '');
             const template = shouldRotateVariants
-                ? sanitizedVariants[index % sanitizedVariants.length]
+                ? sanitizedVariants[Math.floor(Math.random() * sanitizedVariants.length)]
                 : (messageTemplate || sanitizedVariants[0] || '');
 
             return {
