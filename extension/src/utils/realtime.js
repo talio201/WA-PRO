@@ -1,4 +1,4 @@
-const DEFAULT_WS_URL = "ws://localhost:3000/ws";
+const DEFAULT_WS_URL = "ws://144.126.214.121:3000/ws";
 function safeParseMessage(raw) {
   try {
     return JSON.parse(String(raw || "{}"));

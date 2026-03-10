@@ -1,4 +1,4 @@
-const API_URL = "http://localhost:3000/api";
+const API_URL = "http://144.126.214.121:3000/api";
 const parseResponsePayload = async (response) => {
   const contentType = String(
     response.headers.get("content-type") || "",
