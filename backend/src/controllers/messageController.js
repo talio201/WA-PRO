@@ -168,10 +168,12 @@ function isHistoryDuplicate(existingMessage, candidate = {}) {
 async function getOrCreateSystemCampaignId(agentId) {
   try {
     const CampaignModel = require("../models/Campaign");
-    let system = await CampaignModel.findOne({
+    const matches = await CampaignModel.find({
       name: "[System] Atendimento Avulso",
       agentId,
-    });
+    }).limit(1);
+    let system = Array.isArray(matches) && matches.length > 0 ? matches[0] : null;
+
     if (!system) {
       system = new CampaignModel({
         name: "[System] Atendimento Avulso",
