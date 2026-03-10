@@ -263,3 +263,7 @@ export const importContactsXlsx = async (file) => {
     body: formData
   }, "Failed to import contacts");
 };
+
+export const fetchBotStatus = async () => {
+  return requestJson(`${API_URL}/bot/status`, {}, "Failed to fetch bot status");
+};
