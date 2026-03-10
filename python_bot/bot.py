@@ -67,7 +67,7 @@ def send_message(page, phone, message, is_priority=False, media=None):
         page.wait_for_timeout(3000) 
         page.keyboard.press("Enter")
         page.wait_for_timeout(1500)
-        chat_box = page.locator('div[role="textbox"]').last
+        chat_box = page.locator('#main div[role="textbox"]').last
         if not chat_box.is_visible():
             first_contact = page.locator('div[role="listitem"]').first
             if first_contact.is_visible():
@@ -89,7 +89,7 @@ def send_message(page, phone, message, is_priority=False, media=None):
         chat_url = f"{WHATSAPP_URL}/send/?phone={phone}"
         page.goto(chat_url)
         try:
-            page.wait_for_selector('div[role="textbox"]', timeout=MAX_WAIT_TIME)
+            page.wait_for_selector('#main', timeout=MAX_WAIT_TIME)
             if check_invalid_number_modal(page):
                 return False, "Número inválido ou sem WhatsApp."
         except PlaywrightTimeoutError:
@@ -122,7 +122,7 @@ def send_message(page, phone, message, is_priority=False, media=None):
                 # Se houver mensagem, digita como legenda
                 if message:
                     caption_box = page.locator('div[role="textbox"]').last
-                    caption_box.click()
+                    caption_box.click(timeout=3000)
                     type_like_human(page, message, is_priority)
                 
                 page.wait_for_timeout(1000)
@@ -141,8 +141,8 @@ def send_message(page, phone, message, is_priority=False, media=None):
                     os.remove(temp_path)
     
     # Fallback ou apenas texto
-    chat_box = page.locator('div[role="textbox"]').last
-    chat_box.click()
+    chat_box = page.locator('#main div[role="textbox"]').last
+    chat_box.click(timeout=3000)
     if not is_priority:
         time.sleep(random.uniform(1.0, 3.0))
     
@@ -152,13 +152,15 @@ def send_message(page, phone, message, is_priority=False, media=None):
         time.sleep(random.uniform(0.5, 1.5))
         
     try:
-        send_button = page.locator('button[aria-label="Enviar"]')
+        send_button = page.locator('button[aria-label="Enviar"], span[data-icon="send"]').first
         if send_button.is_visible():
-            send_button.click()
+            send_button.click(timeout=3000)
             logging.info("Mensagem enviada pelo Ícone de Enviar.")
         else:
+            chat_box.click()
             page.keyboard.press("Enter")
     except Exception:
+        chat_box.click()
         page.keyboard.press("Enter")
         
     time.sleep(random.uniform(1.0, 2.0))
