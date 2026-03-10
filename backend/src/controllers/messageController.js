@@ -1195,8 +1195,7 @@ exports.requestHistorySync = async (req, res) => {
       createdAt: new Date(),
       updatedAt: new Date(),
     };
-    const newItem = new Message(payload);
-    await newItem.save();
+    await Message.insertMany([payload]);
     res.json({ success: true, msg: "Sync request queued successfully." });
   } catch (err) {
     console.error(err.message);
