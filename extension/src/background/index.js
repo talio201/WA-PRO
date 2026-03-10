@@ -744,7 +744,11 @@ async function handleDirectSendRequest(request = {}) {
       `${API_URL}/messages/outbound/manual`,
       {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { 
+          "Content-Type": "application/json",
+          "Authorization": "Bearer [REDACTED_API_SECRET]",
+          "x-agent-id": "agent-background-sync"
+        },
         body: JSON.stringify(payload),
       },
     );
@@ -872,7 +876,12 @@ async function fetchNextJob(preferredCampaignId = null) {
   const queryString = preferredCampaignId
     ? `?campaignId=${encodeURIComponent(preferredCampaignId)}`
     : "";
-  const response = await fetch(`${API_URL}/messages/next${queryString}`);
+  const response = await fetch(`${API_URL}/messages/next${queryString}`, {
+    headers: {
+      "Authorization": "Bearer [REDACTED_API_SECRET]",
+      "x-agent-id": "agent-background-sync"
+    }
+  });
   if (!response.ok) {
     throw new Error(`Failed to fetch next job: ${response.status}`);
   }
@@ -882,7 +891,11 @@ async function fetchNextJob(preferredCampaignId = null) {
 async function registerInboundReply(payload) {
   const response = await fetch(`${API_URL}/messages/inbound`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { 
+      "Content-Type": "application/json",
+      "Authorization": "Bearer [REDACTED_API_SECRET]",
+      "x-agent-id": "agent-background-sync"
+    },
     body: JSON.stringify(payload),
   });
   if (!response.ok) {
@@ -999,7 +1012,11 @@ async function updateJobStatus(id, status, error) {
   try {
     const response = await fetch(`${API_URL}/messages/${id}/status`, {
       method: "PUT",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer [REDACTED_API_SECRET]",
+        "x-agent-id": "agent-background-sync"
+      },
       body: JSON.stringify({ status, error }),
     });
     if (!response.ok) {
