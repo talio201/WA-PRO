@@ -27,6 +27,21 @@ app.use("/uploads", express.static(path.join(__dirname, "../uploads")));
 const { sendFlowLogger } = require("./monitorSendFlow");
 app.use("/api/messages", sendFlowLogger);
 app.use("/api", requireAuth);
+let botState = { status: 'DISCONNECTED', qrCode: null };
+
+app.post("/api/bot/status", (req, res) => {
+  const { status, qrCodeBase64 } = req.body;
+  if (status) botState.status = status;
+  if (qrCodeBase64 !== undefined) botState.qrCode = qrCodeBase64;
+  
+  emitRealtimeEvent("bot.status", botState);
+  res.json({ success: true, botState });
+});
+
+app.get("/api/bot/status", (req, res) => {
+  res.json(botState);
+});
+
 app.use("/api/campaigns", require("./routes/campaignRoutes"));
 app.use("/api/messages", require("./routes/messageRoutes"));
 app.use("/api/contacts", require("./routes/contactRoutes"));

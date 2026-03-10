@@ -292,7 +292,7 @@ def main():
         user_data_dir = os.path.join(os.getcwd(), "whatsapp_session")
         browser = p.chromium.launch_persistent_context(
             user_data_dir=user_data_dir,
-            headless=False, 
+            headless=True, 
             bypass_csp=True, 
             user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
             args=[
@@ -303,10 +303,31 @@ def main():
         )
         page = browser.new_page()
         page.goto(WHATSAPP_URL)
-        logging.info("Aguarde a leitura do QR Code se for o primeiro acesso...")
-        page.wait_for_selector('canvas', state='hidden', timeout=120000) # Se houver canvas QR code, espera sumir
-        page.wait_for_selector('div#pane-side', timeout=120000) # Painel lateral de conversas provando que logou
-        logging.info("WhatsApp logado com sucesso. Iniciando processamento da fila...")
+        logging.info("Aguardando carregamento da página e verificando estado de login...")
+        
+        import base64
+        while True:
+            try:
+                if page.locator('div#pane-side').is_visible():
+                    logging.info("WhatsApp logado com sucesso. Status atualizado.")
+                    requests.post(f"{API_BASE_URL}/bot/status", json={"status": "LOGGED_IN", "qrCodeBase64": None}, headers=API_HEADERS)
+                    break
+                
+                qr_canvas = page.locator('canvas')
+                if qr_canvas.is_visible():
+                    logging.info("Canvas de QR Code detectado! Capturando...")
+                    qr_image_bytes = qr_canvas.screenshot()
+                    base64_encoded = base64.b64encode(qr_image_bytes).decode('utf-8')
+                    base64_str = f"data:image/png;base64,{base64_encoded}"
+                    requests.post(f"{API_BASE_URL}/bot/status", json={"status": "AWAITING_QR", "qrCodeBase64": base64_str}, headers=API_HEADERS)
+                    time.sleep(2)
+                else:
+                    time.sleep(2)
+            except Exception as e:
+                logging.error(f"Erro no laco de verificacao de QR Code: {e}")
+                time.sleep(2)
+                
+        logging.info("WhatsApp pronto. Iniciando processamento da fila...")
         while True:
             try:
                 response = requests.get(f"{API_BASE_URL}/messages/next", headers=API_HEADERS)
