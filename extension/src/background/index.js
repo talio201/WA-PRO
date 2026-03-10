@@ -741,7 +741,7 @@ async function handleDirectSendRequest(request = {}) {
   };
   try {
     const response = await fetch(
-      "http://localhost:3000/api/messages/outbound/manual",
+      `${API_URL}/messages/outbound/manual`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
