@@ -13,8 +13,7 @@ export default defineConfig({
             input: {
                 popup: resolve(__dirname, 'index.html'),
                 options: resolve(__dirname, 'options.html'),
-                background: resolve(__dirname, 'src/background/index.js'),
-                content: resolve(__dirname, 'src/content/index.js')
+                background: resolve(__dirname, 'src/background/index.js')
             },
             output: {
                 entryFileNames: 'src/[name]/index.js',

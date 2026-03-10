@@ -14,9 +14,16 @@ const requestJson = async (
   options = {},
   fallbackMessage = "Request failed",
 ) => {
+  let agentId = localStorage.getItem("emidia_agent_id");
+  if (!agentId) {
+    agentId = "agent-" + Math.random().toString(36).substr(2, 9);
+    localStorage.setItem("emidia_agent_id", agentId);
+  }
+
   const mergedHeaders = {
     ...options.headers,
     Authorization: `Bearer [REDACTED_API_SECRET]`,
+    "x-agent-id": agentId,
   };
   const mergedOptions = {
     ...options,
@@ -227,4 +234,32 @@ export const requestConversationHistorySync = async (phone) => {
     },
     "Failed to request conversation history sync",
   );
+};
+
+// API DE CONTATOS (AGENT ISOLATED)
+export const getContacts = async () => {
+  return requestJson(`${API_URL}/contacts`, {}, "Failed to fetch contacts");
+};
+
+export const addContact = async (payload) => {
+  return requestJson(`${API_URL}/contacts`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload)
+  }, "Failed to add contact");
+};
+
+export const deleteContact = async (id) => {
+  return requestJson(`${API_URL}/contacts/${id}`, {
+    method: "DELETE"
+  }, "Failed to delete contact");
+};
+
+export const importContactsXlsx = async (file) => {
+  const formData = new FormData();
+  formData.append("file", file);
+  return requestJson(`${API_URL}/contacts/import`, {
+    method: "POST",
+    body: formData
+  }, "Failed to import contacts");
 };

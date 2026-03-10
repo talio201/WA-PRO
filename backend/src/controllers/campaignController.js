@@ -63,6 +63,7 @@ exports.createCampaign = async (req, res) => {
       Boolean(turboMode) && sanitizedVariants.length > 1;
     const campaign = new Campaign({
       name,
+      agentId: req.agentId,
       messageTemplate,
       messageVariants: sanitizedVariants,
       turboMode: shouldRotateVariants,
@@ -136,7 +137,7 @@ exports.createCampaign = async (req, res) => {
 };
 exports.getCampaigns = async (req, res) => {
   try {
-    const campaigns = await Campaign.find().sort({ createdAt: -1 });
+    const campaigns = await Campaign.find({ agentId: req.agentId }).sort({ createdAt: -1 });
     res.json(campaigns);
   } catch (err) {
     console.error(err.message);
@@ -146,7 +147,7 @@ exports.getCampaigns = async (req, res) => {
 };
 exports.getCampaignFailures = async (req, res) => {
   try {
-    const campaigns = await Campaign.find({ _id: req.params.id });
+    const campaigns = await Campaign.find({ _id: req.params.id, agentId: req.agentId });
     const campaign = campaigns && campaigns.length > 0 ? campaigns[0] : null;
     if (!campaign) {
       return res.status(404).json({ msg: "Campaign not found" });
@@ -177,9 +178,10 @@ exports.getCampaignFailures = async (req, res) => {
 };
 exports.deleteCampaign = async (req, res) => {
   try {
-    const campaign = await Campaign.findById(req.params.id);
+    const campaigns = await Campaign.find({ _id: req.params.id, agentId: req.agentId });
+    const campaign = campaigns && campaigns.length > 0 ? campaigns[0] : null;
     if (!campaign) {
-      return res.status(404).json({ msg: "Campaign not found" });
+      return res.status(404).json({ msg: "Campaign not found or unauthorized" });
     }
     await Message.deleteMany({ campaign: req.params.id });
     await Campaign.deleteById(req.params.id);

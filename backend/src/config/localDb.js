@@ -10,6 +10,7 @@ const DB_PATH = path.join(__dirname, "../../data/db.json");
 const DEFAULT_LOCAL_DB = {
   campaigns: [],
   messages: [],
+  contacts: [],
   conversation_assignments: [],
 };
 let sharedSupabaseClient = null;
@@ -244,6 +245,17 @@ function mapFieldToDb(collection, field) {
     };
     return map[field] || field;
   }
+  if (collection === "contacts") {
+    const map = {
+      _id: "id",
+      agentId: "agent_id",
+      phone: "phone",
+      name: "name",
+      createdAt: "created_at",
+      updatedAt: "updated_at",
+    };
+    return map[field] || field;
+  }
   return field;
 }
 function mapCampaignFromDb(row) {
@@ -306,6 +318,17 @@ function mapFromDb(collection, row) {
       notes: row.notes || "",
     };
   }
+  if (collection === "contacts") {
+    if (!row) return null;
+    return {
+      _id: row.id,
+      agentId: row.agent_id || "",
+      phone: row.phone || "",
+      name: row.name || "",
+      createdAt: row.created_at || null,
+      updatedAt: row.updated_at || null,
+    };
+  }
   return row;
 }
 function mapCampaignToDb(item) {
@@ -365,6 +388,17 @@ function mapToDb(collection, item) {
       closed_at: toIsoDate(item.closedAt),
       updated_at: toIsoDate(item.updatedAt),
       notes: item.notes || "",
+    };
+    return removeUndefinedFields(payload);
+  }
+  if (collection === "contacts") {
+    const payload = {
+      id: item._id,
+      agent_id: item.agentId || "",
+      phone: item.phone || "",
+      name: item.name || "",
+      created_at: toIsoDate(item.createdAt),
+      updated_at: toIsoDate(item.updatedAt),
     };
     return removeUndefinedFields(payload);
   }

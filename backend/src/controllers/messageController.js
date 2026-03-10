@@ -165,15 +165,17 @@ function isHistoryDuplicate(existingMessage, candidate = {}) {
     return false;
   return Math.abs(existingAt - candidateAt) <= 90 * 1000;
 }
-async function getOrCreateSystemCampaignId() {
+async function getOrCreateSystemCampaignId(agentId) {
   try {
     const CampaignModel = require("../models/Campaign");
     let system = await CampaignModel.findOne({
       name: "[System] Atendimento Avulso",
+      agentId,
     });
     if (!system) {
       system = new CampaignModel({
         name: "[System] Atendimento Avulso",
+        agentId: agentId || "system",
         messageTemplate: "SYSTEM_DUMMY_TEMPLATE",
         status: "completed",
         stats: { total: 0, sent: 0, failed: 0 },
@@ -249,7 +251,9 @@ async function resolveRelatedCampaignId({
       return false;
     });
   if (fuzzyMatch?.campaign) return fuzzyMatch.campaign;
-  return await getOrCreateSystemCampaignId();
+  // Fallback requires agentId to create system campaign properly
+  const queryAgentId = (history.length > 0 && history[0].campaign && history[0].campaign.agentId) || 'system';
+  return await getOrCreateSystemCampaignId(queryAgentId);
 }
 exports.getMessages = async (req, res) => {
   try {
@@ -259,8 +263,20 @@ exports.getMessages = async (req, res) => {
     const safeLimit = Number.isFinite(parsedLimit)
       ? Math.max(1, Math.min(parsedLimit, maxLimit))
       : 200;
+    
+    // Filtro inicial pegando campanhas do agente
+    const agentCampaigns = await Campaign.find({ agentId: req.agentId });
+    const agentCampaignIds = agentCampaigns.map(c => c._id);
+
+    // Listando todas e filtrando após, se for DB Local JSON (otimizavel se for SQL real)
     const allMessages = await Message.find({});
     let filtered = Array.isArray(allMessages) ? allMessages : [];
+    
+    // Só deixa passar mensagens que pertençam a campanhas do agente atual 
+    // ou se agentId == bot (permite tudo pra fila)
+    if (req.agentId !== 'bot') {
+        filtered = filtered.filter(item => agentCampaignIds.includes(item.campaign));
+    }
     if (status) {
       filtered = filtered.filter((item) => item.status === status);
     }
@@ -299,7 +315,14 @@ exports.getMessages = async (req, res) => {
 exports.getConversations = async (req, res) => {
   try {
     const { search = "", onlyWithReplies, onlyAssigned, limit } = req.query;
-    const allMessages = await Message.find({});
+    
+    const agentCampaigns = await Campaign.find({ agentId: req.agentId });
+    const agentCampaignIds = agentCampaigns.map(c => c._id);
+
+    let allMessages = await Message.find({});
+    if (req.agentId && req.agentId !== 'bot') {
+        allMessages = allMessages.filter(item => agentCampaignIds.includes(item.campaign));
+    }
     let activeAssignments = [];
     try {
       activeAssignments = await ConversationAssignment.find({
@@ -437,15 +460,21 @@ exports.getConversationHistory = async (req, res) => {
     if (!normalizedPhone) {
       return res.status(400).json({ msg: "Phone is required." });
     }
-    await ensureConversationOwnership({
-      normalizedPhone,
-      agentId,
-    });
+    // await ensureConversationOwnership({
+    //  normalizedPhone,
+    //  agentId,
+    // });
     const parsedLimit = Number(req.query?.limit);
     const safeLimit = Number.isFinite(parsedLimit)
       ? Math.max(1, Math.min(parsedLimit, 5000))
       : 2000;
-    const history = await Message.find({ phone: normalizedPhone });
+    const agentCampaigns = await Campaign.find({ agentId });
+    const agentCampaignIds = agentCampaigns.map(c => c._id);
+
+    let history = await Message.find({ phone: normalizedPhone });
+    if (agentId && agentId !== 'bot') {
+       history = history.filter(item => agentCampaignIds.includes(item.campaign));
+    }
     const ordered = (Array.isArray(history) ? history : []).sort(
       (a, b) => getMessageDateMs(a) - getMessageDateMs(b),
     );
@@ -998,9 +1027,12 @@ exports.getNextJob = async (req, res) => {
       Number.isFinite(configuredStaleTimeoutMs) && configuredStaleTimeoutMs > 0
         ? configuredStaleTimeoutMs
         : 90 * 1000;
-    const activeCampaigns = await Campaign.find({ status: "running" }).select(
-      "_id",
-    );
+    const query = { status: "running" };
+    // Se não for bot, filtra pra puxar as campaigns rodando do agente atual
+    if (req.agentId && req.agentId !== "bot") {
+      query.agentId = req.agentId;
+    }
+    const activeCampaigns = await Campaign.find(query).select("_id");
     const activeCampaignIds = activeCampaigns.map((c) => c._id);
     const activeCampaignIdSet = new Set(
       activeCampaignIds.map((id) => String(id)),
@@ -1135,7 +1167,7 @@ exports.requestHistorySync = async (req, res) => {
     if (!normalizedPhone) {
       return res.status(400).json({ msg: "Phone is required for sync." });
     }
-    const dummyCampaignId = await getOrCreateSystemCampaignId();
+    const dummyCampaignId = await getOrCreateSystemCampaignId(agentId);
     const payload = {
       campaign: dummyCampaignId,
       phone: normalizedPhone,

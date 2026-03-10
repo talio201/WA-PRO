@@ -9,9 +9,12 @@ load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '..', 'backend',
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 API_BASE_URL = os.getenv("API_BASE_URL", "http://localhost:3000/api")
 API_SECRET_KEY = os.getenv("API_SECRET_KEY", "")
-API_HEADERS = { "Authorization": f"Bearer {API_SECRET_KEY}" }
+API_HEADERS = { 
+    "Authorization": f"Bearer {API_SECRET_KEY}",
+    "x-agent-id": "bot"
+}
 WHATSAPP_URL = "https://web.whatsapp.com"
-MAX_WAIT_TIME = 60000 
+MAX_WAIT_TIME = 60000
 def type_like_human(page, text, is_priority=False):
     logging.info("Iniciando digitação...")
     if text:
@@ -40,7 +43,20 @@ def check_invalid_number_modal(page):
     except PlaywrightTimeoutError:
         return False
     return False
-def send_message(page, phone, message, is_priority=False):
+def download_file(url, target_path):
+    try:
+        logging.info(f"Baixando mídia de: {url}")
+        response = requests.get(url, stream=True, timeout=30)
+        response.raise_for_status()
+        with open(target_path, 'wb') as f:
+            for chunk in response.iter_content(chunk_size=8192):
+                f.write(chunk)
+        return True
+    except Exception as e:
+        logging.error(f"Erro ao baixar arquivo: {e}")
+        return False
+
+def send_message(page, phone, message, is_priority=False, media=None):
     logging.info(f"Tentando iniciar conversa silenciosa com: {phone}")
     dom_success = False
     try:
@@ -49,7 +65,7 @@ def send_message(page, phone, message, is_priority=False):
         page.wait_for_timeout(1000) 
         page.keyboard.type(phone)
         page.wait_for_timeout(3000) 
-        page.keyboard.press("Enter") # Geralmente escolhe o usuario sugerido
+        page.keyboard.press("Enter")
         page.wait_for_timeout(1500)
         chat_box = page.locator('div[role="textbox"]').last
         if not chat_box.is_visible():
@@ -58,7 +74,7 @@ def send_message(page, phone, message, is_priority=False):
                 first_contact.click(timeout=2000)
                 page.wait_for_timeout(1500)
             else:
-                page.keyboard.press("Escape") # Aborta barra lateral de busca e volta a tela default
+                page.keyboard.press("Escape")
                 raise Exception("Sem resultados.")
         if chat_box.is_visible():
             dom_success = True
@@ -68,6 +84,7 @@ def send_message(page, phone, message, is_priority=False):
             raise Exception("Caixa de chat indetectável.")
     except Exception as e:
         logging.warning(f"Busca silenciosa DOM falhou. Recorrendo a URL e recarregamento...")
+
     if not dom_success:
         chat_url = f"{WHATSAPP_URL}/send/?phone={phone}"
         page.goto(chat_url)
@@ -80,14 +97,60 @@ def send_message(page, phone, message, is_priority=False):
                 return False, "Número inválido ou sem WhatsApp."
             logging.error("Tempo esgotado aguardando o chat carregar.")
             return False, "Timeout ao abrir o chat via URL."
-    logging.info("Chat inicializado no painel. Preparando para digitar...")
+
+    logging.info("Chat inicializado no painel. Preparando envio...")
+    
+    if media and media.get('fileUrl'):
+        file_url = media['fileUrl']
+        file_name = media.get('fileName', 'anexo')
+        temp_dir = os.path.join(os.getcwd(), 'tmp_media')
+        os.makedirs(temp_dir, exist_ok=True)
+        temp_path = os.path.join(temp_dir, file_name)
+        
+        if download_file(file_url, temp_path):
+            try:
+                logging.info(f"Anexando arquivo: {temp_path}")
+                page.locator('span[data-icon="plus"], span[data-icon="clip"]').first.click(timeout=5000)
+                
+                # Input de arquivo do WhatsApp Web
+                with page.expect_file_chooser() as fc_info:
+                    # Dependendo da versão/tipo, o seletor pode variar. Tentamos os mais comuns de imagem/video
+                    page.locator('input[type="file"]').first.set_input_files(temp_path)
+                
+                page.wait_for_timeout(2000)
+                
+                # Se houver mensagem, digita como legenda
+                if message:
+                    caption_box = page.locator('div[role="textbox"]').last
+                    caption_box.click()
+                    type_like_human(page, message, is_priority)
+                
+                page.wait_for_timeout(1000)
+                page.keyboard.press("Enter")
+                logging.info("Mídia enviada.")
+                
+                # Cleanup
+                time.sleep(2)
+                if os.path.exists(temp_path):
+                    os.remove(temp_path)
+                    
+                return True, "Enviado com sucesso (mídia)."
+            except Exception as e:
+                logging.error(f"Erro ao anexar mídia: {e}")
+                if os.path.exists(temp_path):
+                    os.remove(temp_path)
+    
+    # Fallback ou apenas texto
     chat_box = page.locator('div[role="textbox"]').last
     chat_box.click()
     if not is_priority:
         time.sleep(random.uniform(1.0, 3.0))
+    
     type_like_human(page, message, is_priority)
+    
     if not is_priority:
         time.sleep(random.uniform(0.5, 1.5))
+        
     try:
         send_button = page.locator('button[aria-label="Enviar"]')
         if send_button.is_visible():
@@ -97,6 +160,7 @@ def send_message(page, phone, message, is_priority=False):
             page.keyboard.press("Enter")
     except Exception:
         page.keyboard.press("Enter")
+        
     time.sleep(random.uniform(1.0, 2.0))
     return True, "Enviado com sucesso."
 def update_job_status(job_id, status, error=None):
@@ -260,14 +324,23 @@ def main():
                 job_id = job.get("_id") # NodeJS usa _id
                 phone = job.get("phone")
                 message_text = job.get("processedMessage", "Mensagem vazia")
-                campaign_id = job.get("campaign")
+                campaign = job.get("campaign")
+                media = None
+                campaign_id = None
+                if isinstance(campaign, dict):
+                    media = campaign.get("media")
+                    campaign_id = campaign.get("_id")
+                else:
+                    campaign_id = campaign
+                
                 action = job.get("action", "send_message")
                 logging.info(f"Iniciando job {job_id} para {phone} (Prioridade: {is_priority}) (Acao: {action})")
                 if action == "history_sync":
                     success, error_reason = scrape_history_for_job(page, phone)
                     update_job_status(job_id, "sent" if success else "failed", error_reason if not success else None)
                     continue
-                success, error_reason = send_message(page, phone, message_text, is_priority)
+                
+                success, error_reason = send_message(page, phone, message_text, is_priority, media)
                 if success:
                     update_job_status(job_id, "sent")
                     if not is_priority:

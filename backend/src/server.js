@@ -3,6 +3,7 @@ const express = require("express");
 const cors = require("cors");
 const path = require("path");
 const http = require("http");
+const { spawn } = require("child_process");
 const {
   initRealtimeServer,
   emitRealtimeEvent,
@@ -28,6 +29,7 @@ app.use("/api/messages", sendFlowLogger);
 app.use("/api", requireAuth);
 app.use("/api/campaigns", require("./routes/campaignRoutes"));
 app.use("/api/messages", require("./routes/messageRoutes"));
+app.use("/api/contacts", require("./routes/contactRoutes"));
 app.use("/api/upload", require("./routes/uploadRoutes"));
 app.use("/api/ai", require("./routes/aiRoutes"));
 app.use((err, req, res, next) => {
