@@ -20,6 +20,7 @@ services:
       context: ./python_bot
     environment:
       - API_SECRET_KEY=[REDACTED_API_SECRET]
+      - API_BASE_URL=http://backend:3000/api
     # O bot precisa acessar a rede do host ou do serviço backend.
     # Usaremos a rede interna do docker-compose onde o host 'backend' resolve para o contêiner Node.js.
     depends_on:
