@@ -1,11 +1,17 @@
 const multer = require("multer");
 const path = require("path");
 const fs = require("fs");
+
+const useSupabaseStorage = String(
+  process.env.SUPABASE_MEDIA_STORAGE || ""
+).trim().toLowerCase() === "true";
+
 const uploadDir = path.join(__dirname, "../../uploads");
 if (!fs.existsSync(uploadDir)) {
   fs.mkdirSync(uploadDir, { recursive: true });
 }
-const storage = multer.diskStorage({
+
+const diskStorage = multer.diskStorage({
   destination: function (req, file, cb) {
     cb(null, uploadDir);
   },
@@ -14,6 +20,9 @@ const storage = multer.diskStorage({
     cb(null, uniqueSuffix + path.extname(file.originalname));
   },
 });
+
+const memoryStorage = multer.memoryStorage();
+
 const fileFilter = (req, file, cb) => {
   if (
     file.mimetype.startsWith("image/") ||
@@ -29,9 +38,11 @@ const fileFilter = (req, file, cb) => {
     cb(new Error("Invalid file type"), false);
   }
 };
+
 const upload = multer({
-  storage: storage,
+  storage: useSupabaseStorage ? memoryStorage : diskStorage,
   limits: { fileSize: 50 * 1024 * 1024 },
   fileFilter: fileFilter,
 });
+
 module.exports = upload;

@@ -5,12 +5,23 @@
     "description": "Automação humana de controle de campanhas para WhatsApp.",
     "permissions": [
         "alarms",
-        "storage"
+        "storage",
+        "tabs",
+        "clipboardWrite",
+        "clipboardRead"
     ],
     "host_permissions": [
         "*://web.whatsapp.com/*",
         "http://localhost/*",
-        "http://127.0.0.1/*"
+        "http://127.0.0.1/*",
+        "http://144.126.214.121/*"
+    ],
+    "content_scripts": [
+        {
+            "matches": ["*://web.whatsapp.com/*"],
+            "js": ["src/content/contentScript.js"],
+            "run_at": "document_idle"
+        }
     ],
     "background": {
         "service_worker": "src/background/index.js",

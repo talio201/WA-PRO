@@ -1121,12 +1121,27 @@ exports.getNextJob = async (req, res) => {
         },
         { sort: { _id: 1 }, new: true },
       );
-      if (job && typeof job.populate === "function") {
-        job = await job.populate("campaign", "name antiBan media");
-      }
     }
     if (!job) {
       return res.json({ job: null });
+    }
+    const campaignId = extractCampaignIdFromPayload(job.campaign);
+    if (campaignId) {
+      try {
+        const campaignDoc = await Campaign.findById(campaignId);
+        if (campaignDoc) {
+          job.media = campaignDoc.media || null;
+          job.antiBan = campaignDoc.antiBan || null;
+          job.campaign = {
+            _id: campaignDoc._id,
+            name: campaignDoc.name,
+            antiBan: campaignDoc.antiBan,
+            media: campaignDoc.media || null,
+          };
+        }
+      } catch (populateError) {
+        console.warn("Failed to populate campaign for job:", populateError.message);
+      }
     }
     const reservedMessage = await Message.findById(job._id);
     if (reservedMessage) {

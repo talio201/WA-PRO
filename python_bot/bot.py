@@ -103,42 +103,75 @@ def send_message(page, phone, message, is_priority=False, media=None):
     if media and media.get('fileUrl'):
         file_url = media['fileUrl']
         file_name = media.get('fileName', 'anexo')
+        mimetype = media.get('mimetype', '')
         temp_dir = os.path.join(os.getcwd(), 'tmp_media')
         os.makedirs(temp_dir, exist_ok=True)
-        temp_path = os.path.join(temp_dir, file_name)
-        
+
+        ext = os.path.splitext(file_name)[1]
+        if not ext:
+            if 'image' in mimetype:
+                ext = '.jpg'
+            elif 'video' in mimetype:
+                ext = '.mp4'
+            elif 'audio' in mimetype:
+                ext = '.mp3'
+
+        safe_name = f"media_{int(time.time())}{ext}"
+        temp_path = os.path.join(temp_dir, safe_name)
+
         if download_file(file_url, temp_path):
             try:
                 logging.info(f"Anexando arquivo: {temp_path}")
-                page.locator('span[data-icon="plus"], span[data-icon="clip"]').first.click(timeout=5000)
-                
-                # Input de arquivo do WhatsApp Web
-                with page.expect_file_chooser() as fc_info:
-                    # Dependendo da versão/tipo, o seletor pode variar. Tentamos os mais comuns de imagem/video
-                    page.locator('input[type="file"]').first.set_input_files(temp_path)
-                
-                page.wait_for_timeout(2000)
-                
-                # Se houver mensagem, digita como legenda
+
+                attach_btn = page.locator(
+                    'span[data-icon="plus"], span[data-icon="clip"], span[data-icon="attach-menu-plus"]'
+                ).first
+                attach_btn.click(timeout=5000)
+                page.wait_for_timeout(800)
+
+                file_input = page.locator('input[type="file"]').first
+                file_input.set_input_files(temp_path, timeout=5000)
+                page.wait_for_timeout(2500)
+
                 if message:
-                    caption_box = page.locator('div[role="textbox"]').last
-                    caption_box.click(timeout=3000)
-                    type_like_human(page, message, is_priority)
-                
-                page.wait_for_timeout(1000)
-                page.keyboard.press("Enter")
-                logging.info("Mídia enviada.")
-                
-                # Cleanup
-                time.sleep(2)
+                    try:
+                        caption_box = page.locator(
+                            'div[data-testid="media-caption-input-container"] div[contenteditable="true"],'
+                            'div[contenteditable="true"][data-testid="caption-compose-box"]'
+                        ).first
+                        caption_box.wait_for(state="visible", timeout=4000)
+                        caption_box.click()
+                        type_like_human(page, message, is_priority)
+                    except Exception:
+                        logging.warning("Caixa de legenda não encontrada, continuando sem legenda.")
+
+                page.wait_for_timeout(800)
+
+                try:
+                    send_btn = page.locator(
+                        'button[aria-label="Enviar"], span[data-icon="send"]'
+                    ).first
+                    if send_btn.is_visible():
+                        send_btn.click(timeout=3000)
+                    else:
+                        page.keyboard.press("Enter")
+                except Exception:
+                    page.keyboard.press("Enter")
+
+                logging.info("Mídia enviada com sucesso.")
+                page.wait_for_timeout(2000)
+
                 if os.path.exists(temp_path):
                     os.remove(temp_path)
-                    
+
                 return True, "Enviado com sucesso (mídia)."
             except Exception as e:
                 logging.error(f"Erro ao anexar mídia: {e}")
                 if os.path.exists(temp_path):
                     os.remove(temp_path)
+        else:
+            logging.warning("Falha ao baixar mídia. Enviando somente texto.")
+
     
     # Fallback ou apenas texto
     chat_box = page.locator('#main div[role="textbox"]').last

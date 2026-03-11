@@ -783,7 +783,39 @@ function validateImageMedia(media = {}) {
   return { fileUrl, mimetype };
 }
 async function handleDirectMediaRequest(request = {}) {
-  throw new Error("Envio direto desativado.");
+  if (!request.phone) throw new Error("Telefone obrigatorio.");
+  if (!request.fileUrl) throw new Error("URL do arquivo obrigatoria.");
+  await waitForDispatchSlot(20000);
+  try {
+    const tab = await ensureWhatsAppTab({ focus: true });
+    if (!tab?.id) {
+      throw new Error("Nao foi possivel abrir o WhatsApp Web.");
+    }
+    const navigation = await openChatForCampaignJob(tab, { phone: request.phone });
+    if (!navigation?.success) {
+      throw new Error(navigation?.error || "Falha ao abrir conversa.");
+    }
+    await sleep(randomBetween(400, 800));
+    const result = await sendMessageToTabWithRetry(
+      tab.id,
+      {
+        action: "SEND_MEDIA_MESSAGE",
+        fileUrl: request.fileUrl,
+        mimetype: request.mimetype || "application/octet-stream",
+        fileName: request.fileName || "file",
+        caption: request.caption || "",
+      },
+      4,
+      700,
+    );
+    if (!result?.success) {
+      throw new Error(result?.error || "Falha ao enviar midia.");
+    }
+    return { sent: true };
+  } finally {
+    isManualSendInProgress = false;
+    broadcastRuntimeState();
+  }
 }
 async function handleOpenChatToolRequest(request = {}) {
   const phone = digitsOnly(request.phone);
@@ -957,17 +989,97 @@ async function processQueue() {
   isProcessingQueue = true;
   broadcastRuntimeState();
   try {
-    const monitorTab = await findWhatsAppTab();
-    if (monitorTab) {
-      await captureInboundForTab(monitorTab);
+    const tab = await ensureWhatsAppTab({
+      focus: focusWhatsAppOnNextQueueRun,
+    });
+    focusWhatsAppOnNextQueueRun = false;
+    if (tab) {
+      await captureInboundForTab(tab);
     }
-    await sleep(IDLE_POLLING_INTERVAL_MS);
+    const job = await fetchNextJob(activeCampaignId).catch(() => null);
+    if (!job) {
+      scheduleNextRun(IDLE_POLLING_INTERVAL_MS, { reason: "idle" });
+      return;
+    }
+    if (!tab?.id) {
+      await updateJobStatus(job._id, "pending", "WhatsApp tab not found");
+      scheduleNextRun(5000, { reason: "no_tab" });
+      return;
+    }
+    const navigation = await openChatForCampaignJob(tab, job);
+    if (!navigation?.success) {
+      const isTransient = Boolean(navigation?.transient);
+      await updateJobStatus(
+        job._id,
+        isTransient ? "pending" : "failed",
+        navigation?.error || "Failed to open chat",
+      );
+      scheduleNextRun(isTransient ? 8000 : 3000, { reason: "nav_fail" });
+      return;
+    }
+    await sleep(randomBetween(400, 900));
+    const campaign = typeof job.campaign === "object" ? job.campaign : null;
+    const jobMedia = job.media || campaign?.media || null;
+    if (jobMedia?.fileUrl) {
+      const mediaResult = await sendMessageToTabWithRetry(
+        tab.id,
+        {
+          action: "SEND_MEDIA_MESSAGE",
+          fileUrl: jobMedia.fileUrl,
+          mimetype: jobMedia.mimetype || "application/octet-stream",
+          fileName: jobMedia.fileName || "file",
+          caption: job.processedMessage || "",
+        },
+        4,
+        700,
+      );
+      if (!mediaResult?.success) {
+        await updateJobStatus(
+          job._id,
+          "failed",
+          mediaResult?.error || "Failed to send media",
+        );
+        scheduleNextRun(3000, { reason: "media_fail" });
+        return;
+      }
+    } else if (job.processedMessage) {
+      const textResult = await sendMessageToTabWithRetry(
+        tab.id,
+        {
+          action: "SEND_TEXT_MESSAGE",
+          text: job.processedMessage,
+          humanized: Boolean(extensionSettings.enableHumanizedTyping),
+        },
+        4,
+        700,
+      );
+      if (!textResult?.success) {
+        await updateJobStatus(
+          job._id,
+          "failed",
+          textResult?.error || "Failed to send text",
+        );
+        scheduleNextRun(3000, { reason: "text_fail" });
+        return;
+      }
+    }
+    await updateJobStatus(job._id, "sent", null);
+    recordOutboundSend();
+    pushGlassToast({
+      title: "Mensagem enviada",
+      message: `Para: ${job.phoneOriginal || job.phone}`,
+      tone: "success",
+    });
+    const campaign2 = typeof job.campaign === "object" ? job.campaign : null;
+    const baseDelay = getRandomDelayMs(campaign2);
+    const finalDelay = maybeApplyLongBreak(baseDelay);
+    scheduleNextRun(finalDelay, { reason: "after_send" });
   } catch (error) {
     console.error("Error in processQueue:", error);
+    scheduleNextRun(IDLE_POLLING_INTERVAL_MS, { reason: "queue_error" });
   } finally {
     isProcessingQueue = false;
     broadcastRuntimeState();
-    scheduleNextRun(IDLE_POLLING_INTERVAL_MS, { reason: "idle" });
   }
 }
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -1006,6 +1118,21 @@ async function sendMessageToTabWithRetry(
   attempts = 3,
   delayMs = 450,
 ) {
+  const maxAttempts = Math.max(1, Number(attempts) || 3);
+  const retryDelay = Math.max(100, Number(delayMs) || 450);
+  let lastError = null;
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    if (attempt > 0) {
+      await sleep(retryDelay);
+    }
+    try {
+      const response = await sendMessageToTab(tabId, message);
+      if (response) return response;
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  if (lastError) throw lastError;
   return null;
 }
 async function updateJobStatus(id, status, error) {

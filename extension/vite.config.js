@@ -13,10 +13,16 @@ export default defineConfig({
             input: {
                 popup: resolve(__dirname, 'index.html'),
                 options: resolve(__dirname, 'options.html'),
-                background: resolve(__dirname, 'src/background/index.js')
+                background: resolve(__dirname, 'src/background/index.js'),
+                contentScript: resolve(__dirname, 'src/content/contentScript.js')
             },
             output: {
-                entryFileNames: 'src/[name]/index.js',
+                entryFileNames: (chunkInfo) => {
+                    if (chunkInfo.name === 'contentScript') {
+                        return 'src/content/contentScript.js';
+                    }
+                    return 'src/[name]/index.js';
+                },
                 chunkFileNames: 'assets/[name].[hash].js',
                 assetFileNames: 'assets/[name].[hash].[ext]',
                 manualChunks(id) {
