@@ -135,45 +135,84 @@ def send_message(page, phone, message, is_priority=False, media=None):
 
         if download_file(file_url, temp_path):
             try:
-                logging.info(f"Preparando envio de midia real (NÃO sticker): {temp_path}")
+                logging.info(f"Preparando envio de midia (Original): {temp_path} | Mime: {mimetype}")
 
-                # Clica no ícone de anexo (+)
-                attach_btn = page.locator('span[data-icon="plus"], span[data-icon="clip"], span[data-icon="attach-menu-plus"]').first
-                attach_btn.click(timeout=5000)
-                page.wait_for_timeout(1000)
+                # 1. Tentar clicar no ícone de anexo (+) com timeout maior
+                try:
+                    attach_btn = page.locator('span[data-icon="plus"], span[data-icon="clip"], span[data-icon="attach-menu-plus"]').first
+                    attach_btn.click(timeout=10000)
+                    page.wait_for_timeout(1500)
+                except Exception as e_menu:
+                    logging.warning(f"Nao foi possivel abrir o menu de anexo (pode ja estar aberto): {e_menu}")
 
-                # Identifica qual botão de anexo usar (Galeria vs Documento)
-                # 'attach-image' é o ícone de Fotos e Vídeos (O que envia imagem real)
-                # 'attach-document' é para arquivos gerais
+                # 2. Selecionar o input correto baseando-se no atributo 'accept'
+                # Evitaremos a todo custo o input que aceite 'webp' (que é o de stickers)
                 is_image_or_video = 'image' in mimetype or 'video' in mimetype
                 
-                selector = 'span[data-icon="attach-image"]' if is_image_or_video else 'span[data-icon="attach-document"]'
-                
                 try:
-                    # Usamos expect_file_chooser para capturar a abertura do seletor e injetar o arquivo
-                    with page.expect_file_chooser(timeout=10000) as fc_info:
-                        btn_gallery = page.locator(selector).first
-                        btn_gallery.click(timeout=5000)
-                    
-                    file_chooser = fc_info.value
-                    file_chooser.set_files(temp_path)
-                    logging.info(f"Arquivo anexado via ícone: {selector}")
-                except Exception as e_click:
-                    logging.warning(f"Falha ao clicar no ícone específico ({selector}), tentando fallback de input: {e_click}")
-                    file_input = page.locator('input[type="file"]').first
-                    file_input.set_input_files(temp_path, timeout=8000)
+                    # Buscamos todos os inputs de arquivo
+                    inputs = page.locator('input[type="file"]')
+                    input_count = inputs.count()
+                    target_input = None
 
-                # Aguarda o modal de preview e envia
-                page.wait_for_timeout(4000)
+                    for i in range(input_count):
+                        # Verificamos o atributo 'accept' via JS
+                        accept_attr = inputs.nth(i).get_attribute('accept') or ""
+                        logging.debug(f"Input {i} accept: {accept_attr}")
+                        
+                        # Se queremos imagem/video, pegamos o que aceita image/* e NAO aceita webp
+                        if is_image_or_video:
+                            if 'image/*' in accept_attr and 'webp' not in accept_attr:
+                                target_input = inputs.nth(i)
+                                logging.info(f"Input {i} identificado como Galeria (Midia Real).")
+                                break
+                        else:
+                            # Se for documento/audio, pegamos o que aceita * (ou o que sobrou que nao seja sticker)
+                            if 'webp' not in accept_attr:
+                                target_input = inputs.nth(i)
+                                logging.info(f"Input {i} identificado para Documento/Audio.")
+                                break
+
+                    if not target_input:
+                        logging.warning("Nao foi possivel identificar o input ideal. Usando fallback (primeiro input disponivel).")
+                        target_input = inputs.first
+
+                    # Injeta o arquivo
+                    target_input.set_input_files(temp_path, timeout=12000)
+                    logging.info("Arquivo injetado no input selecionado.")
+                    
+                except Exception as e_input:
+                    logging.error(f"Falha ao selecionar/interagir com o input de arquivo: {e_input}")
+                    # Tentativa desesperada de fallback via clique visual se o input falhar
+                    try:
+                        selector = 'span[data-icon="attach-image"]' if is_image_or_video else 'span[data-icon="attach-document"]'
+                        with page.expect_file_chooser(timeout=10000) as fc_info:
+                            page.locator(selector).first.click(timeout=5000)
+                        file_chooser = fc_info.value
+                        file_chooser.set_files(temp_path)
+                    except Exception:
+                        pass
+
+                # 3. Aguarda o modal de preview aparecer e clica em enviar (ou Enter)
+                page.wait_for_timeout(5000) # Buffer para carregar a mídia no modal
                 page.keyboard.press("Enter")
-                logging.info("Midia enviada via Galeria.")
+                
+                # Verificando se o botão de enviar ainda está lá (caso o Enter falhe)
+                try:
+                    send_btn = page.locator('span[data-icon="send"], button[aria-label="Enviar"]').first
+                    if send_btn.is_visible(timeout=2000):
+                        send_btn.click(timeout=3000)
+                except Exception:
+                    pass
+
+                logging.info("Midia enviada com sucesso (via fluxo corrigido).")
                 page.wait_for_timeout(2000)
 
                 if os.path.exists(temp_path):
                     os.remove(temp_path)
                 
             except Exception as e:
-                logging.error(f"Erro no envio de midia: {e}")
+                logging.error(f"Erro no fluxo de midia: {e}")
                 if os.path.exists(temp_path):
                     os.remove(temp_path)
         else:
