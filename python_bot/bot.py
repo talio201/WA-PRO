@@ -123,14 +123,38 @@ def send_message(page, phone, message, is_priority=False, media=None):
             try:
                 logging.info(f"Anexando arquivo: {temp_path}")
 
-                attach_btn = page.locator(
-                    'span[data-icon="plus"], span[data-icon="clip"], span[data-icon="attach-menu-plus"]'
-                ).first
-                attach_btn.click(timeout=5000)
-                page.wait_for_timeout(800)
+                file_inputs = page.locator('input[type="file"]')
+                file_input_count = file_inputs.count()
+                logging.info(f"Inputs de arquivo encontrados na pagina: {file_input_count}")
 
-                file_input = page.locator('input[type="file"]').first
-                file_input.set_input_files(temp_path, timeout=5000)
+                attached = False
+                for idx in range(min(file_input_count, 5)):
+                    try:
+                        file_inputs.nth(idx).set_input_files(temp_path, timeout=8000)
+                        page.wait_for_timeout(3000)
+                        if page.locator('div[data-testid="media-editor"], div[data-testid="photo-editor"]').is_visible():
+                            attached = True
+                            logging.info(f"Preview de midia detectado apos input {idx}.")
+                            break
+                        logging.info(f"Input {idx} nao abriu preview. Tentando proximo...")
+                    except Exception as ex_inp:
+                        logging.warning(f"Input {idx} falhou: {ex_inp}")
+
+                if not attached:
+                    logging.warning("Nenhum input abriu preview. Tentando via JS evaluate...")
+                    try:
+                        page.evaluate("""
+                            const inputs = document.querySelectorAll('input[type="file"]');
+                            for (const inp of inputs) {
+                                const dt = new DataTransfer();
+                                // nao conseguimos setar arquivo via JS puro em sandboxed
+                                // apenas marcamos como alvo
+                                inp.removeAttribute('multiple');
+                            }
+                        """)
+                    except Exception:
+                        pass
+
                 page.wait_for_timeout(2500)
 
                 if message:
