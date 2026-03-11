@@ -124,50 +124,34 @@ def send_message(page, phone, message, is_priority=False, media=None):
                 logging.info(f"Anexando arquivo: {temp_path}")
 
                 file_inputs = page.locator('input[type="file"]')
-                file_input_count = file_inputs.count()
-                logging.info(f"Inputs de arquivo encontrados na pagina: {file_input_count}")
+                logging.info(f"Inputs de arquivo na pagina: {file_inputs.count()}")
 
-                attached = False
-                for idx in range(min(file_input_count, 5)):
-                    try:
-                        file_inputs.nth(idx).set_input_files(temp_path, timeout=8000)
-                        page.wait_for_timeout(3000)
-                        if page.locator('div[data-testid="media-editor"], div[data-testid="photo-editor"]').is_visible():
-                            attached = True
-                            logging.info(f"Preview de midia detectado apos input {idx}.")
-                            break
-                        logging.info(f"Input {idx} nao abriu preview. Tentando proximo...")
-                    except Exception as ex_inp:
-                        logging.warning(f"Input {idx} falhou: {ex_inp}")
-
-                if not attached:
-                    logging.warning("Nenhum input abriu preview. Tentando via JS evaluate...")
-                    try:
-                        page.evaluate("""
-                            const inputs = document.querySelectorAll('input[type="file"]');
-                            for (const inp of inputs) {
-                                const dt = new DataTransfer();
-                                // nao conseguimos setar arquivo via JS puro em sandboxed
-                                // apenas marcamos como alvo
-                                inp.removeAttribute('multiple');
-                            }
-                        """)
-                    except Exception:
-                        pass
-
-                page.wait_for_timeout(2500)
+                file_inputs.first.set_input_files(temp_path, timeout=8000)
+                page.wait_for_timeout(4000)
 
                 if message:
-                    try:
-                        caption_box = page.locator(
-                            'div[data-testid="media-caption-input-container"] div[contenteditable="true"],'
-                            'div[contenteditable="true"][data-testid="caption-compose-box"]'
-                        ).first
-                        caption_box.wait_for(state="visible", timeout=4000)
-                        caption_box.click()
-                        type_like_human(page, message, is_priority)
-                    except Exception:
-                        logging.warning("Caixa de legenda não encontrada, continuando sem legenda.")
+                    caption_selectors = [
+                        'div[data-testid="media-caption-input-container"] div[contenteditable="true"]',
+                        'div[contenteditable="true"][data-testid="caption-compose-box"]',
+                        'div[role="complementary"] div[contenteditable="true"]',
+                        'div[data-lexical-editor="true"]',
+                        'div[contenteditable="true"]',
+                    ]
+                    caption_typed = False
+                    for sel in caption_selectors:
+                        try:
+                            cap = page.locator(sel).last
+                            cap.wait_for(state="visible", timeout=2000)
+                            cap.click()
+                            page.wait_for_timeout(300)
+                            type_like_human(page, message, is_priority)
+                            caption_typed = True
+                            logging.info(f"Legenda digitada com seletor: {sel}")
+                            break
+                        except Exception:
+                            continue
+                    if not caption_typed:
+                        logging.warning("Nao foi possivel digitar legenda em nenhum seletor.")
 
                 page.wait_for_timeout(800)
 
@@ -182,19 +166,19 @@ def send_message(page, phone, message, is_priority=False, media=None):
                 except Exception:
                     page.keyboard.press("Enter")
 
-                logging.info("Mídia enviada com sucesso.")
+                logging.info("Midia enviada com sucesso.")
                 page.wait_for_timeout(2000)
 
                 if os.path.exists(temp_path):
                     os.remove(temp_path)
 
-                return True, "Enviado com sucesso (mídia)."
+                return True, "Enviado com sucesso (midia)."
             except Exception as e:
-                logging.error(f"Erro ao anexar mídia: {e}")
+                logging.error(f"Erro ao anexar midia: {e}")
                 if os.path.exists(temp_path):
                     os.remove(temp_path)
         else:
-            logging.warning("Falha ao baixar mídia. Enviando somente texto.")
+            logging.warning("Falha ao baixar midia. Enviando somente texto.")
 
     
     # Fallback ou apenas texto
