@@ -377,7 +377,7 @@ def main():
                     check_inbound_messages(page)
                     time.sleep(5)
                     continue
-                job_id = job.get("_id") # NodeJS usa _id
+                job_id = job.get("_id")
                 phone = job.get("phone")
                 message_text = job.get("processedMessage", "Mensagem vazia")
                 campaign = job.get("campaign")
@@ -388,14 +388,18 @@ def main():
                     campaign_id = campaign.get("_id")
                 else:
                     campaign_id = campaign
-                
+
+                if not media:
+                    media = job.get("media")
+
+                logging.info(f"Iniciando job {job_id} para {phone} | Prioridade: {is_priority} | Midia: {bool(media)} | fileUrl: {media.get('fileUrl') if isinstance(media, dict) else None}")
+
                 action = job.get("action", "send_message")
-                logging.info(f"Iniciando job {job_id} para {phone} (Prioridade: {is_priority}) (Acao: {action})")
                 if action == "history_sync":
                     success, error_reason = scrape_history_for_job(page, phone)
                     update_job_status(job_id, "sent" if success else "failed", error_reason if not success else None)
                     continue
-                
+
                 success, error_reason = send_message(page, phone, message_text, is_priority, media)
                 if success:
                     update_job_status(job_id, "sent")
