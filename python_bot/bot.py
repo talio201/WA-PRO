@@ -100,7 +100,7 @@ def send_message(page, phone, message, is_priority=False, media=None):
 
     logging.info("Chat aberto. Preparando envio...")
 
-    # 1. Enviar Texto Primeiro (Independente)
+    # 1. Enviar Texto Primeiro (Mensagem Independente)
     if message:
         try:
             chat_box = page.locator('#main div[role="textbox"]').last
@@ -111,123 +111,75 @@ def send_message(page, phone, message, is_priority=False, media=None):
             page.wait_for_timeout(400)
             page.keyboard.press("Enter")
             logging.info("Texto enviado com sucesso.")
-            page.wait_for_timeout(1000)
+            page.wait_for_timeout(1500)
         except Exception as e:
             logging.error(f"Erro ao enviar texto: {e}")
 
-    # 2. Enviar Mídia Depois (Independente)
+    # 2. Enviar Mídia via Simulação de 'Ctrl+V' (Paste)
     if media and media.get('fileUrl'):
         file_url = media['fileUrl']
-        file_name = media.get('fileName', 'anexo')
-        mimetype = media.get('mimetype', '')
+        mimetype = media.get('mimetype', 'image/png')
+        
         temp_dir = os.path.join(os.getcwd(), 'tmp_media')
         os.makedirs(temp_dir, exist_ok=True)
-
-        ext = os.path.splitext(file_name)[1]
-        if not ext:
-            if 'image' in mimetype: ext = '.jpg'
-            elif 'video' in mimetype: ext = '.mp4'
-            elif 'audio' in mimetype: ext = '.mp3'
-            else: ext = '.bin'
-
-        safe_name = f"media_{int(time.time())}{ext}"
+        safe_name = f"paste_{int(time.time())}.png"
         temp_path = os.path.join(temp_dir, safe_name)
 
         if download_file(file_url, temp_path):
             try:
-                logging.info(f"Preparando envio de midia (Original): {temp_path} | Mime: {mimetype}")
+                logging.info(f"Simulando Ctrl+V para midia: {temp_path}")
+                import base64
+                with open(temp_path, "rb") as image_file:
+                    base64_image = base64.b64encode(image_file.read()).decode('utf-8')
 
-                # 1. Tentar abrir o menu de anexo (Plus/Clip)
-                attach_opened = False
-                attach_selectors = [
-                    'span[data-icon="plus"]', 
-                    'span[data-icon="clip"]', 
-                    'span[data-icon="attach-menu-plus"]',
-                    'div[aria-label="Anexar"]',
-                    'button[title="Anexar"]'
-                ]
-                
-                for sel in attach_selectors:
-                    try:
-                        btn = page.locator(sel).first
-                        if btn.is_visible(timeout=2000):
-                            btn.click(timeout=3000)
-                            attach_opened = True
-                            logging.info(f"Menu de anexo aberto via: {sel}")
-                            break
-                    except Exception:
-                        continue
-                
-                if not attach_opened:
-                    logging.warning("Nao foi possivel confirmar abertura do menu de anexo. Tentando busca direta de input.")
-
-                page.wait_for_timeout(1000)
-
-                # 2. Selecionar o input de GALERIA (Fotos e Vídeos)
-                # O input de galeria SEMPRE aceita vídeo. O de sticker NÃO aceita.
-                is_image_or_video = 'image' in mimetype or 'video' in mimetype
-                
-                try:
-                    inputs = page.locator('input[type="file"]')
-                    input_count = inputs.count()
-                    target_input = None
-
-                    # Prioridade 1: Input que aceita vídeo (Galeria Real)
-                    for i in range(input_count):
-                        accept = inputs.nth(i).get_attribute('accept') or ""
-                        if 'video' in accept.lower():
-                            target_input = inputs.nth(i)
-                            logging.info(f"Input {i} identificado como GALERIA (aceita video).")
-                            break
+                # Script JS para injetar o arquivo no Clipboard e disparar o Paste
+                paste_script = """
+                async (params) => {
+                    const { base64Data, mimeType } = params;
+                    const res = await fetch(`data:${mimeType};base64,${base64Data}`);
+                    const blob = await res.blob();
+                    const file = new File([blob], "image.png", { type: mimeType });
                     
-                    # Prioridade 2: Se não achou por vídeo (ex: áudio), busca o que não é sticker
-                    if not target_input:
-                        for i in range(input_count):
-                            accept = inputs.nth(i).get_attribute('accept') or ""
-                            if 'webp' not in accept.lower():
-                                target_input = inputs.nth(i)
-                                logging.info(f"Input {i} selecionado por exclusao de stickers.")
-                                break
-
-                    if not target_input:
-                        target_input = inputs.first
-                        logging.warning("Usando primeiro input disponivel (fallback total).")
-
-                    # Injeção do arquivo
-                    target_input.set_input_files(temp_path, timeout=15000)
-                    logging.info("Arquivo injetado. Aguardando preview...")
+                    const dataTransfer = new DataTransfer();
+                    dataTransfer.items.add(file);
                     
-                except Exception as e_in:
-                    logging.error(f"Erro ao injetar arquivo: {e_in}")
-
-                # 3. Finalização no Modal de Preview
-                # Esperamos o modal carregar (botão de enviar aparecer)
-                page.wait_for_timeout(5000)
-                page.keyboard.press("Enter")
+                    const chatBox = document.querySelector('#main div[role="textbox"]');
+                    if (chatBox) {
+                        const pasteEvent = new ClipboardEvent('paste', {
+                            clipboardData: dataTransfer,
+                            bubbles: true,
+                            cancelable: true
+                        });
+                        chatBox.dispatchEvent(pasteEvent);
+                        return true;
+                    }
+                    return false;
+                }
+                """
                 
-                # Clique de segurança no botão de enviar do modal
-                try:
-                    send_btn = page.locator('span[data-icon="send"], div[role="button"] span[data-icon="send"]').first
-                    if send_btn.is_visible(timeout=3000):
-                        send_btn.click()
-                        logging.info("Clique manual no botao de enviar do modal realizado.")
-                except Exception:
-                    pass
+                success = page.evaluate(paste_script, {"base64Data": base64_image, "mimeType": mimetype})
+                
+                if success:
+                    logging.info("Evento 'Paste' (Ctrl+V) disparado com sucesso.")
+                    # Aguarda o preview aparecer e confirma
+                    page.wait_for_timeout(5000)
+                    page.keyboard.press("Enter")
+                    logging.info("Midia confirmada apos Paste.")
+                else:
+                    logging.error("Nao foi possivel encontrar o chatbox para o Paste.")
 
-                logging.info("Fluxo de midia concluido.")
                 page.wait_for_timeout(2000)
-
                 if os.path.exists(temp_path):
                     os.remove(temp_path)
                 
             except Exception as e:
-                logging.error(f"Erro fatal no fluxo de midia: {e}")
+                logging.error(f"Erro na simulacao de Paste: {e}")
                 if os.path.exists(temp_path):
                     os.remove(temp_path)
         else:
             logging.warning("Download falhou.")
 
-    return True, "Enviado."
+    return True, "Processo concluido."
 def update_job_status(job_id, status, error=None):
     data = {"status": status}
     if error:
