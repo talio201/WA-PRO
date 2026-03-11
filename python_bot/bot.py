@@ -115,36 +115,42 @@ def send_message(page, phone, message, is_priority=False, media=None):
         except Exception as e:
             logging.error(f"Erro ao enviar texto: {e}")
 
-    # 2. Enviar Mídia via Simulação de 'Ctrl+V' (Paste)
+    # 2. Enviar Mídia via Simulação de 'Ctrl+V' (Paste) Universal
     if media and media.get('fileUrl'):
         file_url = media['fileUrl']
-        mimetype = media.get('mimetype', 'image/png')
+        file_name = media.get('fileName', 'arquivo.bin')
+        mimetype = media.get('mimetype', 'application/octet-stream')
         
         temp_dir = os.path.join(os.getcwd(), 'tmp_media')
         os.makedirs(temp_dir, exist_ok=True)
-        safe_name = f"paste_{int(time.time())}.png"
+        # Preservar o nome do arquivo se possível para o SO baixar corretamente
+        ext = os.path.splitext(file_name)[1]
+        safe_name = f"paste_{int(time.time())}{ext}"
         temp_path = os.path.join(temp_dir, safe_name)
 
         if download_file(file_url, temp_path):
             try:
-                logging.info(f"Simulando Ctrl+V para midia: {temp_path}")
+                logging.info(f"Simulando Ctrl+V para arquivo: {file_name} ({mimetype})")
                 import base64
-                with open(temp_path, "rb") as image_file:
-                    base64_image = base64.b64encode(image_file.read()).decode('utf-8')
+                with open(temp_path, "rb") as f:
+                    base64_data = base64.b64encode(f.read()).decode('utf-8')
 
-                # Script JS para injetar o arquivo no Clipboard e disparar o Paste
+                # Script JS Universal para injetar QUALQUER arquivo no Clipboard e disparar o Paste
                 paste_script = """
                 async (params) => {
-                    const { base64Data, mimeType } = params;
+                    const { base64Data, mimeType, fileName } = params;
                     const res = await fetch(`data:${mimeType};base64,${base64Data}`);
                     const blob = await res.blob();
-                    const file = new File([blob], "image.png", { type: mimeType });
+                    
+                    // Criamos o arquivo com o nome original para o WhatsApp reconhecer
+                    const file = new File([blob], fileName, { type: mimeType });
                     
                     const dataTransfer = new DataTransfer();
                     dataTransfer.items.add(file);
                     
                     const chatBox = document.querySelector('#main div[role="textbox"]');
                     if (chatBox) {
+                        chatBox.focus();
                         const pasteEvent = new ClipboardEvent('paste', {
                             clipboardData: dataTransfer,
                             bubbles: true,
@@ -157,23 +163,27 @@ def send_message(page, phone, message, is_priority=False, media=None):
                 }
                 """
                 
-                success = page.evaluate(paste_script, {"base64Data": base64_image, "mimeType": mimetype})
+                success = page.evaluate(paste_script, {
+                    "base64Data": base64_data, 
+                    "mimeType": mimetype,
+                    "fileName": file_name
+                })
                 
                 if success:
-                    logging.info("Evento 'Paste' (Ctrl+V) disparado com sucesso.")
-                    # Aguarda o preview aparecer e confirma
-                    page.wait_for_timeout(5000)
+                    logging.info(f"Evento 'Paste' para {file_name} disparado.")
+                    # Aguarda o preview aparecer. Documentos e Vídeos podem demorar mais para carregar.
+                    page.wait_for_timeout(6000)
                     page.keyboard.press("Enter")
-                    logging.info("Midia confirmada apos Paste.")
+                    logging.info("Mídia confirmada via Ctrl+V.")
                 else:
-                    logging.error("Nao foi possivel encontrar o chatbox para o Paste.")
+                    logging.error("Falha ao localizar chatbox para o Paste.")
 
                 page.wait_for_timeout(2000)
                 if os.path.exists(temp_path):
                     os.remove(temp_path)
                 
             except Exception as e:
-                logging.error(f"Erro na simulacao de Paste: {e}")
+                logging.error(f"Erro no Paste universal: {e}")
                 if os.path.exists(temp_path):
                     os.remove(temp_path)
         else:
