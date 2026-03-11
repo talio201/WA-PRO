@@ -137,88 +137,97 @@ def send_message(page, phone, message, is_priority=False, media=None):
             try:
                 logging.info(f"Preparando envio de midia (Original): {temp_path} | Mime: {mimetype}")
 
-                # 1. Tentar clicar no ícone de anexo (+) com timeout maior
-                try:
-                    attach_btn = page.locator('span[data-icon="plus"], span[data-icon="clip"], span[data-icon="attach-menu-plus"]').first
-                    attach_btn.click(timeout=10000)
-                    page.wait_for_timeout(1500)
-                except Exception as e_menu:
-                    logging.warning(f"Nao foi possivel abrir o menu de anexo (pode ja estar aberto): {e_menu}")
+                # 1. Tentar abrir o menu de anexo (Plus/Clip)
+                attach_opened = False
+                attach_selectors = [
+                    'span[data-icon="plus"]', 
+                    'span[data-icon="clip"]', 
+                    'span[data-icon="attach-menu-plus"]',
+                    'div[aria-label="Anexar"]',
+                    'button[title="Anexar"]'
+                ]
+                
+                for sel in attach_selectors:
+                    try:
+                        btn = page.locator(sel).first
+                        if btn.is_visible(timeout=2000):
+                            btn.click(timeout=3000)
+                            attach_opened = True
+                            logging.info(f"Menu de anexo aberto via: {sel}")
+                            break
+                    except Exception:
+                        continue
+                
+                if not attach_opened:
+                    logging.warning("Nao foi possivel confirmar abertura do menu de anexo. Tentando busca direta de input.")
 
-                # 2. Selecionar o input correto baseando-se no atributo 'accept'
-                # Evitaremos a todo custo o input que aceite 'webp' (que é o de stickers)
+                page.wait_for_timeout(1000)
+
+                # 2. Selecionar o input de GALERIA (Fotos e Vídeos)
+                # O input de galeria SEMPRE aceita vídeo. O de sticker NÃO aceita.
                 is_image_or_video = 'image' in mimetype or 'video' in mimetype
                 
                 try:
-                    # Buscamos todos os inputs de arquivo
                     inputs = page.locator('input[type="file"]')
                     input_count = inputs.count()
                     target_input = None
 
+                    # Prioridade 1: Input que aceita vídeo (Galeria Real)
                     for i in range(input_count):
-                        # Verificamos o atributo 'accept' via JS
-                        accept_attr = inputs.nth(i).get_attribute('accept') or ""
-                        logging.debug(f"Input {i} accept: {accept_attr}")
-                        
-                        # Se queremos imagem/video, pegamos o que aceita image/* e NAO aceita webp
-                        if is_image_or_video:
-                            if 'image/*' in accept_attr and 'webp' not in accept_attr:
+                        accept = inputs.nth(i).get_attribute('accept') or ""
+                        if 'video' in accept.lower():
+                            target_input = inputs.nth(i)
+                            logging.info(f"Input {i} identificado como GALERIA (aceita video).")
+                            break
+                    
+                    # Prioridade 2: Se não achou por vídeo (ex: áudio), busca o que não é sticker
+                    if not target_input:
+                        for i in range(input_count):
+                            accept = inputs.nth(i).get_attribute('accept') or ""
+                            if 'webp' not in accept.lower():
                                 target_input = inputs.nth(i)
-                                logging.info(f"Input {i} identificado como Galeria (Midia Real).")
-                                break
-                        else:
-                            # Se for documento/audio, pegamos o que aceita * (ou o que sobrou que nao seja sticker)
-                            if 'webp' not in accept_attr:
-                                target_input = inputs.nth(i)
-                                logging.info(f"Input {i} identificado para Documento/Audio.")
+                                logging.info(f"Input {i} selecionado por exclusao de stickers.")
                                 break
 
                     if not target_input:
-                        logging.warning("Nao foi possivel identificar o input ideal. Usando fallback (primeiro input disponivel).")
                         target_input = inputs.first
+                        logging.warning("Usando primeiro input disponivel (fallback total).")
 
-                    # Injeta o arquivo
-                    target_input.set_input_files(temp_path, timeout=12000)
-                    logging.info("Arquivo injetado no input selecionado.")
+                    # Injeção do arquivo
+                    target_input.set_input_files(temp_path, timeout=15000)
+                    logging.info("Arquivo injetado. Aguardando preview...")
                     
-                except Exception as e_input:
-                    logging.error(f"Falha ao selecionar/interagir com o input de arquivo: {e_input}")
-                    # Tentativa desesperada de fallback via clique visual se o input falhar
-                    try:
-                        selector = 'span[data-icon="attach-image"]' if is_image_or_video else 'span[data-icon="attach-document"]'
-                        with page.expect_file_chooser(timeout=10000) as fc_info:
-                            page.locator(selector).first.click(timeout=5000)
-                        file_chooser = fc_info.value
-                        file_chooser.set_files(temp_path)
-                    except Exception:
-                        pass
+                except Exception as e_in:
+                    logging.error(f"Erro ao injetar arquivo: {e_in}")
 
-                # 3. Aguarda o modal de preview aparecer e clica em enviar (ou Enter)
-                page.wait_for_timeout(5000) # Buffer para carregar a mídia no modal
+                # 3. Finalização no Modal de Preview
+                # Esperamos o modal carregar (botão de enviar aparecer)
+                page.wait_for_timeout(5000)
                 page.keyboard.press("Enter")
                 
-                # Verificando se o botão de enviar ainda está lá (caso o Enter falhe)
+                # Clique de segurança no botão de enviar do modal
                 try:
-                    send_btn = page.locator('span[data-icon="send"], button[aria-label="Enviar"]').first
-                    if send_btn.is_visible(timeout=2000):
-                        send_btn.click(timeout=3000)
+                    send_btn = page.locator('span[data-icon="send"], div[role="button"] span[data-icon="send"]').first
+                    if send_btn.is_visible(timeout=3000):
+                        send_btn.click()
+                        logging.info("Clique manual no botao de enviar do modal realizado.")
                 except Exception:
                     pass
 
-                logging.info("Midia enviada com sucesso (via fluxo corrigido).")
+                logging.info("Fluxo de midia concluido.")
                 page.wait_for_timeout(2000)
 
                 if os.path.exists(temp_path):
                     os.remove(temp_path)
                 
             except Exception as e:
-                logging.error(f"Erro no fluxo de midia: {e}")
+                logging.error(f"Erro fatal no fluxo de midia: {e}")
                 if os.path.exists(temp_path):
                     os.remove(temp_path)
         else:
-            logging.warning("Falha no download da midia.")
+            logging.warning("Download falhou.")
 
-    return True, "Processo de envio finalizado."
+    return True, "Enviado."
 def update_job_status(job_id, status, error=None):
     data = {"status": status}
     if error:
