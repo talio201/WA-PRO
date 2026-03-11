@@ -100,28 +100,22 @@ def send_message(page, phone, message, is_priority=False, media=None):
 
     logging.info("Chat aberto. Preparando envio...")
 
+    # 1. Enviar Texto Primeiro (Independente)
     if message:
         try:
             chat_box = page.locator('#main div[role="textbox"]').last
             chat_box.click(timeout=3000)
             if not is_priority:
-                time.sleep(random.uniform(0.5, 1.5))
+                time.sleep(random.uniform(0.5, 1.2))
             type_like_human(page, message, is_priority)
-            if not is_priority:
-                time.sleep(random.uniform(0.3, 0.8))
-            try:
-                btn = page.locator('button[aria-label="Enviar"], span[data-icon="send"]').first
-                if btn.is_visible():
-                    btn.click(timeout=2000)
-                else:
-                    page.keyboard.press("Enter")
-            except Exception:
-                page.keyboard.press("Enter")
-            logging.info("Texto enviado com sucesso.")
-            page.wait_for_timeout(1500)
+            page.wait_for_timeout(400)
+            page.keyboard.press("Enter")
+            logging.info("Texto enviado de forma independente.")
+            page.wait_for_timeout(1000)
         except Exception as e:
-            logging.error(f"Erro ao enviar texto: {e}")
+            logging.error(f"Erro ao enviar texto isolado: {e}")
 
+    # 2. Enviar Mídia Depois (Independente)
     if media and media.get('fileUrl'):
         file_url = media['fileUrl']
         file_name = media.get('fileName', 'anexo')
@@ -131,14 +125,10 @@ def send_message(page, phone, message, is_priority=False, media=None):
 
         ext = os.path.splitext(file_name)[1]
         if not ext:
-            if 'image' in mimetype:
-                ext = '.jpg'
-            elif 'video' in mimetype:
-                ext = '.mp4'
-            elif 'audio' in mimetype:
-                ext = '.mp3'
-            else:
-                ext = '.bin'
+            if 'image' in mimetype: ext = '.jpg'
+            elif 'video' in mimetype: ext = '.mp4'
+            elif 'audio' in mimetype: ext = '.mp3'
+            else: ext = '.bin'
 
         safe_name = f"media_{int(time.time())}{ext}"
         temp_path = os.path.join(temp_dir, safe_name)
@@ -147,65 +137,47 @@ def send_message(page, phone, message, is_priority=False, media=None):
             try:
                 logging.info(f"Enviando midia: {temp_path} | tipo: {mimetype}")
 
+                # Abrir menu de anexo para garantir que os inputs estejam no DOM
                 try:
-                    attach_btn = page.locator(
-                        'span[data-icon="plus"], span[data-icon="clip"], span[data-icon="attach-menu-plus"]'
-                    ).first
+                    attach_btn = page.locator('span[data-icon="plus"], span[data-icon="clip"], span[data-icon="attach-menu-plus"]').first
                     attach_btn.click(timeout=3000)
-                    page.wait_for_timeout(700)
+                    page.wait_for_timeout(800)
                 except Exception:
                     pass
 
-                try:
-                    inputs_desc = page.evaluate("""
-                        Array.from(document.querySelectorAll('input[type="file"]'))
-                            .map((inp, i) => i + ':' + (inp.getAttribute('accept') || 'none'))
-                            .join(' | ')
-                    """)
-                    logging.info(f"Inputs apos click no anexo: {inputs_desc}")
-                except Exception:
-                    pass
-
+                # Selecionar o input de "Fotos e Vídeos" (Evita stickers que geralmente são o input com accept="image/webp...")
+                # No WA Web atual, o input de mídia real aceita uma vasta gama de imagens/vídeos.
                 is_image_or_video = 'image' in mimetype or 'video' in mimetype
-                is_audio = 'audio' in mimetype
-
+                
                 if is_image_or_video:
-                    target = page.locator(
-                        'input[type="file"][accept*="jpeg"],'
-                        'input[type="file"][accept*="image/png"],'
-                        'input[type="file"][accept*="image/*"],'
-                        'input[type="file"][accept*="mp4"]'
-                    )
-                    if target.count() > 0:
-                        target.first.set_input_files(temp_path, timeout=8000)
-                        logging.info("Arquivo enviado via input de imagem/video.")
-                    else:
-                        logging.warning("Input especifico de imagem nao encontrado. Usando input[0].")
-                        page.locator('input[type="file"]').first.set_input_files(temp_path, timeout=8000)
-                elif is_audio:
-                    target = page.locator('input[type="file"][accept*="audio"], input[type="file"]')
-                    target.first.set_input_files(temp_path, timeout=8000)
-                    logging.info("Arquivo enviado via input de audio.")
+                    # Filtramos pelo accept para pegar o input de Galeria e não o de Sticker
+                    file_input = page.locator('input[type="file"][accept*="video"], input[type="file"][accept*="image/png"], input[type="file"][accept*="image/jpeg"]').first
+                    if not file_input.count():
+                         file_input = page.locator('input[type="file"]').first
+                    logging.info("Usando input de Galeria/Midia (evitando stickers).")
                 else:
-                    page.locator('input[type="file"]').first.set_input_files(temp_path, timeout=8000)
-                    logging.info("Arquivo enviado via input generico.")
+                    file_input = page.locator('input[type="file"]').first
+                    logging.info("Usando input generico.")
 
-                page.wait_for_timeout(3000)
+                file_input.set_input_files(temp_path, timeout=8000)
+                
+                # Aguarda o modal de preview da mídia e envia
+                page.wait_for_timeout(3500)
                 page.keyboard.press("Enter")
-                logging.info("Midia confirmada e enviada.")
+                logging.info("Midia enviada de forma independente.")
                 page.wait_for_timeout(2000)
 
                 if os.path.exists(temp_path):
                     os.remove(temp_path)
-
+                
             except Exception as e:
-                logging.error(f"Erro ao enviar midia: {e}")
+                logging.error(f"Erro no envio de midia: {e}")
                 if os.path.exists(temp_path):
                     os.remove(temp_path)
         else:
-            logging.warning("Falha ao baixar midia.")
+            logging.warning("Falha no download da midia.")
 
-    return True, "Enviado com sucesso."
+    return True, "Processo de envio finalizado."
 def update_job_status(job_id, status, error=None):
     data = {"status": status}
     if error:
