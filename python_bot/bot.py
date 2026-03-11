@@ -98,8 +98,30 @@ def send_message(page, phone, message, is_priority=False, media=None):
             logging.error("Tempo esgotado aguardando o chat carregar.")
             return False, "Timeout ao abrir o chat via URL."
 
-    logging.info("Chat inicializado no painel. Preparando envio...")
-    
+    logging.info("Chat aberto. Preparando envio...")
+
+    if message:
+        try:
+            chat_box = page.locator('#main div[role="textbox"]').last
+            chat_box.click(timeout=3000)
+            if not is_priority:
+                time.sleep(random.uniform(0.5, 1.5))
+            type_like_human(page, message, is_priority)
+            if not is_priority:
+                time.sleep(random.uniform(0.3, 0.8))
+            try:
+                btn = page.locator('button[aria-label="Enviar"], span[data-icon="send"]').first
+                if btn.is_visible():
+                    btn.click(timeout=2000)
+                else:
+                    page.keyboard.press("Enter")
+            except Exception:
+                page.keyboard.press("Enter")
+            logging.info("Texto enviado com sucesso.")
+            page.wait_for_timeout(1500)
+        except Exception as e:
+            logging.error(f"Erro ao enviar texto: {e}")
+
     if media and media.get('fileUrl'):
         file_url = media['fileUrl']
         file_name = media.get('fileName', 'anexo')
@@ -115,31 +137,32 @@ def send_message(page, phone, message, is_priority=False, media=None):
                 ext = '.mp4'
             elif 'audio' in mimetype:
                 ext = '.mp3'
+            else:
+                ext = '.bin'
 
         safe_name = f"media_{int(time.time())}{ext}"
         temp_path = os.path.join(temp_dir, safe_name)
 
         if download_file(file_url, temp_path):
             try:
-                logging.info(f"Anexando arquivo: {temp_path} | mime: {mimetype}")
-
-                try:
-                    inputs_info = page.evaluate("""
-                        Array.from(document.querySelectorAll('input[type="file"]')).map((inp, i) =>
-                            i + ':accept=[' + (inp.getAttribute('accept') || 'none') + ']'
-                        ).join(' || ')
-                    """)
-                    logging.info(f"Inputs disponiveis: {inputs_info}")
-                except Exception:
-                    pass
+                logging.info(f"Enviando midia: {temp_path} | tipo: {mimetype}")
 
                 try:
                     attach_btn = page.locator(
                         'span[data-icon="plus"], span[data-icon="clip"], span[data-icon="attach-menu-plus"]'
                     ).first
-                    if attach_btn.count() > 0:
-                        attach_btn.click(timeout=3000)
-                        page.wait_for_timeout(700)
+                    attach_btn.click(timeout=3000)
+                    page.wait_for_timeout(700)
+                except Exception:
+                    pass
+
+                try:
+                    inputs_desc = page.evaluate("""
+                        Array.from(document.querySelectorAll('input[type="file"]'))
+                            .map((inp, i) => i + ':' + (inp.getAttribute('accept') || 'none'))
+                            .join(' | ')
+                    """)
+                    logging.info(f"Inputs apos click no anexo: {inputs_desc}")
                 except Exception:
                     pass
 
@@ -147,117 +170,41 @@ def send_message(page, phone, message, is_priority=False, media=None):
                 is_audio = 'audio' in mimetype
 
                 if is_image_or_video:
-                    input_priority = [
-                        'input[type="file"][accept*="jpeg"]',
-                        'input[type="file"][accept*="image/png"]',
-                        'input[type="file"][accept*="image/*"]',
-                        'input[type="file"][accept*="image/"]',
-                        'input[type="file"][accept*="video"]',
-                    ]
-                elif is_audio:
-                    input_priority = [
-                        'input[type="file"][accept*="audio"]',
-                        'input[type="file"][accept*="ogg"]',
-                    ]
-                else:
-                    input_priority = []
-
-                input_priority.append('input[type="file"]')
-
-                file_set = False
-                for inp_sel in input_priority:
-                    try:
-                        inp = page.locator(inp_sel)
-                        if inp.count() > 0:
-                            inp.first.set_input_files(temp_path, timeout=8000)
-                            file_set = True
-                            logging.info(f"Arquivo definido via: {inp_sel}")
-                            break
-                    except Exception as ex:
-                        logging.warning(f"Input [{inp_sel}] falhou: {ex}")
-
-                if not file_set:
-                    raise Exception("Nenhum input de arquivo funcionou.")
-
-                page.wait_for_timeout(4000)
-
-                if message:
-                    caption_selectors = [
-                        'div[data-testid="media-caption-input-container"] div[contenteditable="true"]',
-                        'div[contenteditable="true"][data-testid="caption-compose-box"]',
-                        'div[role="complementary"] div[contenteditable="true"]',
-                        'div[data-lexical-editor="true"]',
-                        'div[contenteditable="true"]',
-                    ]
-                    caption_typed = False
-                    for sel in caption_selectors:
-                        try:
-                            cap = page.locator(sel).last
-                            cap.wait_for(state="visible", timeout=2000)
-                            cap.click()
-                            page.wait_for_timeout(300)
-                            type_like_human(page, message, is_priority)
-                            caption_typed = True
-                            logging.info(f"Legenda digitada via: {sel}")
-                            break
-                        except Exception:
-                            continue
-                    if not caption_typed:
-                        logging.warning("Nao foi possivel digitar legenda em nenhum seletor.")
-
-                page.wait_for_timeout(800)
-
-                try:
-                    send_btn = page.locator(
-                        'button[aria-label="Enviar"], span[data-icon="send"]'
-                    ).first
-                    if send_btn.is_visible():
-                        send_btn.click(timeout=3000)
+                    target = page.locator(
+                        'input[type="file"][accept*="jpeg"],'
+                        'input[type="file"][accept*="image/png"],'
+                        'input[type="file"][accept*="image/*"],'
+                        'input[type="file"][accept*="mp4"]'
+                    )
+                    if target.count() > 0:
+                        target.first.set_input_files(temp_path, timeout=8000)
+                        logging.info("Arquivo enviado via input de imagem/video.")
                     else:
-                        page.keyboard.press("Enter")
-                except Exception:
-                    page.keyboard.press("Enter")
+                        logging.warning("Input especifico de imagem nao encontrado. Usando input[0].")
+                        page.locator('input[type="file"]').first.set_input_files(temp_path, timeout=8000)
+                elif is_audio:
+                    target = page.locator('input[type="file"][accept*="audio"], input[type="file"]')
+                    target.first.set_input_files(temp_path, timeout=8000)
+                    logging.info("Arquivo enviado via input de audio.")
+                else:
+                    page.locator('input[type="file"]').first.set_input_files(temp_path, timeout=8000)
+                    logging.info("Arquivo enviado via input generico.")
 
-                logging.info("Midia enviada com sucesso.")
+                page.wait_for_timeout(3000)
+                page.keyboard.press("Enter")
+                logging.info("Midia confirmada e enviada.")
                 page.wait_for_timeout(2000)
 
                 if os.path.exists(temp_path):
                     os.remove(temp_path)
 
-                return True, "Enviado com sucesso (midia)."
             except Exception as e:
-                logging.error(f"Erro ao anexar midia: {e}")
+                logging.error(f"Erro ao enviar midia: {e}")
                 if os.path.exists(temp_path):
                     os.remove(temp_path)
         else:
-            logging.warning("Falha ao baixar midia. Enviando somente texto.")
+            logging.warning("Falha ao baixar midia.")
 
-
-    
-    # Fallback ou apenas texto
-    chat_box = page.locator('#main div[role="textbox"]').last
-    chat_box.click(timeout=3000)
-    if not is_priority:
-        time.sleep(random.uniform(1.0, 3.0))
-    
-    type_like_human(page, message, is_priority)
-    
-    if not is_priority:
-        time.sleep(random.uniform(0.5, 1.5))
-        
-    try:
-        send_button = page.locator('button[aria-label="Enviar"], span[data-icon="send"]').first
-        if send_button.is_visible():
-            send_button.click(timeout=3000)
-            logging.info("Mensagem enviada pelo Ícone de Enviar.")
-        else:
-            chat_box.click()
-            page.keyboard.press("Enter")
-    except Exception:
-        chat_box.click()
-        page.keyboard.press("Enter")
-        
-    time.sleep(random.uniform(1.0, 2.0))
     return True, "Enviado com sucesso."
 def update_job_status(job_id, status, error=None):
     data = {"status": status}
