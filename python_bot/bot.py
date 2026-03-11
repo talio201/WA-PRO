@@ -121,12 +121,64 @@ def send_message(page, phone, message, is_priority=False, media=None):
 
         if download_file(file_url, temp_path):
             try:
-                logging.info(f"Anexando arquivo: {temp_path}")
+                logging.info(f"Anexando arquivo: {temp_path} | mime: {mimetype}")
 
-                file_inputs = page.locator('input[type="file"]')
-                logging.info(f"Inputs de arquivo na pagina: {file_inputs.count()}")
+                try:
+                    inputs_info = page.evaluate("""
+                        Array.from(document.querySelectorAll('input[type="file"]')).map((inp, i) =>
+                            i + ':accept=[' + (inp.getAttribute('accept') || 'none') + ']'
+                        ).join(' || ')
+                    """)
+                    logging.info(f"Inputs disponiveis: {inputs_info}")
+                except Exception:
+                    pass
 
-                file_inputs.first.set_input_files(temp_path, timeout=8000)
+                try:
+                    attach_btn = page.locator(
+                        'span[data-icon="plus"], span[data-icon="clip"], span[data-icon="attach-menu-plus"]'
+                    ).first
+                    if attach_btn.count() > 0:
+                        attach_btn.click(timeout=3000)
+                        page.wait_for_timeout(700)
+                except Exception:
+                    pass
+
+                is_image_or_video = 'image' in mimetype or 'video' in mimetype
+                is_audio = 'audio' in mimetype
+
+                if is_image_or_video:
+                    input_priority = [
+                        'input[type="file"][accept*="jpeg"]',
+                        'input[type="file"][accept*="image/png"]',
+                        'input[type="file"][accept*="image/*"]',
+                        'input[type="file"][accept*="image/"]',
+                        'input[type="file"][accept*="video"]',
+                    ]
+                elif is_audio:
+                    input_priority = [
+                        'input[type="file"][accept*="audio"]',
+                        'input[type="file"][accept*="ogg"]',
+                    ]
+                else:
+                    input_priority = []
+
+                input_priority.append('input[type="file"]')
+
+                file_set = False
+                for inp_sel in input_priority:
+                    try:
+                        inp = page.locator(inp_sel)
+                        if inp.count() > 0:
+                            inp.first.set_input_files(temp_path, timeout=8000)
+                            file_set = True
+                            logging.info(f"Arquivo definido via: {inp_sel}")
+                            break
+                    except Exception as ex:
+                        logging.warning(f"Input [{inp_sel}] falhou: {ex}")
+
+                if not file_set:
+                    raise Exception("Nenhum input de arquivo funcionou.")
+
                 page.wait_for_timeout(4000)
 
                 if message:
@@ -146,7 +198,7 @@ def send_message(page, phone, message, is_priority=False, media=None):
                             page.wait_for_timeout(300)
                             type_like_human(page, message, is_priority)
                             caption_typed = True
-                            logging.info(f"Legenda digitada com seletor: {sel}")
+                            logging.info(f"Legenda digitada via: {sel}")
                             break
                         except Exception:
                             continue
@@ -179,6 +231,7 @@ def send_message(page, phone, message, is_priority=False, media=None):
                     os.remove(temp_path)
         else:
             logging.warning("Falha ao baixar midia. Enviando somente texto.")
+
 
     
     # Fallback ou apenas texto
