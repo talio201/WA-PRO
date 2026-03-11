@@ -110,10 +110,10 @@ def send_message(page, phone, message, is_priority=False, media=None):
             type_like_human(page, message, is_priority)
             page.wait_for_timeout(400)
             page.keyboard.press("Enter")
-            logging.info("Texto enviado de forma independente.")
+            logging.info("Texto enviado com sucesso.")
             page.wait_for_timeout(1000)
         except Exception as e:
-            logging.error(f"Erro ao enviar texto isolado: {e}")
+            logging.error(f"Erro ao enviar texto: {e}")
 
     # 2. Enviar Mídia Depois (Independente)
     if media and media.get('fileUrl'):
@@ -135,36 +135,38 @@ def send_message(page, phone, message, is_priority=False, media=None):
 
         if download_file(file_url, temp_path):
             try:
-                logging.info(f"Enviando midia: {temp_path} | tipo: {mimetype}")
+                logging.info(f"Preparando envio de midia real (NÃO sticker): {temp_path}")
 
-                # Abrir menu de anexo para garantir que os inputs estejam no DOM
-                try:
-                    attach_btn = page.locator('span[data-icon="plus"], span[data-icon="clip"], span[data-icon="attach-menu-plus"]').first
-                    attach_btn.click(timeout=3000)
-                    page.wait_for_timeout(800)
-                except Exception:
-                    pass
+                # Clica no ícone de anexo (+)
+                attach_btn = page.locator('span[data-icon="plus"], span[data-icon="clip"], span[data-icon="attach-menu-plus"]').first
+                attach_btn.click(timeout=5000)
+                page.wait_for_timeout(1000)
 
-                # Selecionar o input de "Fotos e Vídeos" (Evita stickers que geralmente são o input com accept="image/webp...")
-                # No WA Web atual, o input de mídia real aceita uma vasta gama de imagens/vídeos.
+                # Identifica qual botão de anexo usar (Galeria vs Documento)
+                # 'attach-image' é o ícone de Fotos e Vídeos (O que envia imagem real)
+                # 'attach-document' é para arquivos gerais
                 is_image_or_video = 'image' in mimetype or 'video' in mimetype
                 
-                if is_image_or_video:
-                    # Filtramos pelo accept para pegar o input de Galeria e não o de Sticker
-                    file_input = page.locator('input[type="file"][accept*="video"], input[type="file"][accept*="image/png"], input[type="file"][accept*="image/jpeg"]').first
-                    if not file_input.count():
-                         file_input = page.locator('input[type="file"]').first
-                    logging.info("Usando input de Galeria/Midia (evitando stickers).")
-                else:
-                    file_input = page.locator('input[type="file"]').first
-                    logging.info("Usando input generico.")
-
-                file_input.set_input_files(temp_path, timeout=8000)
+                selector = 'span[data-icon="attach-image"]' if is_image_or_video else 'span[data-icon="attach-document"]'
                 
-                # Aguarda o modal de preview da mídia e envia
-                page.wait_for_timeout(3500)
+                try:
+                    # Usamos expect_file_chooser para capturar a abertura do seletor e injetar o arquivo
+                    with page.expect_file_chooser(timeout=10000) as fc_info:
+                        btn_gallery = page.locator(selector).first
+                        btn_gallery.click(timeout=5000)
+                    
+                    file_chooser = fc_info.value
+                    file_chooser.set_files(temp_path)
+                    logging.info(f"Arquivo anexado via ícone: {selector}")
+                except Exception as e_click:
+                    logging.warning(f"Falha ao clicar no ícone específico ({selector}), tentando fallback de input: {e_click}")
+                    file_input = page.locator('input[type="file"]').first
+                    file_input.set_input_files(temp_path, timeout=8000)
+
+                # Aguarda o modal de preview e envia
+                page.wait_for_timeout(4000)
                 page.keyboard.press("Enter")
-                logging.info("Midia enviada de forma independente.")
+                logging.info("Midia enviada via Galeria.")
                 page.wait_for_timeout(2000)
 
                 if os.path.exists(temp_path):
