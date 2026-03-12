@@ -975,6 +975,8 @@
         let ws = null;
         let autoScroll = true;
         let reconnectAttempts = 0;
+        let pythonAuthFailCount = 0;
+        let pythonAuthFailLastAt = 0;
 
         // Auth check
         async function checkAuth() {
@@ -1070,8 +1072,29 @@
         }
 
         function handleRealtimeEvent(data) {
-            const { event, data: payload } = data;
-            logToConsole(event, JSON.stringify(payload));
+            const envelopeType = String(data?.type || '').trim();
+            if (envelopeType === 'hello' || envelopeType === 'pong') {
+                return;
+            }
+            const event = String(data?.event || envelopeType || 'event');
+            const payload = data?.data || data || {};
+
+            if (
+                event === 'admin.security' &&
+                payload?.reason === 'invalid_token' &&
+                String(payload?.userAgent || '').toLowerCase().includes('python-requests') &&
+                String(payload?.endpoint || '').includes('/api/messages/next')
+            ) {
+                pythonAuthFailCount += 1;
+                const now = Date.now();
+                if (now - pythonAuthFailLastAt > 15000) {
+                    pythonAuthFailLastAt = now;
+                    logToConsole('python_bot.auth_failed', `Falha de token em /messages/next (${pythonAuthFailCount}x). Verifique API_SECRET_KEY/BOT_API_KEY do python_bot.`);
+                }
+                return;
+            }
+
+            logToConsole(event, typeof payload === 'string' ? payload : JSON.stringify(payload));
 
             // Handle specific events
             if (event === 'bot.status') {

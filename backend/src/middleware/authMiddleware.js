@@ -8,6 +8,22 @@ try {
 } catch (e) {
   logSecurityEvent = () => {}; // Fallback if not available
 }
+const authFailureThrottle = new Map();
+function shouldLogAuthFailure({ reason = '', ip = '', agentId = '', endpoint = '', userAgent = '' }) {
+  const key = `${reason}|${ip}|${agentId}|${endpoint}|${userAgent}`;
+  const now = Date.now();
+  const lastAt = Number(authFailureThrottle.get(key) || 0);
+  if (now - lastAt < 30000) {
+    return false;
+  }
+  authFailureThrottle.set(key, now);
+  if (authFailureThrottle.size > 5000) {
+    const entries = Array.from(authFailureThrottle.entries()).slice(-2000);
+    authFailureThrottle.clear();
+    entries.forEach(([k, v]) => authFailureThrottle.set(k, v));
+  }
+  return true;
+}
 
 const requireAuth = async (req, res, next) => {
   const authHeader = req.headers.authorization;
@@ -16,12 +32,14 @@ const requireAuth = async (req, res, next) => {
   const agentId = req.headers['x-agent-id'];
   
   if (!authHeader) {
-    logSecurityEvent('auth_failed', {
-      reason: 'missing_header',
-      ip,
-      userAgent,
-      endpoint: req.originalUrl,
-    });
+    if (shouldLogAuthFailure({ reason: 'missing_header', ip, userAgent, endpoint: req.originalUrl, agentId })) {
+      logSecurityEvent('auth_failed', {
+        reason: 'missing_header',
+        ip,
+        userAgent,
+        endpoint: req.originalUrl,
+      });
+    }
     return res
       .status(401)
       .json({ msg: "Unauthorized: Missing Authorization header" });
@@ -53,13 +71,15 @@ const requireAuth = async (req, res, next) => {
   }
 
   // Log failed auth attempt
-  logSecurityEvent('auth_failed', {
-    reason: 'invalid_token',
-    ip,
-    userAgent,
-    agentId,
-    endpoint: req.originalUrl,
-  });
+  if (shouldLogAuthFailure({ reason: 'invalid_token', ip, userAgent, endpoint: req.originalUrl, agentId })) {
+    logSecurityEvent('auth_failed', {
+      reason: 'invalid_token',
+      ip,
+      userAgent,
+      agentId,
+      endpoint: req.originalUrl,
+    });
+  }
 
   return res.status(401).json({ msg: "Unauthorized: Invalid token or key." });
 };

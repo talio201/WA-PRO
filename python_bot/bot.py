@@ -7,14 +7,24 @@ from dotenv import load_dotenv
 from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeoutError
 load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '..', 'backend', '.env'))
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-API_BASE_URL = os.getenv("API_BASE_URL", "http://localhost:3000/api")
-API_SECRET_KEY = os.getenv("API_SECRET_KEY", "")
+def normalize_secret(value):
+    return str(value or "").strip().strip('"').strip("'")
+
+API_BASE_URL = str(os.getenv("API_BASE_URL", "http://localhost:3000/api") or "").strip().rstrip('/')
+API_SECRET_KEY = normalize_secret(os.getenv("BOT_API_KEY") or os.getenv("API_SECRET_KEY", ""))
+BOT_AGENT_ID = str(os.getenv("BOT_AGENT_ID", "bot") or "bot").strip() or "bot"
 API_HEADERS = { 
     "Authorization": f"Bearer {API_SECRET_KEY}",
-    "x-agent-id": "bot"
+    "x-agent-id": BOT_AGENT_ID
 }
 WHATSAPP_URL = "https://web.whatsapp.com"
 MAX_WAIT_TIME = 60000
+
+if not API_SECRET_KEY:
+    logging.critical("API_SECRET_KEY/BOT_API_KEY não definida. O bot não conseguirá autenticar na API.")
+else:
+    masked = f"{API_SECRET_KEY[:4]}...{API_SECRET_KEY[-4:]}" if len(API_SECRET_KEY) > 8 else "***"
+    logging.info(f"Bot autenticando com x-agent-id={BOT_AGENT_ID} | key={masked} | api={API_BASE_URL}")
 def type_like_human(page, text, is_priority=False):
     logging.info("Iniciando digitação...")
     if text:
@@ -367,7 +377,12 @@ def main():
             try:
                 response = requests.get(f"{API_BASE_URL}/messages/next", headers=API_HEADERS)
                 if response.status_code != 200:
-                    logging.error(f"Erro na API ao buscar próxima mensagem: {response.text}")
+                    if response.status_code == 401:
+                        logging.critical(
+                            "Falha de autenticação (401) em /messages/next. Verifique API_SECRET_KEY/BOT_API_KEY e reinicie os containers.",
+                        )
+                    else:
+                        logging.error(f"Erro na API ao buscar próxima mensagem ({response.status_code}): {response.text}")
                     time.sleep(5)
                     continue
                 data = response.json()
