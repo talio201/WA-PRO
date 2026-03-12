@@ -53,6 +53,7 @@
             font-size: 1.5rem;
             font-weight: 600;
             background: linear-gradient(135deg, #6366f1, #8b5cf6);
+            background-clip: text;
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
         }
@@ -903,7 +904,9 @@
             const { data: { session } } = await supabaseClient.auth.getSession();
             if (!session) {
                 window.location.href = '/login.html';
+                return null;
             }
+            return session;
         }
 
         async function logout() {
@@ -913,15 +916,23 @@
 
         // API Helper
         async function apiRequest(endpoint, options = {}) {
+            const session = await checkAuth();
+            if (!session?.access_token) {
+                throw new Error('Sessão inválida. Faça login novamente.');
+            }
             const response = await fetch(`${API_URL}${endpoint}`, {
                 ...options,
                 headers: {
                     'Content-Type': 'application/json',
-                    'Authorization': 'Bearer [REDACTED_API_SECRET]',
+                    'Authorization': `Bearer ${session.access_token}`,
                     'x-agent-id': 'admin-console',
                     ...options.headers,
                 },
             });
+            if (response.status === 401) {
+                await logout();
+                throw new Error('Sessão expirada.');
+            }
             return response.json();
         }
 
@@ -946,8 +957,13 @@
         });
 
         // WebSocket connection
-        function connectWebSocket() {
-            ws = new WebSocket(WS_URL);
+        async function connectWebSocket() {
+            const session = await checkAuth();
+            if (!session?.access_token) return;
+            const url = new URL(WS_URL);
+            url.searchParams.set('access_token', session.access_token);
+            url.searchParams.set('agentId', 'admin-console');
+            ws = new WebSocket(url.toString());
             
             ws.onopen = () => {
                 reconnectAttempts = 0;
@@ -1225,7 +1241,25 @@
 
         // Extension
         async function downloadExtension() {
-            window.open('/api/admin/extension/download', '_blank');
+            const session = await checkAuth();
+            if (!session?.access_token) return;
+            const response = await fetch('/api/admin/extension/download', {
+                headers: {
+                    'Authorization': `Bearer ${session.access_token}`,
+                    'x-agent-id': 'admin-console',
+                }
+            });
+            if (!response.ok) {
+                const payload = await response.json().catch(() => ({}));
+                showToast(payload.msg || 'Falha ao baixar extensão', 'error');
+                return;
+            }
+            const blob = await response.blob();
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            link.download = 'EmidiaWhats-Extension.zip';
+            link.click();
+            URL.revokeObjectURL(link.href);
         }
 
         function showSendModal() {

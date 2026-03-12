@@ -1,6 +1,9 @@
-const API_URL = "https://tcgsolucoes.app/api";
+import {
+  getAuthorizedHeaders,
+  getRuntimeConfig,
+} from "../utils/runtimeConfig.js";
+
 const IDLE_POLLING_INTERVAL_MS = 10000;
-const REALTIME_WS_URL = "wss://tcgsolucoes.app/ws";
 const REALTIME_RECONNECT_BASE_MS = 1200;
 const QUEUE_ALARM_NAME = "wa-manager-queue-next-run";
 const DEFAULT_DELAY_RANGE = {
@@ -39,6 +42,21 @@ let nextLongBreakAt = null;
 let realtimeConnectionState = "disconnected";
 let lastRealtimeEventAt = null;
 let extensionSettings = { ...DEFAULT_EXTENSION_SETTINGS };
+async function buildApiUrl(pathname = "") {
+  const { backendApiUrl } = await getRuntimeConfig();
+  return `${backendApiUrl}${pathname}`;
+}
+async function buildRealtimeUrl() {
+  const { backendWsUrl, backendApiKey, agentId } = await getRuntimeConfig();
+  const url = new URL(backendWsUrl);
+  if (backendApiKey) {
+    url.searchParams.set("access_token", backendApiKey);
+  }
+  if (agentId) {
+    url.searchParams.set("agentId", agentId);
+  }
+  return url.toString();
+}
 chrome.runtime.onInstalled.addListener(() => {
   console.log("WhatsApp Campaign Manager Installed");
   chrome.storage.local.get(
@@ -467,7 +485,7 @@ function scheduleRealtimeReconnect() {
     connectRealtimeBridge();
   }, delayMs);
 }
-function connectRealtimeBridge() {
+async function connectRealtimeBridge() {
   if (!isRunning) return;
   if (
     realtimeSocket &&
@@ -480,7 +498,7 @@ function connectRealtimeBridge() {
   realtimeConnectionState = "connecting";
   broadcastRuntimeState();
   try {
-    const socket = new WebSocket(REALTIME_WS_URL);
+    const socket = new WebSocket(await buildRealtimeUrl());
     realtimeSocket = socket;
     socket.addEventListener("open", () => {
       realtimeReconnectAttempt = 0;
@@ -741,14 +759,13 @@ async function handleDirectSendRequest(request = {}) {
   };
   try {
     const response = await fetch(
-      `${API_URL}/messages/outbound/manual`,
+      await buildApiUrl(`/messages/outbound/manual`),
       {
         method: "POST",
-        headers: { 
-          "Content-Type": "application/json",
-          "Authorization": "Bearer [REDACTED_API_SECRET]",
-          "x-agent-id": "agent-background-sync"
-        },
+        headers: await getAuthorizedHeaders(
+          { "Content-Type": "application/json" },
+          "agent-background-sync",
+        ),
         body: JSON.stringify(payload),
       },
     );
@@ -892,11 +909,8 @@ async function fetchNextJob(preferredCampaignId = null) {
   const queryString = preferredCampaignId
     ? `?campaignId=${encodeURIComponent(preferredCampaignId)}`
     : "";
-  const response = await fetch(`${API_URL}/messages/next${queryString}`, {
-    headers: {
-      "Authorization": "Bearer [REDACTED_API_SECRET]",
-      "x-agent-id": "agent-background-sync"
-    }
+  const response = await fetch(await buildApiUrl(`/messages/next${queryString}`), {
+    headers: await getAuthorizedHeaders({}, "agent-background-sync"),
   });
   if (!response.ok) {
     throw new Error(`Failed to fetch next job: ${response.status}`);
@@ -905,13 +919,12 @@ async function fetchNextJob(preferredCampaignId = null) {
   return data.job || null;
 }
 async function registerInboundReply(payload) {
-  const response = await fetch(`${API_URL}/messages/inbound`, {
+  const response = await fetch(await buildApiUrl(`/messages/inbound`), {
     method: "POST",
-    headers: { 
-      "Content-Type": "application/json",
-      "Authorization": "Bearer [REDACTED_API_SECRET]",
-      "x-agent-id": "agent-background-sync"
-    },
+    headers: await getAuthorizedHeaders(
+      { "Content-Type": "application/json" },
+      "agent-background-sync",
+    ),
     body: JSON.stringify(payload),
   });
   if (!response.ok) {
@@ -1121,13 +1134,12 @@ async function sendMessageToTabWithRetry(
 }
 async function updateJobStatus(id, status, error) {
   try {
-    const response = await fetch(`${API_URL}/messages/${id}/status`, {
+    const response = await fetch(await buildApiUrl(`/messages/${id}/status`), {
       method: "PUT",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": "Bearer [REDACTED_API_SECRET]",
-        "x-agent-id": "agent-background-sync"
-      },
+      headers: await getAuthorizedHeaders(
+        { "Content-Type": "application/json" },
+        "agent-background-sync",
+      ),
       body: JSON.stringify({ status, error }),
     });
     if (!response.ok) {

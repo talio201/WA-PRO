@@ -12,9 +12,8 @@
     ],
     "host_permissions": [
         "*://web.whatsapp.com/*",
-        "http://localhost/*",
-        "http://127.0.0.1/*",
-        "http://144.126.214.121/*"
+        "http://*/*",
+        "https://*/*"
     ],
     "content_scripts": [
         {

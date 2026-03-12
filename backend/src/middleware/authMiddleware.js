@@ -1,9 +1,4 @@
-const { createClient } = require('@supabase/supabase-js');
-
-const supabase = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_ANON_KEY
-);
+const { authenticateBearerToken } = require('../utils/auth');
 
 // Import admin logging functions
 let logSecurityEvent;
@@ -36,21 +31,15 @@ const requireAuth = async (req, res, next) => {
   const token = String(parts[1] || '').trim();
   const type = String(parts[0] || '').toLowerCase();
 
-  // 1. Check for Master API Key (Extension/Bot)
-  const validKey = String(process.env.API_SECRET_KEY || '').trim();
-  
-  if (type === 'bearer' && token === validKey) {
-    req.agentId = agentId || 'bot';
-    return next();
-  }
-
-  // 2. Check for Supabase Session Token (Dashboard)
   if (type === 'bearer') {
-    const { data: { user }, error } = await supabase.auth.getUser(token);
-    
-    if (!error && user) {
-      req.user = user;
-      req.agentId = 'admin'; // Admin session from dashboard
+    const authResult = await authenticateBearerToken(token, agentId);
+    if (authResult?.kind === 'api-key') {
+      req.agentId = authResult.agentId;
+      return next();
+    }
+    if (authResult?.kind === 'supabase-user') {
+      req.user = authResult.user;
+      req.agentId = authResult.agentId;
       return next();
     }
   }

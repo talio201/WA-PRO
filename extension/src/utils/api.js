@@ -1,4 +1,5 @@
-const API_URL = "https://tcgsolucoes.app/api";
+import { getAuthorizedHeaders, getRuntimeConfig } from './runtimeConfig';
+
 const parseResponsePayload = async (response) => {
   const contentType = String(
     response.headers.get("content-type") || "",
@@ -10,25 +11,20 @@ const parseResponsePayload = async (response) => {
   return text ? { msg: text } : {};
 };
 const requestJson = async (
-  url,
+  path,
   options = {},
   fallbackMessage = "Request failed",
 ) => {
-  let agentId = localStorage.getItem("emidia_agent_id");
-  if (!agentId) {
-    agentId = "agent-" + Math.random().toString(36).substr(2, 9);
-    localStorage.setItem("emidia_agent_id", agentId);
+  const { backendApiUrl, backendApiKey } = await getRuntimeConfig();
+  if (!backendApiKey) {
+    throw new Error("API key not configured in extension settings.");
   }
-
-  const mergedHeaders = {
-    ...options.headers,
-    Authorization: `Bearer [REDACTED_API_SECRET]`,
-    "x-agent-id": agentId,
-  };
+  const mergedHeaders = await getAuthorizedHeaders(options.headers || {});
   const mergedOptions = {
     ...options,
     headers: mergedHeaders,
   };
+  const url = `${backendApiUrl}${String(path || "")}`;
   const response = await fetch(url, mergedOptions);
   const payload = await parseResponsePayload(response);
   if (!response.ok) {
@@ -40,7 +36,7 @@ const requestJson = async (
 export const getCampaigns = async () => {
   try {
     return await requestJson(
-      `${API_URL}/campaigns`,
+      `/campaigns`,
       {},
       "Failed to fetch campaigns",
     );
@@ -58,7 +54,7 @@ export const getMessages = async (params = {}) => {
   });
   const suffix = query.toString() ? `?${query.toString()}` : "";
   return requestJson(
-    `${API_URL}/messages${suffix}`,
+    `/messages${suffix}`,
     {},
     "Failed to fetch messages",
   );
@@ -72,7 +68,7 @@ export const getConversations = async (params = {}) => {
   });
   const suffix = query.toString() ? `?${query.toString()}` : "";
   return requestJson(
-    `${API_URL}/messages/conversations${suffix}`,
+    `/messages/conversations${suffix}`,
     {},
     "Failed to fetch conversations",
   );
@@ -90,7 +86,7 @@ export const getConversationHistory = async (phone, params = {}) => {
   });
   const suffix = query.toString() ? `?${query.toString()}` : "";
   return requestJson(
-    `${API_URL}/messages/conversations/${encodeURIComponent(safePhone)}/history${suffix}`,
+    `/messages/conversations/${encodeURIComponent(safePhone)}/history${suffix}`,
     {},
     "Failed to fetch conversation history",
   );
@@ -101,7 +97,7 @@ export const syncConversationHistory = async (phone, payload = {}) => {
     throw new Error("Phone is required.");
   }
   return requestJson(
-    `${API_URL}/messages/conversations/${encodeURIComponent(safePhone)}/history/sync`,
+    `/messages/conversations/${encodeURIComponent(safePhone)}/history/sync`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -112,7 +108,7 @@ export const syncConversationHistory = async (phone, payload = {}) => {
 };
 export const createCampaign = async (data) =>
   requestJson(
-    `${API_URL}/campaigns`,
+    `/campaigns`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -124,7 +120,7 @@ export const uploadFile = async (file) => {
   const formData = new FormData();
   formData.append("file", file);
   return requestJson(
-    `${API_URL}/upload`,
+    `/upload`,
     {
       method: "POST",
       body: formData,
@@ -134,7 +130,7 @@ export const uploadFile = async (file) => {
 };
 export const deleteCampaign = async (campaignId) =>
   requestJson(
-    `${API_URL}/campaigns/${campaignId}`,
+    `/campaigns/${campaignId}`,
     {
       method: "DELETE",
     },
@@ -142,19 +138,19 @@ export const deleteCampaign = async (campaignId) =>
   );
 export const getCampaignFailures = async (campaignId) =>
   requestJson(
-    `${API_URL}/campaigns/${campaignId}/failures`,
+    `/campaigns/${campaignId}/failures`,
     {},
     "Failed to fetch campaign failures",
   );
 export const getMessageAudit = async (messageId) =>
   requestJson(
-    `${API_URL}/messages/${messageId}/audit`,
+    `/messages/${messageId}/audit`,
     {},
     "Failed to fetch message audit",
   );
 export const updateMessage = async (messageId, payload) =>
   requestJson(
-    `${API_URL}/messages/${messageId}`,
+    `/messages/${messageId}`,
     {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -164,7 +160,7 @@ export const updateMessage = async (messageId, payload) =>
   );
 export const retryMessage = async (messageId, payload = {}) =>
   requestJson(
-    `${API_URL}/messages/${messageId}/retry`,
+    `/messages/${messageId}/retry`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -174,7 +170,7 @@ export const retryMessage = async (messageId, payload = {}) =>
   );
 export const assignConversation = async (phone, payload) =>
   requestJson(
-    `${API_URL}/messages/conversations/${encodeURIComponent(phone)}/assign`,
+    `/messages/conversations/${encodeURIComponent(phone)}/assign`,
     {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
@@ -184,7 +180,7 @@ export const assignConversation = async (phone, payload) =>
   );
 export const releaseConversation = async (phone, payload = {}) =>
   requestJson(
-    `${API_URL}/messages/conversations/${encodeURIComponent(phone)}/release`,
+    `/messages/conversations/${encodeURIComponent(phone)}/release`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -194,7 +190,7 @@ export const releaseConversation = async (phone, payload = {}) =>
   );
 export const registerInboundMessage = async (payload = {}) =>
   requestJson(
-    `${API_URL}/messages/inbound`,
+    `/messages/inbound`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -204,7 +200,7 @@ export const registerInboundMessage = async (payload = {}) =>
   );
 export const registerManualOutbound = async (payload = {}) =>
   requestJson(
-    `${API_URL}/messages/outbound/manual`,
+    `/messages/outbound/manual`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -214,7 +210,7 @@ export const registerManualOutbound = async (payload = {}) =>
   );
 export const generateMessageVariants = async ({ message, count = 5 }) =>
   requestJson(
-    `${API_URL}/ai/generate-variants`,
+    `/ai/generate-variants`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -226,7 +222,7 @@ export const requestConversationHistorySync = async (phone) => {
   const safePhone = String(phone || "").trim();
   if (!safePhone) throw new Error("Phone is required.");
   return requestJson(
-    `${API_URL}/messages/history/request-sync`,
+    `/messages/history/request-sync`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -238,11 +234,11 @@ export const requestConversationHistorySync = async (phone) => {
 
 // API DE CONTATOS (AGENT ISOLATED)
 export const getContacts = async () => {
-  return requestJson(`${API_URL}/contacts`, {}, "Failed to fetch contacts");
+  return requestJson(`/contacts`, {}, "Failed to fetch contacts");
 };
 
 export const addContact = async (payload) => {
-  return requestJson(`${API_URL}/contacts`, {
+  return requestJson(`/contacts`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload)
@@ -250,7 +246,7 @@ export const addContact = async (payload) => {
 };
 
 export const deleteContact = async (id) => {
-  return requestJson(`${API_URL}/contacts/${id}`, {
+  return requestJson(`/contacts/${id}`, {
     method: "DELETE"
   }, "Failed to delete contact");
 };
@@ -258,12 +254,12 @@ export const deleteContact = async (id) => {
 export const importContactsXlsx = async (file) => {
   const formData = new FormData();
   formData.append("file", file);
-  return requestJson(`${API_URL}/contacts/import`, {
+  return requestJson(`/contacts/import`, {
     method: "POST",
     body: formData
   }, "Failed to import contacts");
 };
 
 export const fetchBotStatus = async () => {
-  return requestJson(`${API_URL}/bot/status`, {}, "Failed to fetch bot status");
+  return requestJson(`/bot/status`, {}, "Failed to fetch bot status");
 };

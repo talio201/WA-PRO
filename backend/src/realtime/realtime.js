@@ -1,5 +1,7 @@
 const crypto = require("crypto");
+const { URL } = require("url");
 const { WebSocketServer } = require("ws");
+const { authenticateBearerToken } = require("../utils/auth");
 let wsServer = null;
 const DEFAULT_WEBHOOK_TIMEOUT_MS = 8000;
 const DEFAULT_WEBHOOK_RETRIES = 2;
@@ -28,12 +30,32 @@ function broadcastEnvelope(envelope) {
   if (!wsServer) return;
   const payload = JSON.stringify(envelope);
   wsServer.clients.forEach((client) => {
-    if (client.readyState === 1) {
+    if (client.readyState === 1 && client.isAuthorized) {
       try {
         client.send(payload);
       } catch (error) {}
     }
   });
+}
+async function authorizeRealtimeRequest(request) {
+  try {
+    const requestUrl = new URL(request.url || "/ws", "http://localhost");
+    const tokenFromQuery = String(
+      requestUrl.searchParams.get("access_token") ||
+        requestUrl.searchParams.get("token") ||
+        "",
+    ).trim();
+    const authHeader = String(request.headers?.authorization || "").trim();
+    const tokenFromHeader = authHeader.toLowerCase().startsWith("bearer ")
+      ? authHeader.slice(7).trim()
+      : "";
+    const token = tokenFromQuery || tokenFromHeader;
+    const agentId = String(requestUrl.searchParams.get("agentId") || "").trim();
+    if (!token) return null;
+    return authenticateBearerToken(token, agentId);
+  } catch (error) {
+    return null;
+  }
 }
 function buildWebhookSignature(payload) {
   const secret = getWebhookSecret();
@@ -110,8 +132,23 @@ function initRealtimeServer(server) {
   wsServer = new WebSocketServer({
     server,
     path: "/ws",
+    verifyClient: async (info, done) => {
+      try {
+        const authResult = await authorizeRealtimeRequest(info.req);
+        if (!authResult) {
+          done(false, 401, "Unauthorized");
+          return;
+        }
+        info.req.realtimeAuth = authResult;
+        done(true);
+      } catch (error) {
+        done(false, 500, "Auth error");
+      }
+    },
   });
-  wsServer.on("connection", (socket) => {
+  wsServer.on("connection", (socket, request) => {
+    socket.isAuthorized = true;
+    socket.auth = request?.realtimeAuth || null;
     try {
       socket.send(
         JSON.stringify({

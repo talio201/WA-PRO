@@ -1,7 +1,7 @@
 const http = require('http');
 
 const PORT = 3000;
-const SECRET_KEY = '[REDACTED_API_SECRET]';
+const SECRET_KEY = String(process.env.API_SECRET_KEY || '').trim();
 const ENDPOINT = '/api/campaigns';
 
 function makeRequest(headers, expectedStatus, testName) {
@@ -39,6 +39,11 @@ function makeRequest(headers, expectedStatus, testName) {
 
 async function runTests() {
     console.log("Iniciando Testes de Segurança (JWT & API KEY)...\n");
+
+    if (!SECRET_KEY) {
+        console.error('API_SECRET_KEY não definida no ambiente de teste.');
+        process.exit(1);
+    }
 
     const t1 = await makeRequest({}, 401, 'Request Localhost s/ Header Authorization');
     

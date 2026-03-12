@@ -1,4 +1,6 @@
-const DEFAULT_WS_URL = "wss://tcgsolucoes.app/ws";
+import { getRuntimeConfig, getRuntimeConfigSync, runtimeConfigReady } from './runtimeConfig';
+
+const DEFAULT_WS_URL = getRuntimeConfigSync().backendWsUrl;
 function safeParseMessage(raw) {
   try {
     return JSON.parse(String(raw || "{}"));
@@ -46,12 +48,21 @@ export function connectRealtime({
       } catch (error) {}
     }, 25000);
   };
-  const connect = () => {
+  const connect = async () => {
     if (isDisposed) return;
     clearTimers();
     onStatus("connecting");
     try {
-      socket = new WebSocket(wsUrl);
+      await runtimeConfigReady;
+      const config = await getRuntimeConfig();
+      const resolvedUrl = new URL(wsUrl || config.backendWsUrl);
+      if (config.backendApiKey) {
+        resolvedUrl.searchParams.set('access_token', config.backendApiKey);
+      }
+      if (config.agentId) {
+        resolvedUrl.searchParams.set('agentId', config.agentId);
+      }
+      socket = new WebSocket(resolvedUrl.toString());
     } catch (error) {
       onStatus("error");
       scheduleReconnect();

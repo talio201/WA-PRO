@@ -1,12 +1,16 @@
 async function testContacts() {
+  const secretKey = String(process.env.API_SECRET_KEY || '').trim();
+  if (!secretKey) {
+    throw new Error('API_SECRET_KEY não definida no ambiente.');
+  }
   const headers1 = {
-    'Authorization': 'Bearer [REDACTED_API_SECRET]',
+    'Authorization': `Bearer ${secretKey}`,
     'x-agent-id': 'agent-test-1',
     'Content-Type': 'application/json'
   };
 
   const headers2 = {
-    'Authorization': 'Bearer [REDACTED_API_SECRET]',
+    'Authorization': `Bearer ${secretKey}`,
     'x-agent-id': 'agent-test-2',
     'Content-Type': 'application/json'
   };
