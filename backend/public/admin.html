@@ -977,6 +977,7 @@
         let reconnectAttempts = 0;
         let pythonAuthFailCount = 0;
         let pythonAuthFailLastAt = 0;
+        let dashboardRefreshTimer = null;
 
         // Auth check
         async function checkAuth() {
@@ -1071,6 +1072,16 @@
             };
         }
 
+        function scheduleDashboardRefresh(delay = 800) {
+            if (dashboardRefreshTimer) {
+                clearTimeout(dashboardRefreshTimer);
+            }
+            dashboardRefreshTimer = setTimeout(() => {
+                dashboardRefreshTimer = null;
+                refreshDashboard();
+            }, delay);
+        }
+
         function handleRealtimeEvent(data) {
             const envelopeType = String(data?.type || '').trim();
             if (envelopeType === 'hello' || envelopeType === 'pong') {
@@ -1096,12 +1107,30 @@
 
             logToConsole(event, typeof payload === 'string' ? payload : JSON.stringify(payload));
 
+            const isMessageLifecycleEvent = [
+                'messages.queue.reserved',
+                'messages.status.updated',
+                'messages.retried',
+                'messages.edited',
+                'messages.inbound.received',
+                'messages.outbound.manual_sent'
+            ].includes(event);
+
+            if (isMessageLifecycleEvent || event.startsWith('campaign.')) {
+                scheduleDashboardRefresh();
+            }
+
             // Handle specific events
             if (event === 'bot.status') {
                 document.getElementById('bot-status-text').textContent = payload.status || 'Desconectado';
             }
 
-            if (event === 'message.sent' || event === 'message.failed') {
+            if (
+                event === 'message.sent'
+                || event === 'message.failed'
+                || event === 'messages.queue.reserved'
+                || (event === 'messages.status.updated' && ['sent', 'failed', 'processing'].includes(String(payload?.status || '').toLowerCase()))
+            ) {
                 addBotActivity(event, payload);
             }
 
@@ -1135,10 +1164,16 @@
         function addBotActivity(event, payload) {
             const log = document.getElementById('bot-activity-log');
             const time = new Date().toLocaleTimeString();
-            const status = event === 'message.sent' ? '✅' : '❌';
+            const normalizedStatus = String(payload?.status || '').toLowerCase();
+            const status = event === 'message.sent' || normalizedStatus === 'sent'
+                ? '✅'
+                : event === 'messages.queue.reserved' || normalizedStatus === 'processing'
+                    ? '⏳'
+                    : '❌';
+            const label = payload?.status || event;
             const line = document.createElement('div');
             line.className = 'console-line';
-            line.innerHTML = `<span class="time">[${time}]</span> ${status} <span class="data">${payload.phone || '-'} - ${payload.status || event}</span>`;
+            line.innerHTML = `<span class="time">[${time}]</span> ${status} <span class="data">${payload.phone || '-'} - ${label}</span>`;
             log.insertBefore(line, log.firstChild);
             
             while (log.children.length > 100) {
