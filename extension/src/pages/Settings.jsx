@@ -111,12 +111,6 @@ const Settings = () => {
         });
     };
 
-    const updateBackendSetting = (key, value) => {
-        persistSettings({
-            ...settings,
-            [key]: String(value || ''),
-        });
-    };
 
     const copyActivationCode = async () => {
         const code = String(settings.activationCode || '').trim();
@@ -304,35 +298,6 @@ const Settings = () => {
                     </div>
                 </section>
 
-                <section className="settings-input-card">
-                    <label htmlFor="backend-api-url">
-                        <h3>URL da API</h3>
-                        <p>Endpoint do backend (normalmente não precisa alterar).</p>
-                    </label>
-                    <input
-                        id="backend-api-url"
-                        type="url"
-                        placeholder="https://tcgsolucoes.app/api"
-                        value={settings.backendApiUrl || ''}
-                        onChange={(event) => updateBackendSetting('backendApiUrl', event.target.value)}
-                        className="settings-glass-input"
-                    />
-                </section>
-
-                <section className="settings-input-card">
-                    <label htmlFor="backend-ws-url">
-                        <h3>URL do WebSocket</h3>
-                        <p>Endpoint realtime (normalmente não precisa alterar).</p>
-                    </label>
-                    <input
-                        id="backend-ws-url"
-                        type="url"
-                        placeholder="wss://tcgsolucoes.app/ws"
-                        value={settings.backendWsUrl || ''}
-                        onChange={(event) => updateBackendSetting('backendWsUrl', event.target.value)}
-                        className="settings-glass-input"
-                    />
-                </section>
             </div>
         </div>
     );
