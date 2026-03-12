@@ -3,6 +3,7 @@ const express = require("express");
 const cors = require("cors");
 const path = require("path");
 const http = require("http");
+const fs = require("fs");
 const { spawn } = require("child_process");
 const {
   initRealtimeServer,
@@ -10,21 +11,35 @@ const {
 } = require("./realtime/realtime");
 const requireAuth = require("./middleware/authMiddleware");
 const app = express();
-const whitelist = ["chrome-extension://", "http://localhost"];
+
+// CORS whitelist - permit all origins for web access
 const corsOptions = {
-  origin: (origin, callback) => {
-    if (!origin || whitelist.some((w) => origin.startsWith(w))) {
-      callback(null, true);
-    } else {
-      callback(new Error("Not allowed by CORS"));
-    }
-  },
+  origin: true,
+  credentials: true,
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
+  allowedHeaders: ["Content-Type", "Authorization", "x-agent-id"],
 };
+
 app.use(cors(corsOptions));
-app.use(express.json({ extended: false }));
-app.get("/", (req, res) => res.sendFile(path.join(__dirname, "../public/login.html")));
-app.use(express.static(path.join(__dirname, "../public")));
-app.use("/uploads", express.static(path.join(__dirname, "../uploads")));
+app.use(express.json({ extended: false, limit: "50mb" }));
+app.use(express.urlencoded({ extended: false, limit: "50mb" }));
+
+// Health check endpoint
+app.get("/health", (req, res) => {
+  res.status(200).json({ status: "ok", message: "Backend is running and healthy" });
+});
+
+// Serve public static files
+app.use(express.static(path.join(__dirname, "../public"), {
+  maxAge: "1d",
+  etag: false
+}));
+
+// Serve uploads
+app.use("/uploads", express.static(path.join(__dirname, "../uploads"), {
+  maxAge: "7d"
+}));
+
 const { sendFlowLogger } = require("./monitorSendFlow");
 app.use("/api/messages", sendFlowLogger);
 app.use("/api", requireAuth);
@@ -48,11 +63,36 @@ app.use("/api/messages", require("./routes/messageRoutes"));
 app.use("/api/contacts", require("./routes/contactRoutes"));
 app.use("/api/upload", require("./routes/uploadRoutes"));
 app.use("/api/ai", require("./routes/aiRoutes"));
+
 app.use((err, req, res, next) => {
   if (err instanceof SyntaxError && err.status === 400 && "body" in err) {
     return res.status(400).json({ msg: "Invalid payload." });
   }
   return next(err);
+});
+
+// SPA Fallback - serve login.html for root and unmatched routes
+app.get(/^\/(?!api|uploads|\.js|\.css|\.html|\.json|\.png|\.jpg|\.jpeg|\.gif|\.svg|\.ico|\.woff|\.woff2|\.ttf|\.eot)/, (req, res) => {
+  const loginPath = path.join(__dirname, "../public/login.html");
+  if (fs.existsSync(loginPath)) {
+    res.sendFile(loginPath);
+  } else {
+    res.status(404).json({ error: "Frontend not found" });
+  }
+});
+
+// Default 404 for API routes
+app.use((req, res) => {
+  if (req.path.startsWith("/api")) {
+    res.status(404).json({ msg: "API endpoint not found" });
+  } else {
+    const loginPath = path.join(__dirname, "../public/login.html");
+    if (fs.existsSync(loginPath)) {
+      res.sendFile(loginPath);
+    } else {
+      res.status(404).json({ error: "Not found" });
+    }
+  }
 });
 const PORT = process.env.PORT || 3000;
 const server = http.createServer(app);
