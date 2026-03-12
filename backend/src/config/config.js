@@ -3,6 +3,14 @@ const GEMINI_DEFAULT_MODELS = [
   "models/gemini-1.5-flash",
   "models/gemini-1.5-pro",
 ];
+function resolveGeminiApiKey() {
+  return String(
+    process.env.GEMINI_API_KEY ||
+      process.env.GOOGLE_API_KEY ||
+      process.env.GENAI_API_KEY ||
+      "",
+  ).trim();
+}
 function resolveStorageProvider() {
   return String(
     process.env.STORAGE_PROVIDER ||
@@ -14,7 +22,7 @@ function resolveStorageProvider() {
 }
 module.exports = {
   gemini: {
-    apiKey: String(process.env.GEMINI_API_KEY || "").trim(),
+    apiKey: resolveGeminiApiKey(),
     apiBaseUrl: "https://generativelanguage.googleapis.com/v1beta",
     preferredModels: GEMINI_DEFAULT_MODELS,
     requestTimeoutMs: Number(process.env.GEMINI_REQUEST_TIMEOUT_MS) || 20000,

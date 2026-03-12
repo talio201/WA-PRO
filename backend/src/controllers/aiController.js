@@ -150,7 +150,7 @@ exports.generateVariants = async (req, res) => {
     const targetCount = Math.max(1, Math.min(Number(req.body?.count) || 5, 10));
     if (!apiKey) {
       return res.status(400).json({
-        msg: "Gemini API key is not configured on server. Set GEMINI_API_KEY in backend/.env.",
+        msg: "Gemini API key is not configured on server. Set GEMINI_API_KEY or GOOGLE_API_KEY in backend/.env.",
       });
     }
     if (!baseMessage) {
