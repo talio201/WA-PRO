@@ -10,7 +10,8 @@ const {
   emitRealtimeEvent,
 } = require("./realtime/realtime");
 const requireAuth = require("./middleware/authMiddleware");
-const app = express();
+// Enable trust proxy for Cloudflare/Proxy environments
+app.set("trust proxy", 1);
 
 // CORS whitelist - permit all origins for web access
 const corsOptions = {
@@ -24,18 +25,17 @@ app.use(cors(corsOptions));
 app.use(express.json({ extended: false, limit: "50mb" }));
 app.use(express.urlencoded({ extended: false, limit: "50mb" }));
 
-// Health check endpoint
+// 1. Health check - Always available
 app.get("/health", (req, res) => {
   res.status(200).json({ status: "ok", message: "Backend is running and healthy" });
 });
 
-// Serve public static files
+// 2. Serve static files FIRST
 app.use(express.static(path.join(__dirname, "../public"), {
   maxAge: "1d",
   etag: false
 }));
 
-// Serve uploads
 app.use("/uploads", express.static(path.join(__dirname, "../uploads"), {
   maxAge: "7d"
 }));
@@ -43,6 +43,7 @@ app.use("/uploads", express.static(path.join(__dirname, "../uploads"), {
 const { sendFlowLogger } = require("./monitorSendFlow");
 app.use("/api/messages", sendFlowLogger);
 app.use("/api", requireAuth);
+
 let botState = { status: 'DISCONNECTED', qrCode: null };
 
 app.post("/api/bot/status", (req, res) => {
@@ -64,35 +65,19 @@ app.use("/api/contacts", require("./routes/contactRoutes"));
 app.use("/api/upload", require("./routes/uploadRoutes"));
 app.use("/api/ai", require("./routes/aiRoutes"));
 
+// 3. SPA Fallback - Redirect unmatched non-API routes to login.html
+app.get("*", (req, res) => {
+  if (req.path.startsWith("/api") || req.path.startsWith("/uploads")) {
+    return res.status(404).json({ msg: "Not found" });
+  }
+  res.sendFile(path.join(__dirname, "../public/login.html"));
+});
+
 app.use((err, req, res, next) => {
   if (err instanceof SyntaxError && err.status === 400 && "body" in err) {
     return res.status(400).json({ msg: "Invalid payload." });
   }
   return next(err);
-});
-
-// SPA Fallback - serve login.html for root and unmatched routes
-app.get(/^\/(?!api|uploads|\.js|\.css|\.html|\.json|\.png|\.jpg|\.jpeg|\.gif|\.svg|\.ico|\.woff|\.woff2|\.ttf|\.eot)/, (req, res) => {
-  const loginPath = path.join(__dirname, "../public/login.html");
-  if (fs.existsSync(loginPath)) {
-    res.sendFile(loginPath);
-  } else {
-    res.status(404).json({ error: "Frontend not found" });
-  }
-});
-
-// Default 404 for API routes
-app.use((req, res) => {
-  if (req.path.startsWith("/api")) {
-    res.status(404).json({ msg: "API endpoint not found" });
-  } else {
-    const loginPath = path.join(__dirname, "../public/login.html");
-    if (fs.existsSync(loginPath)) {
-      res.sendFile(loginPath);
-    } else {
-      res.status(404).json({ error: "Not found" });
-    }
-  }
 });
 const PORT = process.env.PORT || 3000;
 const server = http.createServer(app);
