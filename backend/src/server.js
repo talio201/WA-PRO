@@ -45,8 +45,8 @@ app.use("/uploads", express.static(path.join(__dirname, "../uploads"), {
 
 const { sendFlowLogger } = require("./monitorSendFlow");
 app.use("/api/messages", sendFlowLogger);
-app.use("/api", requireAuth);
 
+// Bot status endpoints - public (before auth middleware)
 let botState = { status: 'DISCONNECTED', qrCode: null };
 
 app.post("/api/bot/status", (req, res) => {
@@ -61,6 +61,9 @@ app.post("/api/bot/status", (req, res) => {
 app.get("/api/bot/status", (req, res) => {
   res.json(botState);
 });
+
+// Protected API routes
+app.use("/api", requireAuth);
 
 app.use("/api/campaigns", require("./routes/campaignRoutes"));
 app.use("/api/messages", require("./routes/messageRoutes"));

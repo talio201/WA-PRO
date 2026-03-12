@@ -1,25 +1,43 @@
-const requireAuth = (req, res, next) => {
+const { createClient } = require('@supabase/supabase-js');
+
+const supabase = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_ANON_KEY
+);
+
+const requireAuth = async (req, res, next) => {
   const authHeader = req.headers.authorization;
+  
   if (!authHeader) {
     return res
       .status(401)
       .json({ msg: "Unauthorized: Missing Authorization header" });
   }
-  const token = String(authHeader.split(' ')[1] || '').trim();
+
+  const parts = authHeader.split(' ');
+  const token = String(parts[1] || '').trim();
+  const type = String(parts[0] || '').toLowerCase();
+
+  // 1. Check for Master API Key (Extension/Bot)
   const validKey = String(process.env.API_SECRET_KEY || '').trim();
-  if (token !== validKey) {
-    return res.status(401).json({ msg: `Unauthorized: Invalid API Key.` });
-  }
   
-  // Pegar e validar agentId, essencial para não cruzar dados entre computadores/usuários
-  const isBotRoute = req.path.includes('/messages/next') || req.path.includes('/messages/inbound') || req.path.includes('/status');
-  const agentId = req.headers['x-agent-id'];
-  
-  if (!agentId && !isBotRoute) {
-     return res.status(401).json({ msg: "Unauthorized: Missing x-agent-id header. Every frontend request must identify its agent ID." });
+  if (type === 'bearer' && token === validKey) {
+    req.agentId = req.headers['x-agent-id'] || 'bot';
+    return next();
   }
 
-  req.agentId = agentId || 'bot';
-  next();
+  // 2. Check for Supabase Session Token (Dashboard)
+  if (type === 'bearer') {
+    const { data: { user }, error } = await supabase.auth.getUser(token);
+    
+    if (!error && user) {
+      req.user = user;
+      req.agentId = 'admin'; // Admin session from dashboard
+      return next();
+    }
+  }
+
+  return res.status(401).json({ msg: "Unauthorized: Invalid token or key." });
 };
+
 module.exports = requireAuth;

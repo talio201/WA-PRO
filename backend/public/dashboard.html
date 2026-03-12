@@ -102,7 +102,20 @@
 
         async function fetchBotStatus() {
             try {
-                const response = await fetch('/api/bot/status');
+                const { data: { session } } = await supabaseClient.auth.getSession();
+                if (!session) return;
+
+                const response = await fetch('/api/bot/status', {
+                    headers: {
+                        'Authorization': `Bearer ${session.access_token}`
+                    }
+                });
+                
+                if (response.status === 401) {
+                    document.getElementById('bot-status').innerText = 'Não Autorizado';
+                    return;
+                }
+
                 const data = await response.json();
                 document.getElementById('bot-status').innerText = data.status || 'Desconectado';
             } catch (e) {
