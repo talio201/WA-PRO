@@ -9,6 +9,15 @@ const DEFAULT_STORE = {
     backendWsUrl: String(process.env.PUBLIC_WS_URL || 'wss://tcgsolucoes.app/ws').trim(),
   },
   clients: [],
+  installations: [],
+};
+
+const PLAN_TERMS = {
+  '30d': 30,
+  '60d': 60,
+  '90d': 90,
+  '365d': 365,
+  lifetime: null,
 };
 
 function ensureStoreFile() {
@@ -30,6 +39,9 @@ function readStore() {
         ...(parsed.appConfig || {}),
       },
       clients: Array.isArray(parsed.clients) ? parsed.clients : [],
+      installations: Array.isArray(parsed.installations)
+        ? parsed.installations
+        : [],
     };
   } catch (error) {
     return JSON.parse(JSON.stringify(DEFAULT_STORE));
@@ -48,6 +60,93 @@ function generateClientId() {
 
 function generateApiKey() {
   return crypto.randomBytes(24).toString('hex');
+}
+
+function generateActivationCode() {
+  const chunk = () => crypto.randomBytes(3).toString('hex').toUpperCase();
+  return `EW-${chunk()}-${chunk()}-${chunk()}`;
+}
+
+function normalizePlanTerm(value) {
+  const safe = String(value || '').trim().toLowerCase();
+  if (safe === '30' || safe === '30d') return '30d';
+  if (safe === '60' || safe === '60d') return '60d';
+  if (safe === '90' || safe === '90d') return '90d';
+  if (safe === '365' || safe === '365d' || safe === 'annual' || safe === '1y') return '365d';
+  if (safe === 'lifetime' || safe === 'vitalicio' || safe === 'lifelong') return 'lifetime';
+  return '30d';
+}
+
+function buildExpiration(planTerm, startedAt = new Date()) {
+  const normalized = normalizePlanTerm(planTerm);
+  const days = PLAN_TERMS[normalized];
+  if (days === null) return null;
+  const base = new Date(startedAt);
+  base.setUTCDate(base.getUTCDate() + days);
+  return base.toISOString();
+}
+
+function normalizeInstallationStatus(installation = {}) {
+  if (installation.status === 'revoked' || installation.status === 'suspended') {
+    return installation.status;
+  }
+  if (!installation.activatedAt) {
+    return 'pending';
+  }
+  if (installation.expiresAt && new Date(installation.expiresAt).getTime() <= Date.now()) {
+    return 'expired';
+  }
+  return 'active';
+}
+
+function maskInstallationSecret(secret = '') {
+  const safe = String(secret || '').trim();
+  if (!safe) return '';
+  if (safe.length <= 8) return `${safe.slice(0, 2)}***`;
+  return `${safe.slice(0, 4)}...${safe.slice(-4)}`;
+}
+
+function getPublicInstallation(installation) {
+  const status = normalizeInstallationStatus(installation);
+  return {
+    activationCode: installation.activationCode,
+    installationId: installation.installationId,
+    status,
+    createdAt: installation.createdAt,
+    updatedAt: installation.updatedAt,
+    activatedAt: installation.activatedAt || null,
+    revokedAt: installation.revokedAt || null,
+    suspendedAt: installation.suspendedAt || null,
+    expiresAt: installation.expiresAt || null,
+    planTerm: installation.planTerm || null,
+    isLifetime: installation.planTerm === 'lifetime',
+    lastSeenAt: installation.lastSeenAt || null,
+    notes: installation.notes || '',
+    installationSecretMasked: maskInstallationSecret(installation.installationSecret),
+    metadata: installation.metadata || {},
+    permissions: normalizePermissions(installation.permissions),
+    clientId: installation.clientId || null,
+  };
+}
+
+function ensureInstallationClient(store, installation, payload = {}) {
+  if (installation.clientId) {
+    return store.clients.find((item) => item.clientId === installation.clientId) || null;
+  }
+  const client = {
+    clientId: generateClientId(),
+    name: String(payload.name || installation.metadata?.name || `Cliente ${installation.activationCode}`).trim(),
+    description: String(payload.description || installation.notes || '').trim(),
+    active: true,
+    permissions: normalizePermissions(payload.permissions || installation.permissions),
+    apiKey: generateApiKey(),
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    lastUsedAt: null,
+  };
+  store.clients.unshift(client);
+  installation.clientId = client.clientId;
+  return client;
 }
 
 function normalizePermissions(raw = {}) {
@@ -184,6 +283,162 @@ function getProvisionPayload(clientId) {
   };
 }
 
+function findInstallationByCode(store, activationCode = '') {
+  const safeCode = String(activationCode || '').trim().toUpperCase();
+  if (!safeCode) return null;
+  return store.installations.find((item) => String(item.activationCode || '').trim().toUpperCase() === safeCode) || null;
+}
+
+function registerInstallation(payload = {}) {
+  const store = readStore();
+  const activationCode = String(payload.activationCode || generateActivationCode()).trim().toUpperCase();
+  const installationId = String(payload.installationId || '').trim();
+  const installationSecret = String(payload.installationSecret || '').trim();
+  if (!installationId || !installationSecret || !activationCode) {
+    throw new Error('activationCode, installationId and installationSecret are required');
+  }
+  let installation = findInstallationByCode(store, activationCode);
+  if (!installation) {
+    installation = {
+      activationCode,
+      installationId,
+      installationSecret,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      status: 'pending',
+      activatedAt: null,
+      expiresAt: null,
+      planTerm: null,
+      revokedAt: null,
+      suspendedAt: null,
+      notes: '',
+      metadata: payload.metadata || {},
+      permissions: normalizePermissions({}),
+      clientId: null,
+      lastSeenAt: null,
+    };
+    store.installations.unshift(installation);
+  } else {
+    installation.installationId = installationId;
+    installation.installationSecret = installationSecret;
+    installation.metadata = {
+      ...(installation.metadata || {}),
+      ...(payload.metadata || {}),
+    };
+    installation.updatedAt = new Date().toISOString();
+    if (installation.status === 'expired') {
+      installation.status = 'pending';
+      installation.expiresAt = null;
+      installation.activatedAt = null;
+      installation.planTerm = null;
+    }
+  }
+  writeStore(store);
+  return getPublicInstallation(installation);
+}
+
+function listInstallations(filters = {}) {
+  const store = readStore();
+  const statusFilter = String(filters.status || '').trim().toLowerCase();
+  const all = store.installations.map((item) => {
+    item.status = normalizeInstallationStatus(item);
+    return item;
+  });
+  writeStore(store);
+  let list = all;
+  if (statusFilter) {
+    list = all.filter((item) => normalizeInstallationStatus(item) === statusFilter);
+  }
+  return list
+    .slice()
+    .sort((a, b) => new Date(b.updatedAt || b.createdAt || 0).getTime() - new Date(a.updatedAt || a.createdAt || 0).getTime())
+    .map(getPublicInstallation);
+}
+
+function activateInstallation(activationCode, payload = {}) {
+  const store = readStore();
+  const installation = findInstallationByCode(store, activationCode);
+  if (!installation) return null;
+  const now = new Date();
+  const planTerm = normalizePlanTerm(payload.planTerm || installation.planTerm || '30d');
+  const permissions = normalizePermissions(payload.permissions || installation.permissions || {});
+  const client = ensureInstallationClient(store, installation, payload);
+  if (client) {
+    client.permissions = permissions;
+    client.active = true;
+    client.updatedAt = now.toISOString();
+  }
+  installation.permissions = permissions;
+  installation.status = 'active';
+  installation.planTerm = planTerm;
+  installation.activatedAt = installation.activatedAt || now.toISOString();
+  installation.expiresAt = buildExpiration(planTerm, now);
+  installation.revokedAt = null;
+  installation.suspendedAt = null;
+  installation.notes = String(payload.notes || installation.notes || '').trim();
+  installation.updatedAt = now.toISOString();
+  writeStore(store);
+  return getPublicInstallation(installation);
+}
+
+function revokeInstallation(activationCode, payload = {}) {
+  const store = readStore();
+  const installation = findInstallationByCode(store, activationCode);
+  if (!installation) return null;
+  installation.status = String(payload.status || 'revoked').trim().toLowerCase() === 'suspended' ? 'suspended' : 'revoked';
+  installation.revokedAt = installation.status === 'revoked' ? new Date().toISOString() : installation.revokedAt;
+  installation.suspendedAt = installation.status === 'suspended' ? new Date().toISOString() : installation.suspendedAt;
+  installation.updatedAt = new Date().toISOString();
+  if (installation.clientId) {
+    const client = store.clients.find((item) => item.clientId === installation.clientId);
+    if (client) {
+      client.active = false;
+      client.updatedAt = new Date().toISOString();
+    }
+  }
+  writeStore(store);
+  return getPublicInstallation(installation);
+}
+
+function getInstallationByActivationCode(activationCode) {
+  const store = readStore();
+  const installation = findInstallationByCode(store, activationCode);
+  if (!installation) return null;
+  installation.status = normalizeInstallationStatus(installation);
+  writeStore(store);
+  return installation;
+}
+
+function validateInstallationCredentials(activationCode, installationSecret) {
+  const store = readStore();
+  const installation = findInstallationByCode(store, activationCode);
+  if (!installation) return null;
+  const safeSecret = String(installationSecret || '').trim();
+  if (!safeSecret || safeSecret !== String(installation.installationSecret || '').trim()) {
+    return null;
+  }
+  const status = normalizeInstallationStatus(installation);
+  installation.status = status;
+  installation.updatedAt = new Date().toISOString();
+  writeStore(store);
+  if (status !== 'active') return null;
+  return installation;
+}
+
+function touchInstallation(activationCode, metadata = {}) {
+  const store = readStore();
+  const installation = findInstallationByCode(store, activationCode);
+  if (!installation) return null;
+  installation.lastSeenAt = new Date().toISOString();
+  installation.updatedAt = installation.lastSeenAt;
+  installation.metadata = {
+    ...(installation.metadata || {}),
+    ...(metadata || {}),
+  };
+  writeStore(store);
+  return getPublicInstallation(installation);
+}
+
 module.exports = {
   listClients,
   createClient,
@@ -194,4 +449,13 @@ module.exports = {
   getAppConfig,
   updateAppConfig,
   getProvisionPayload,
+  listInstallations,
+  registerInstallation,
+  activateInstallation,
+  revokeInstallation,
+  getInstallationByActivationCode,
+  validateInstallationCredentials,
+  touchInstallation,
+  normalizePlanTerm,
+  buildExpiration,
 };

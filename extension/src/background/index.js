@@ -1,4 +1,5 @@
 import {
+  ensureSessionToken,
   getAuthorizedHeaders,
   getRuntimeConfig,
 } from "../utils/runtimeConfig.js";
@@ -47,10 +48,17 @@ async function buildApiUrl(pathname = "") {
   return `${backendApiUrl}${pathname}`;
 }
 async function buildRealtimeUrl() {
-  const { backendWsUrl, backendApiKey, agentId } = await getRuntimeConfig();
+  const { backendWsUrl, backendApiKey, accessToken, agentId } = await getRuntimeConfig();
   const url = new URL(backendWsUrl);
-  if (backendApiKey) {
-    url.searchParams.set("access_token", backendApiKey);
+  let token = accessToken || backendApiKey || '';
+  if (!token) {
+    try {
+      const session = await ensureSessionToken();
+      token = session?.token || '';
+    } catch (error) {}
+  }
+  if (token) {
+    url.searchParams.set("access_token", token);
   }
   if (agentId) {
     url.searchParams.set("agentId", agentId);

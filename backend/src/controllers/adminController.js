@@ -10,6 +10,9 @@ const {
   getAppConfig,
   updateAppConfig,
   getProvisionPayload,
+  listInstallations,
+  activateInstallation,
+  revokeInstallation,
 } = require("../config/adminStore");
 
 // In-memory stores for tracking
@@ -599,6 +602,52 @@ exports.getBotProvision = async (req, res) => {
     res.json({ success: true, provision: payload });
   } catch (err) {
     res.status(500).json({ msg: "Failed to get bot provisioning data" });
+  }
+};
+
+exports.listInstallations = async (req, res) => {
+  try {
+    const status = String(req.query?.status || '').trim();
+    res.json({ installations: listInstallations({ status }) });
+  } catch (err) {
+    res.status(500).json({ msg: "Failed to list installations" });
+  }
+};
+
+exports.activateInstallation = async (req, res) => {
+  try {
+    const activationCode = String(req.params.activationCode || '').trim().toUpperCase();
+    const installation = activateInstallation(activationCode, req.body || {});
+    if (!installation) {
+      return res.status(404).json({ msg: "Installation not found" });
+    }
+    logSecurityEvent("installation_activated", {
+      by: req.agentId,
+      activationCode,
+      planTerm: installation.planTerm,
+      expiresAt: installation.expiresAt,
+    });
+    res.json({ success: true, installation });
+  } catch (err) {
+    res.status(500).json({ msg: "Failed to activate installation" });
+  }
+};
+
+exports.revokeInstallation = async (req, res) => {
+  try {
+    const activationCode = String(req.params.activationCode || '').trim().toUpperCase();
+    const installation = revokeInstallation(activationCode, req.body || {});
+    if (!installation) {
+      return res.status(404).json({ msg: "Installation not found" });
+    }
+    logSecurityEvent("installation_revoked", {
+      by: req.agentId,
+      activationCode,
+      status: installation.status,
+    });
+    res.json({ success: true, installation });
+  } catch (err) {
+    res.status(500).json({ msg: "Failed to revoke installation" });
   }
 };
 

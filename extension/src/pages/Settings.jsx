@@ -1,6 +1,13 @@
-﻿import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import './settings-glass.css';
-import { DEFAULT_BACKEND_CONFIG } from '../utils/runtimeConfig';
+import {
+    DEFAULT_BACKEND_CONFIG,
+    ensureInstallationRegistration,
+    getRuntimeConfig,
+    saveRuntimeConfig,
+    syncActivationStatus,
+} from '../utils/runtimeConfig';
+
 const DEFAULT_SETTINGS = {
     enableHumanizedTyping: true,
     enableLongBreaks: true,
@@ -11,33 +18,76 @@ const DEFAULT_SETTINGS = {
     agentBridgeChatQuery: '',
     backendApiUrl: DEFAULT_BACKEND_CONFIG.backendApiUrl,
     backendWsUrl: DEFAULT_BACKEND_CONFIG.backendWsUrl,
-    backendApiKey: '',
-    agentId: '',
+    activationCode: '',
+    licenseStatus: 'pending',
+    planTerm: '',
+    expiresAt: '',
 };
+
 const storageKeys = Object.keys(DEFAULT_SETTINGS);
+
+function formatLicenseStatus(status) {
+    const normalized = String(status || 'pending').toLowerCase();
+    if (normalized === 'active') return 'Ativa';
+    if (normalized === 'expired') return 'Expirada';
+    if (normalized === 'revoked') return 'Revogada';
+    if (normalized === 'suspended') return 'Suspensa';
+    return 'Pendente de ativação';
+}
+
 const Settings = () => {
     const [settings, setSettings] = useState(DEFAULT_SETTINGS);
-    const [provisionPayload, setProvisionPayload] = useState('');
     const [loading, setLoading] = useState(true);
+    const [syncingLicense, setSyncingLicense] = useState(false);
+
     useEffect(() => {
-        chrome.storage.local.get(storageKeys, (result) => {
-            setSettings((prev) => ({
-                ...prev,
+        chrome.storage.local.get(storageKeys, async (result) => {
+            const merged = {
+                ...DEFAULT_SETTINGS,
                 ...result,
-            }));
+            };
+            setSettings(merged);
             setLoading(false);
+            await initializeActivation();
         });
     }, []);
-    const persistSettings = (nextSettings) => {
+
+    const initializeActivation = async () => {
+        try {
+            await ensureInstallationRegistration();
+            const config = await getRuntimeConfig();
+            const status = await syncActivationStatus();
+            const nextSettings = {
+                ...settings,
+                activationCode: config.activationCode || '',
+                licenseStatus: status?.status || config.licenseStatus || 'pending',
+                planTerm: status?.planTerm || config.planTerm || '',
+                expiresAt: status?.expiresAt || config.expiresAt || '',
+            };
+            persistSettings(nextSettings);
+        } catch (error) {}
+    };
+
+    const persistSettings = async (nextSettings) => {
         setSettings(nextSettings);
         chrome.storage.local.set(nextSettings);
+        await saveRuntimeConfig({
+            backendApiUrl: nextSettings.backendApiUrl,
+            backendWsUrl: nextSettings.backendWsUrl,
+            activationCode: nextSettings.activationCode,
+            licenseStatus: nextSettings.licenseStatus,
+            planTerm: nextSettings.planTerm,
+            expiresAt: nextSettings.expiresAt,
+        });
     };
+
     const toggleSetting = (key) => {
         persistSettings({
             ...settings,
             [key]: !settings[key],
         });
     };
+
     const updateDelay = (value) => {
         const parsed = Math.max(100, Math.min(2500, Number(value) || 700));
         persistSettings({
@@ -45,6 +95,7 @@ const Settings = () => {
             manualPreSendDelayMs: parsed,
         });
     };
+
     const updateAgentBridgePhone = (value) => {
         const digits = String(value || '').replace(/\D/g, '');
         persistSettings({
@@ -52,54 +103,59 @@ const Settings = () => {
             agentBridgePhone: digits,
         });
     };
+
     const updateAgentBridgeChatQuery = (value) => {
         persistSettings({
             ...settings,
             agentBridgeChatQuery: String(value || ''),
         });
     };
+
     const updateBackendSetting = (key, value) => {
         persistSettings({
             ...settings,
             [key]: String(value || ''),
         });
     };
-    const importProvisionPayload = () => {
+
+    const copyActivationCode = async () => {
+        const code = String(settings.activationCode || '').trim();
+        if (!code) return;
         try {
-            const raw = window.prompt('Cole o payload JSON gerado no Admin Console:');
-            if (!raw) return;
-            const parsed = JSON.parse(raw);
-            persistSettings({
-                ...settings,
-                backendApiUrl: String(parsed.backendApiUrl || settings.backendApiUrl || ''),
-                backendWsUrl: String(parsed.backendWsUrl || settings.backendWsUrl || ''),
-                backendApiKey: String(parsed.backendApiKey || settings.backendApiKey || ''),
-                agentId: String(parsed.agentId || settings.agentId || ''),
-            });
+            await navigator.clipboard.writeText(code);
+            window.alert('Código de ativação copiado.');
         } catch (error) {
-            window.alert('Payload inválido.');
+            window.prompt('Copie o código de ativação:', code);
         }
     };
-    const applyProvisionPayload = () => {
+
+    const refreshLicense = async () => {
+        setSyncingLicense(true);
         try {
-            const parsed = JSON.parse(String(provisionPayload || '').trim());
-            persistSettings({
+            await ensureInstallationRegistration();
+            const status = await syncActivationStatus();
+            const runtime = await getRuntimeConfig();
+            await persistSettings({
                 ...settings,
-                backendApiUrl: String(parsed.backendApiUrl || settings.backendApiUrl || ''),
-                backendWsUrl: String(parsed.backendWsUrl || settings.backendWsUrl || ''),
-                backendApiKey: String(parsed.backendApiKey || settings.backendApiKey || ''),
-                agentId: String(parsed.agentId || settings.agentId || ''),
+                activationCode: runtime.activationCode || settings.activationCode,
+                licenseStatus: status?.status || runtime.licenseStatus || 'pending',
+                planTerm: status?.planTerm || runtime.planTerm || '',
+                expiresAt: status?.expiresAt || runtime.expiresAt || '',
             });
-            setProvisionPayload('');
-            window.alert('Payload aplicado com sucesso.');
         } catch (error) {
-            window.alert('JSON inválido. Verifique o payload e tente novamente.');
+            window.alert(error?.message || 'Falha ao sincronizar licença.');
+        } finally {
+            setSyncingLicense(false);
         }
     };
+
     const statusLabel = useMemo(() => {
         if (loading) return 'Carregando configurações...';
         return 'Preferências salvas localmente';
     }, [loading]);
+
+    const licenseLabel = useMemo(() => formatLicenseStatus(settings.licenseStatus), [settings.licenseStatus]);
+
     return (
         <div className="settings-glass-root">
             <div className="settings-ambient" aria-hidden="true">
@@ -112,10 +168,39 @@ const Settings = () => {
                         <h2>Controle fino da extensão</h2>
                         <p>{statusLabel}</p>
                     </div>
-                    <button type="button" className="glass-toggle active" onClick={importProvisionPayload} aria-label="Importar payload">
-                        ⬇
+                    <button
+                        type="button"
+                        className="glass-toggle active"
+                        onClick={refreshLicense}
+                        aria-label="Sincronizar licença"
+                    >
+                        {syncingLicense ? '...' : '↻'}
                     </button>
                 </header>
+
+                <section className="settings-input-card">
+                    <label>
+                        <h3>Código único da extensão</h3>
+                        <p>Envie este código ao administrador para ativação e liberação da licença.</p>
+                    </label>
+                    <input
+                        type="text"
+                        readOnly
+                        value={settings.activationCode || 'Gerando...'}
+                        className="settings-glass-input"
+                    />
+                    <div style={{ marginTop: '0.75rem', display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                        <button type="button" onClick={copyActivationCode} className="glass-toggle active">
+                            Copiar código
+                        </button>
+                        <span style={{ fontSize: '0.85rem', opacity: 0.8 }}>
+                            Status: <strong>{licenseLabel}</strong>
+                            {settings.planTerm ? ` · Plano: ${settings.planTerm}` : ''}
+                            {settings.expiresAt ? ` · Válida até ${new Date(settings.expiresAt).toLocaleString()}` : ''}
+                        </span>
+                    </div>
+                </section>
+
                 <section className="settings-grid">
                     <article className="settings-card">
                         <div>
@@ -166,6 +251,7 @@ const Settings = () => {
                         />
                     </article>
                 </section>
+
                 <section className="settings-input-card">
                     <label htmlFor="agent-bridge-chat">
                         <h3>Chat do agente (bridge)</h3>
@@ -180,10 +266,11 @@ const Settings = () => {
                         className="settings-glass-input"
                     />
                 </section>
+
                 <section className="settings-input-card">
                     <label htmlFor="agent-bridge-phone">
-                        <h3>Numero do agente (bridge)</h3>
-                        <p>Opcional. Se preferir, informe o numero em vez do nome do chat (somente digitos).</p>
+                        <h3>Número do agente (bridge)</h3>
+                        <p>Opcional. Se preferir, informe o número em vez do nome do chat (somente dígitos).</p>
                     </label>
                     <input
                         id="agent-bridge-phone"
@@ -195,6 +282,7 @@ const Settings = () => {
                         className="settings-glass-input"
                     />
                 </section>
+
                 <section className="settings-slider-card">
                     <div className="slider-head">
                         <h3>Atraso base pré-envio</h3>
@@ -215,49 +303,11 @@ const Settings = () => {
                         <span>Conservador</span>
                     </div>
                 </section>
-                <section className="settings-input-card">
-                    <label htmlFor="provision-payload-json">
-                        <h3>Provisionamento JSON (Admin Console)</h3>
-                        <p>Cole aqui o JSON gerado no painel admin para preencher automaticamente os campos abaixo.</p>
-                    </label>
-                    <textarea
-                        id="provision-payload-json"
-                        placeholder='{"backendApiUrl":"https://.../api","backendWsUrl":"wss://.../ws","backendApiKey":"...","agentId":"bot_xxx"}'
-                        value={provisionPayload}
-                        onChange={(event) => setProvisionPayload(event.target.value)}
-                        className="settings-glass-input"
-                        rows={5}
-                    />
-                    <div style={{ marginTop: '0.75rem', display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
-                        <button
-                            type="button"
-                            onClick={applyProvisionPayload}
-                            className="glass-toggle active"
-                            aria-label="Aplicar payload"
-                        >
-                            Aplicar payload
-                        </button>
-                        <span style={{ fontSize: '0.85rem', opacity: 0.75 }}>Também é possível usar o botão ⬇ no topo.</span>
-                    </div>
-                </section>
-                <section className="settings-input-card">
-                    <label htmlFor="agent-id">
-                        <h3>ID exclusivo do bot</h3>
-                        <p>Identificador provisionado pelo Admin Console.</p>
-                    </label>
-                    <input
-                        id="agent-id"
-                        type="text"
-                        placeholder="bot_xxxxx"
-                        value={settings.agentId || ''}
-                        onChange={(event) => updateBackendSetting('agentId', event.target.value)}
-                        className="settings-glass-input"
-                    />
-                </section>
+
                 <section className="settings-input-card">
                     <label htmlFor="backend-api-url">
                         <h3>URL da API</h3>
-                        <p>Endpoint completo do backend, ex: https://tcgsolucoes.app/api</p>
+                        <p>Endpoint do backend (normalmente não precisa alterar).</p>
                     </label>
                     <input
                         id="backend-api-url"
@@ -268,10 +318,11 @@ const Settings = () => {
                         className="settings-glass-input"
                     />
                 </section>
+
                 <section className="settings-input-card">
                     <label htmlFor="backend-ws-url">
                         <h3>URL do WebSocket</h3>
-                        <p>Endpoint realtime, ex: wss://tcgsolucoes.app/ws</p>
+                        <p>Endpoint realtime (normalmente não precisa alterar).</p>
                     </label>
                     <input
                         id="backend-ws-url"
@@ -282,22 +333,9 @@ const Settings = () => {
                         className="settings-glass-input"
                     />
                 </section>
-                <section className="settings-input-card">
-                    <label htmlFor="backend-api-key">
-                        <h3>Chave da API</h3>
-                        <p>Chave de acesso individual do cliente. Não deixe hardcoded no código.</p>
-                    </label>
-                    <input
-                        id="backend-api-key"
-                        type="password"
-                        placeholder="Cole a chave fornecida pelo administrador"
-                        value={settings.backendApiKey || ''}
-                        onChange={(event) => updateBackendSetting('backendApiKey', event.target.value)}
-                        className="settings-glass-input"
-                    />
-                </section>
             </div>
         </div>
     );
 };
+
 export default Settings;

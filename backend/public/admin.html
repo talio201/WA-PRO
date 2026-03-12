@@ -901,6 +901,32 @@
                     </div>
                 </div>
             </div>
+
+            <div class="card" style="margin-top: 1.5rem;">
+                <div class="card-header">
+                    <h3>🔐 Instalações da extensão</h3>
+                    <button onclick="loadProvisioningData()" class="btn btn-secondary">Atualizar</button>
+                </div>
+                <div class="card-body">
+                    <div class="table-container">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Código</th>
+                                    <th>Status</th>
+                                    <th>Plano</th>
+                                    <th>Expira em</th>
+                                    <th>Última atividade</th>
+                                    <th>Ações</th>
+                                </tr>
+                            </thead>
+                            <tbody id="installations-table">
+                                <tr><td colspan="6" style="text-align:center; color: var(--text-secondary)">Carregando...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
         </div>
 
         <!-- Console Tab -->
@@ -1365,9 +1391,10 @@
 
         async function loadProvisioningData() {
             try {
-                const [runtimeResponse, clientsResponse] = await Promise.all([
+                const [runtimeResponse, clientsResponse, installationsResponse] = await Promise.all([
                     apiRequest('/admin/runtime-config'),
                     apiRequest('/admin/clients'),
+                    apiRequest('/admin/installations'),
                 ]);
 
                 const config = runtimeResponse.config || {};
@@ -1396,9 +1423,60 @@
                         </td>
                     </tr>
                 `).join('');
+
+                const installations = installationsResponse.installations || [];
+                const installTbody = document.getElementById('installations-table');
+                if (!installations.length) {
+                    installTbody.innerHTML = '<tr><td colspan="6" style="text-align:center; color: var(--text-secondary)">Nenhuma instalação registrada</td></tr>';
+                } else {
+                    installTbody.innerHTML = installations.map((installation) => {
+                        const status = String(installation.status || 'pending').toLowerCase();
+                        const badgeClass = status === 'active'
+                            ? 'badge-success'
+                            : status === 'pending'
+                                ? 'badge-warning'
+                                : 'badge-danger';
+                        return `
+                            <tr>
+                                <td><code>${installation.activationCode}</code></td>
+                                <td><span class="badge ${badgeClass}">${status.toUpperCase()}</span></td>
+                                <td>${installation.planTerm || '-'}</td>
+                                <td>${installation.expiresAt ? new Date(installation.expiresAt).toLocaleString() : 'Vitalício / -'}</td>
+                                <td>${installation.lastSeenAt ? new Date(installation.lastSeenAt).toLocaleString() : '-'}</td>
+                                <td>
+                                    <button onclick="approveInstallation('${installation.activationCode}', '30d')" class="btn btn-primary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;">30d</button>
+                                    <button onclick="approveInstallation('${installation.activationCode}', '60d')" class="btn btn-primary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;">60d</button>
+                                    <button onclick="approveInstallation('${installation.activationCode}', '90d')" class="btn btn-primary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;">90d</button>
+                                    <button onclick="approveInstallation('${installation.activationCode}', '365d')" class="btn btn-primary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;">Anual</button>
+                                    <button onclick="approveInstallation('${installation.activationCode}', 'lifetime')" class="btn btn-secondary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;">Vitalício</button>
+                                    <button onclick="revokeInstallation('${installation.activationCode}')" class="btn btn-danger" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;">Revogar</button>
+                                </td>
+                            </tr>
+                        `;
+                    }).join('');
+                }
             } catch (error) {
                 console.error('Provisioning load error:', error);
             }
+        }
+
+        async function approveInstallation(activationCode, planTerm) {
+            await apiRequest(`/admin/installations/${encodeURIComponent(activationCode)}/activate`, {
+                method: 'POST',
+                body: JSON.stringify({ planTerm })
+            });
+            showToast(`Instalação ${activationCode} ativada (${planTerm}).`);
+            await loadProvisioningData();
+        }
+
+        async function revokeInstallation(activationCode) {
+            if (!confirm(`Revogar instalação ${activationCode}?`)) return;
+            await apiRequest(`/admin/installations/${encodeURIComponent(activationCode)}/revoke`, {
+                method: 'POST',
+                body: JSON.stringify({ status: 'revoked' })
+            });
+            showToast(`Instalação ${activationCode} revogada.`, 'warning');
+            await loadProvisioningData();
         }
 
         async function saveRuntimeConfig() {

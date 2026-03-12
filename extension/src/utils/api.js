@@ -1,4 +1,4 @@
-import { getAuthorizedHeaders, getRuntimeConfig } from './runtimeConfig';
+import { ensureSessionToken, getAuthorizedHeaders, getRuntimeConfig } from './runtimeConfig';
 
 const parseResponsePayload = async (response) => {
   const contentType = String(
@@ -17,7 +17,7 @@ const requestJson = async (
 ) => {
   const { backendApiUrl, backendApiKey } = await getRuntimeConfig();
   if (!backendApiKey) {
-    throw new Error("API key not configured in extension settings.");
+    await ensureSessionToken();
   }
   const mergedHeaders = await getAuthorizedHeaders(options.headers || {});
   const mergedOptions = {

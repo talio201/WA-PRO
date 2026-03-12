@@ -1,4 +1,4 @@
-import { getRuntimeConfig, getRuntimeConfigSync, runtimeConfigReady } from './runtimeConfig';
+import { ensureSessionToken, getRuntimeConfig, getRuntimeConfigSync, runtimeConfigReady } from './runtimeConfig';
 
 const DEFAULT_WS_URL = getRuntimeConfigSync().backendWsUrl;
 function safeParseMessage(raw) {
@@ -56,8 +56,15 @@ export function connectRealtime({
       await runtimeConfigReady;
       const config = await getRuntimeConfig();
       const resolvedUrl = new URL(wsUrl || config.backendWsUrl);
-      if (config.backendApiKey) {
-        resolvedUrl.searchParams.set('access_token', config.backendApiKey);
+      let token = config.accessToken || config.backendApiKey || '';
+      if (!token) {
+        try {
+          const session = await ensureSessionToken();
+          token = session?.token || '';
+        } catch (error) {}
+      }
+      if (token) {
+        resolvedUrl.searchParams.set('access_token', token);
       }
       if (config.agentId) {
         resolvedUrl.searchParams.set('agentId', config.agentId);

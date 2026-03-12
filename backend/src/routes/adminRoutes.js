@@ -22,6 +22,9 @@ router.post("/clients", adminController.createBotClient);
 router.patch("/clients/:clientId", adminController.updateBotClient);
 router.post("/clients/:clientId/rotate-key", adminController.rotateBotClientKey);
 router.get("/clients/:clientId/provision", adminController.getBotProvision);
+router.get("/installations", adminController.listInstallations);
+router.post("/installations/:activationCode/activate", adminController.activateInstallation);
+router.post("/installations/:activationCode/revoke", adminController.revokeInstallation);
 
 // Security logs
 router.get("/security", adminController.getSecurityLogs);

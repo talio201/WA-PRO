@@ -62,6 +62,8 @@ app.get("/api/bot/status", (req, res) => {
   res.json(botState);
 });
 
+app.use("/api/public", require("./routes/publicRoutes"));
+
 // Protected API routes
 app.use("/api", requireAuth);
 
