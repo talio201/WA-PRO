@@ -17,6 +17,7 @@ const DEFAULT_SETTINGS = {
 const storageKeys = Object.keys(DEFAULT_SETTINGS);
 const Settings = () => {
     const [settings, setSettings] = useState(DEFAULT_SETTINGS);
+    const [provisionPayload, setProvisionPayload] = useState('');
     const [loading, setLoading] = useState(true);
     useEffect(() => {
         chrome.storage.local.get(storageKeys, (result) => {
@@ -77,6 +78,22 @@ const Settings = () => {
             });
         } catch (error) {
             window.alert('Payload inválido.');
+        }
+    };
+    const applyProvisionPayload = () => {
+        try {
+            const parsed = JSON.parse(String(provisionPayload || '').trim());
+            persistSettings({
+                ...settings,
+                backendApiUrl: String(parsed.backendApiUrl || settings.backendApiUrl || ''),
+                backendWsUrl: String(parsed.backendWsUrl || settings.backendWsUrl || ''),
+                backendApiKey: String(parsed.backendApiKey || settings.backendApiKey || ''),
+                agentId: String(parsed.agentId || settings.agentId || ''),
+            });
+            setProvisionPayload('');
+            window.alert('Payload aplicado com sucesso.');
+        } catch (error) {
+            window.alert('JSON inválido. Verifique o payload e tente novamente.');
         }
     };
     const statusLabel = useMemo(() => {
@@ -196,6 +213,31 @@ const Settings = () => {
                         <span>Rápido</span>
                         <span>Natural</span>
                         <span>Conservador</span>
+                    </div>
+                </section>
+                <section className="settings-input-card">
+                    <label htmlFor="provision-payload-json">
+                        <h3>Provisionamento JSON (Admin Console)</h3>
+                        <p>Cole aqui o JSON gerado no painel admin para preencher automaticamente os campos abaixo.</p>
+                    </label>
+                    <textarea
+                        id="provision-payload-json"
+                        placeholder='{"backendApiUrl":"https://.../api","backendWsUrl":"wss://.../ws","backendApiKey":"...","agentId":"bot_xxx"}'
+                        value={provisionPayload}
+                        onChange={(event) => setProvisionPayload(event.target.value)}
+                        className="settings-glass-input"
+                        rows={5}
+                    />
+                    <div style={{ marginTop: '0.75rem', display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+                        <button
+                            type="button"
+                            onClick={applyProvisionPayload}
+                            className="glass-toggle active"
+                            aria-label="Aplicar payload"
+                        >
+                            Aplicar payload
+                        </button>
+                        <span style={{ fontSize: '0.85rem', opacity: 0.75 }}>Também é possível usar o botão ⬇ no topo.</span>
                     </div>
                 </section>
                 <section className="settings-input-card">
