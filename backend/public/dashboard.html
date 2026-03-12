@@ -58,13 +58,36 @@
             border-radius: 8px;
             cursor: pointer;
         }
+
+        .btn-admin {
+            padding: 0.5rem 1rem;
+            background: linear-gradient(135deg, #6366f1, #8b5cf6);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 500;
+            margin-right: 1rem;
+        }
+
+        .btn-admin:hover {
+            opacity: 0.9;
+        }
+
+        .header-actions {
+            display: flex;
+            align-items: center;
+        }
     </style>
 </head>
 <body>
     <div class="container">
         <div class="header">
             <h1>Dashboard de Manutenção</h1>
-            <button onclick="logout()" class="btn-logout">Sair</button>
+            <div class="header-actions">
+                <button onclick="location.href='/admin.html'" class="btn-admin">🛡️ Admin Console</button>
+                <button onclick="logout()" class="btn-logout">Sair</button>
+            </div>
         </div>
 
         <div class="stats-grid">

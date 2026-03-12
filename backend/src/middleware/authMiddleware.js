@@ -5,10 +5,28 @@ const supabase = createClient(
   process.env.SUPABASE_ANON_KEY
 );
 
+// Import admin logging functions
+let logSecurityEvent;
+try {
+  const adminController = require('../controllers/adminController');
+  logSecurityEvent = adminController.logSecurityEvent;
+} catch (e) {
+  logSecurityEvent = () => {}; // Fallback if not available
+}
+
 const requireAuth = async (req, res, next) => {
   const authHeader = req.headers.authorization;
+  const ip = req.ip || req.connection?.remoteAddress;
+  const userAgent = req.headers['user-agent'];
+  const agentId = req.headers['x-agent-id'];
   
   if (!authHeader) {
+    logSecurityEvent('auth_failed', {
+      reason: 'missing_header',
+      ip,
+      userAgent,
+      endpoint: req.originalUrl,
+    });
     return res
       .status(401)
       .json({ msg: "Unauthorized: Missing Authorization header" });
@@ -22,7 +40,7 @@ const requireAuth = async (req, res, next) => {
   const validKey = String(process.env.API_SECRET_KEY || '').trim();
   
   if (type === 'bearer' && token === validKey) {
-    req.agentId = req.headers['x-agent-id'] || 'bot';
+    req.agentId = agentId || 'bot';
     return next();
   }
 
@@ -36,6 +54,15 @@ const requireAuth = async (req, res, next) => {
       return next();
     }
   }
+
+  // Log failed auth attempt
+  logSecurityEvent('auth_failed', {
+    reason: 'invalid_token',
+    ip,
+    userAgent,
+    agentId,
+    endpoint: req.originalUrl,
+  });
 
   return res.status(401).json({ msg: "Unauthorized: Invalid token or key." });
 };

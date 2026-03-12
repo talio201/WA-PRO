@@ -65,6 +65,11 @@ app.get("/api/bot/status", (req, res) => {
 // Protected API routes
 app.use("/api", requireAuth);
 
+// Track user activity for admin dashboard
+const { trackUserActivity } = require("./controllers/adminController");
+app.use(trackUserActivity);
+
+app.use("/api/admin", require("./routes/adminRoutes"));
 app.use("/api/campaigns", require("./routes/campaignRoutes"));
 app.use("/api/messages", require("./routes/messageRoutes"));
 app.use("/api/contacts", require("./routes/contactRoutes"));
