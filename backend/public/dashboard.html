@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Painel Admin | EmidiaWhats</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        :root {
+            --primary: #00f2fe;
+            --bg: #0f172a;
+            --card-bg: rgba(30, 41, 59, 0.7);
+            --text: #f8fafc;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Outfit', sans-serif; }
+
+        body {
+            background: var(--bg);
+            color: var(--text);
+            padding: 2rem;
+        }
+
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 3rem;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+            gap: 1.5rem;
+        }
+
+        .stat-card {
+            background: var(--card-bg);
+            padding: 2rem;
+            border-radius: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .stat-card h3 { color: #94a3b8; font-size: 0.9rem; margin-bottom: 0.5rem; }
+        .stat-card p { font-size: 1.8rem; font-weight: 600; color: var(--primary); }
+
+        .btn-logout {
+            padding: 0.5rem 1rem;
+            background: rgba(239, 68, 68, 0.1);
+            color: #f87171;
+            border: 1px solid rgba(239, 68, 68, 0.2);
+            border-radius: 8px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Dashboard de Manutenção</h1>
+            <button onclick="logout()" class="btn-logout">Sair</button>
+        </div>
+
+        <div class="stats-grid">
+            <div class="stat-card">
+                <h3>Status do Backend</h3>
+                <p>Online</p>
+            </div>
+            <div class="stat-card">
+                <h3>Bot Status</h3>
+                <p id="bot-status">Carregando...</p>
+            </div>
+            <div class="stat-card">
+                <h3>Versão</h3>
+                <p>2.0.0 PRO</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const SUPABASE_URL = "https://izmellnvkwbapcrfuqgp.supabase.co";
+        const SUPABASE_ANON_KEY = "[REDACTED_JWT]";
+        const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+        async function checkAuth() {
+            const { data: { session } } = await supabaseClient.auth.getSession();
+            if (!session) {
+                window.location.href = '/login.html';
+            }
+        }
+
+        async function logout() {
+            await supabaseClient.auth.signOut();
+            window.location.href = '/login.html';
+        }
+
+        async function fetchBotStatus() {
+            try {
+                const response = await fetch('/api/bot/status');
+                const data = await response.json();
+                document.getElementById('bot-status').innerText = data.status || 'Desconectado';
+            } catch (e) {
+                document.getElementById('bot-status').innerText = 'Erro ao buscar';
+            }
+        }
+
+        checkAuth();
+        fetchBotStatus();
+        setInterval(fetchBotStatus, 5000);
+    </script>
+</body>
+</html>

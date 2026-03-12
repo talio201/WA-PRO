@@ -766,22 +766,6 @@ async function handleDirectSendRequest(request = {}) {
     throw new Error(`Falha de comunicacao com o servidor: ${err.message}`);
   }
 }
-function validateImageMedia(media = {}) {
-  if (!media || typeof media !== "object") {
-    throw new Error("Midia invalida para envio.");
-  }
-  const fileUrl = String(media.fileUrl || "").trim();
-  const mimetype = String(media.mimetype || "")
-    .trim()
-    .toLowerCase();
-  if (!fileUrl) {
-    throw new Error("Arquivo sem URL para envio.");
-  }
-  if (!mimetype.startsWith("image/")) {
-    throw new Error("Somente imagens sao suportadas neste botao por enquanto.");
-  }
-  return { fileUrl, mimetype };
-}
 async function handleDirectMediaRequest(request = {}) {
   if (!request.phone) throw new Error("Telefone obrigatorio.");
   if (!request.fileUrl) throw new Error("URL do arquivo obrigatoria.");

@@ -196,11 +196,31 @@ const NewCampaign = ({ onCancel }) => {
       const result = await uploadFile(file);
       setMedia(result);
     } catch (error) {
-      alert(`Erro ao enviar midia: ${error.message}`);
+      alert(`Erro ao enviar arquivo: ${error.message}`);
     } finally {
       setUploadingMedia(false);
     }
   }, []);
+  const handlePaste = async (event) => {
+    const items = event.clipboardData?.items;
+    if (!items) return;
+    for (const item of items) {
+      if (item.kind === "file") {
+        const file = item.getAsFile();
+        if (file) {
+          setUploadingMedia(true);
+          try {
+            const result = await uploadFile(file);
+            setMedia(result);
+          } catch (error) {
+            alert(`Erro ao processar arquivo colado: ${error.message}`);
+          } finally {
+            setUploadingMedia(false);
+          }
+        }
+      }
+    }
+  };
   const { getRootProps: getExcelRootProps, getInputProps: getExcelInputProps } =
     useDropzone({
       onDrop: onDropExcel,
@@ -216,11 +236,7 @@ const NewCampaign = ({ onCancel }) => {
   const { getRootProps: getMediaRootProps, getInputProps: getMediaInputProps } =
     useDropzone({
       onDrop: onDropMedia,
-      accept: {
-        "image/*": [],
-        "video/*": [],
-        "audio/*": [],
-      },
+      // Removido accept para permitir qualquer tipo de arquivo (PDF, docs, etc)
       maxFiles: 1,
     });
   const filteredDbContacts = useMemo(() => {
@@ -404,6 +420,7 @@ const NewCampaign = ({ onCancel }) => {
               <textarea
                 value={message}
                 onChange={(event) => setMessage(event.target.value)}
+                onPaste={handlePaste}
                 placeholder="Olá {name}, temos uma condição especial para você..."
                 className="new-campaign-input h-56 w-full resize-none rounded-xl border border-slate-300 bg-white px-4 py-3 text-base leading-relaxed outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
               />
@@ -660,7 +677,7 @@ const NewCampaign = ({ onCancel }) => {
                     ? "Enviando mídia..."
                     : media
                       ? `Arquivo: ${media.fileName}`
-                      : "Clique ou arraste imagem / vídeo / áudio"}
+                      : "Clique ou arraste qualquer tipo de arquivo"}
                 </div>
               </div>
             </div>

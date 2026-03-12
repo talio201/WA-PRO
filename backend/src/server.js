@@ -22,7 +22,8 @@ const corsOptions = {
 };
 app.use(cors(corsOptions));
 app.use(express.json({ extended: false }));
-app.get("/", (req, res) => res.json({ msg: "API Running" }));
+app.get("/", (req, res) => res.sendFile(path.join(__dirname, "../public/login.html")));
+app.use(express.static(path.join(__dirname, "../public")));
 app.use("/uploads", express.static(path.join(__dirname, "../uploads")));
 const { sendFlowLogger } = require("./monitorSendFlow");
 app.use("/api/messages", sendFlowLogger);
