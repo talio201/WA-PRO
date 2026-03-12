@@ -206,7 +206,7 @@
         const SUPABASE_URL = "https://izmellnvkwbapcrfuqgp.supabase.co";
         const SUPABASE_ANON_KEY = "[REDACTED_JWT]";
         
-        const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
         const form = document.getElementById('login-form');
         const btn = document.getElementById('login-btn');
@@ -226,7 +226,7 @@
             loader.style.display = 'block';
             btn.disabled = true;
 
-            const { data, error } = await supabase.auth.signInWithPassword({
+            const { data, error } = await supabaseClient.auth.signInWithPassword({
                 email,
                 password,
             });
