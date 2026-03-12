@@ -341,8 +341,8 @@ const NewCampaign = ({ onCancel }) => {
     minute: "2-digit",
   });
   return (
-    <div className="new-campaign-page mx-auto max-w-[1460px] text-slate-900">
-      <div className="new-campaign-shell relative overflow-hidden rounded-[30px] border border-slate-200 bg-gradient-to-br from-white via-slate-50 to-emerald-50 shadow-[0_24px_60px_-30px_rgba(15,23,42,0.45)]">
+    <div className="new-campaign-page mx-auto max-w-365 text-slate-900">
+      <div className="new-campaign-shell relative overflow-hidden rounded-[30px] border border-slate-200 bg-linear-to-br from-white via-slate-50 to-emerald-50 shadow-[0_24px_60px_-30px_rgba(15,23,42,0.45)]">
         <div className="pointer-events-none absolute -right-16 -top-20 h-72 w-72 rounded-full bg-emerald-200/40 blur-3xl" />
         <div className="pointer-events-none absolute -bottom-20 -left-20 h-72 w-72 rounded-full bg-cyan-200/40 blur-3xl" />
         <div className="relative grid grid-cols-1 xl:grid-cols-[minmax(0,1.6fr)_420px]">
@@ -516,7 +516,7 @@ const NewCampaign = ({ onCancel }) => {
                   <>
                     <div
                       {...getExcelRootProps()}
-                      className="new-campaign-dropzone flex min-h-[110px] cursor-pointer items-center justify-center rounded-xl border-2 border-dashed border-slate-300 bg-slate-50 px-3 text-center text-sm text-slate-600 hover:border-emerald-500"
+                      className="new-campaign-dropzone flex min-h-27.5 cursor-pointer items-center justify-center rounded-xl border-2 border-dashed border-slate-300 bg-slate-50 px-3 text-center text-sm text-slate-600 hover:border-emerald-500"
                     >
                       <input {...getExcelInputProps()} />
                       {excelFile
@@ -670,7 +670,7 @@ const NewCampaign = ({ onCancel }) => {
                 </p>
                 <div
                   {...getMediaRootProps()}
-                  className="new-campaign-dropzone flex min-h-[200px] cursor-pointer items-center justify-center rounded-xl border-2 border-dashed border-slate-300 bg-slate-50 px-3 text-center text-sm text-slate-600 hover:border-emerald-500"
+                  className="new-campaign-dropzone flex min-h-50 cursor-pointer items-center justify-center rounded-xl border-2 border-dashed border-slate-300 bg-slate-50 px-3 text-center text-sm text-slate-600 hover:border-emerald-500"
                 >
                   <input {...getMediaInputProps()} />
                   {uploadingMedia
@@ -692,8 +692,8 @@ const NewCampaign = ({ onCancel }) => {
                   Como a mensagem chega no WhatsApp
                 </p>
               </div>
-              <div className="mx-auto w-[360px] rounded-[2.3rem] border-[10px] border-slate-900 bg-black p-2 shadow-2xl">
-                <div className="flex h-[730px] flex-col overflow-hidden rounded-[1.7rem] bg-[#e5ddd5]">
+              <div className="mx-auto w-90 rounded-[2.3rem] border-10 border-slate-900 bg-black p-2 shadow-2xl">
+                <div className="flex h-182.5 flex-col overflow-hidden rounded-[1.7rem] bg-[#e5ddd5]">
                   <div className="flex items-center justify-between bg-[#075E54] px-4 py-3 text-white">
                     <div className="min-w-0">
                       <p className="truncate text-base font-semibold">
@@ -721,7 +721,7 @@ const NewCampaign = ({ onCancel }) => {
                       </div>
                     )}
                     <div className="max-w-[85%] rounded-lg rounded-tl-none bg-white px-3 py-2 text-sm text-slate-800 shadow">
-                      <p className="whitespace-pre-wrap break-words">
+                      <p className="whitespace-pre-wrap wrap-break-word">
                         {previewMessage}
                       </p>
                       <div className="mt-1 text-right text-[11px] text-slate-500">
