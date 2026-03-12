@@ -135,7 +135,7 @@ function initRealtimeServer(server) {
     verifyClient: async (info, done) => {
       try {
         const authResult = await authorizeRealtimeRequest(info.req);
-        if (!authResult) {
+        if (!authResult || authResult?.permissions?.allowRealtime === false) {
           done(false, 401, "Unauthorized");
           return;
         }

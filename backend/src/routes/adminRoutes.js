@@ -14,6 +14,15 @@ router.post("/users/disconnect", adminController.disconnectUser);
 // System metrics
 router.get("/metrics", adminController.getMetrics);
 
+// Runtime config & provisioning
+router.get("/runtime-config", adminController.getRuntimeConfig);
+router.put("/runtime-config", adminController.updateRuntimeConfig);
+router.get("/clients", adminController.listBotClients);
+router.post("/clients", adminController.createBotClient);
+router.patch("/clients/:clientId", adminController.updateBotClient);
+router.post("/clients/:clientId/rotate-key", adminController.rotateBotClientKey);
+router.get("/clients/:clientId/provision", adminController.getBotProvision);
+
 // Security logs
 router.get("/security", adminController.getSecurityLogs);
 router.post("/security/report", adminController.reportSecurityEvent);

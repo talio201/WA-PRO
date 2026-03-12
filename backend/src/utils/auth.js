@@ -1,4 +1,5 @@
 const { createClient } = require('@supabase/supabase-js');
+const { getClientByApiKey, touchClient } = require('../config/adminStore');
 
 function getSupabaseClient() {
   return createClient(
@@ -20,6 +21,33 @@ async function authenticateBearerToken(token, agentId = '') {
     return {
       kind: 'api-key',
       agentId: String(agentId || 'bot').trim() || 'bot',
+      permissions: {
+        allowGemini: true,
+        allowRealtime: true,
+        allowCampaigns: true,
+        allowContacts: true,
+        allowInbox: true,
+      },
+    };
+  }
+
+  const client = getClientByApiKey(safeToken);
+  if (client) {
+    touchClient(client.clientId);
+    return {
+      kind: 'bot-client',
+      agentId: client.clientId,
+      apiClient: {
+        clientId: client.clientId,
+        name: client.name,
+      },
+      permissions: {
+        allowGemini: client.permissions?.allowGemini !== false,
+        allowRealtime: client.permissions?.allowRealtime !== false,
+        allowCampaigns: client.permissions?.allowCampaigns !== false,
+        allowContacts: client.permissions?.allowContacts !== false,
+        allowInbox: client.permissions?.allowInbox !== false,
+      },
     };
   }
 
@@ -30,6 +58,13 @@ async function authenticateBearerToken(token, agentId = '') {
       kind: 'supabase-user',
       user,
       agentId: 'admin',
+      permissions: {
+        allowGemini: true,
+        allowRealtime: true,
+        allowCampaigns: true,
+        allowContacts: true,
+        allowInbox: true,
+      },
     };
   }
 

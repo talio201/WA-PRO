@@ -12,6 +12,7 @@ const DEFAULT_SETTINGS = {
     backendApiUrl: DEFAULT_BACKEND_CONFIG.backendApiUrl,
     backendWsUrl: DEFAULT_BACKEND_CONFIG.backendWsUrl,
     backendApiKey: '',
+    agentId: '',
 };
 const storageKeys = Object.keys(DEFAULT_SETTINGS);
 const Settings = () => {
@@ -62,6 +63,22 @@ const Settings = () => {
             [key]: String(value || ''),
         });
     };
+    const importProvisionPayload = () => {
+        try {
+            const raw = window.prompt('Cole o payload JSON gerado no Admin Console:');
+            if (!raw) return;
+            const parsed = JSON.parse(raw);
+            persistSettings({
+                ...settings,
+                backendApiUrl: String(parsed.backendApiUrl || settings.backendApiUrl || ''),
+                backendWsUrl: String(parsed.backendWsUrl || settings.backendWsUrl || ''),
+                backendApiKey: String(parsed.backendApiKey || settings.backendApiKey || ''),
+                agentId: String(parsed.agentId || settings.agentId || ''),
+            });
+        } catch (error) {
+            window.alert('Payload inválido.');
+        }
+    };
     const statusLabel = useMemo(() => {
         if (loading) return 'Carregando configurações...';
         return 'Preferências salvas localmente';
@@ -78,6 +95,9 @@ const Settings = () => {
                         <h2>Controle fino da extensão</h2>
                         <p>{statusLabel}</p>
                     </div>
+                    <button type="button" className="glass-toggle active" onClick={importProvisionPayload} aria-label="Importar payload">
+                        ⬇
+                    </button>
                 </header>
                 <section className="settings-grid">
                     <article className="settings-card">
@@ -177,6 +197,20 @@ const Settings = () => {
                         <span>Natural</span>
                         <span>Conservador</span>
                     </div>
+                </section>
+                <section className="settings-input-card">
+                    <label htmlFor="agent-id">
+                        <h3>ID exclusivo do bot</h3>
+                        <p>Identificador provisionado pelo Admin Console.</p>
+                    </label>
+                    <input
+                        id="agent-id"
+                        type="text"
+                        placeholder="bot_xxxxx"
+                        value={settings.agentId || ''}
+                        onChange={(event) => updateBackendSetting('agentId', event.target.value)}
+                        className="settings-glass-input"
+                    />
                 </section>
                 <section className="settings-input-card">
                     <label htmlFor="backend-api-url">

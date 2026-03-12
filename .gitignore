@@ -10,6 +10,7 @@ extension/dist/
 # Runtime data
 backend/uploads/
 backend/data/db.json
+backend/data/admin-settings.json
 
 # Environment and credentials
 .env

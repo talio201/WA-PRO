@@ -824,6 +824,83 @@
                     </div>
                 </div>
             </div>
+
+            <div class="grid grid-2" style="margin-top: 1.5rem;">
+                <div class="card">
+                    <div class="card-header">
+                        <h3>🔧 Configuração distribuída</h3>
+                        <button onclick="loadProvisioningData()" class="btn btn-secondary">🔄</button>
+                    </div>
+                    <div class="card-body">
+                        <div class="form-group">
+                            <label class="form-label">URL da API</label>
+                            <input id="runtime-api-url" class="form-input" placeholder="https://tcgsolucoes.app/api">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">URL do WebSocket</label>
+                            <input id="runtime-ws-url" class="form-input" placeholder="wss://tcgsolucoes.app/ws">
+                        </div>
+                        <button onclick="saveRuntimeConfig()" class="btn btn-primary">Salvar endpoints</button>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-header">
+                        <h3>🤖 Novo bot / cliente</h3>
+                    </div>
+                    <div class="card-body">
+                        <div class="form-group">
+                            <label class="form-label">Nome do bot</label>
+                            <input id="new-client-name" class="form-input" placeholder="Ex: Cliente Acme - Bot 01">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Descrição</label>
+                            <input id="new-client-description" class="form-input" placeholder="Opcional">
+                        </div>
+                        <div class="grid grid-2">
+                            <label><input type="checkbox" id="perm-gemini" checked> Permitir Gemini</label>
+                            <label><input type="checkbox" id="perm-realtime" checked> Permitir tempo real</label>
+                            <label><input type="checkbox" id="perm-campaigns" checked> Permitir campanhas</label>
+                            <label><input type="checkbox" id="perm-contacts" checked> Permitir contatos</label>
+                        </div>
+                        <div style="margin-top: 1rem; display:flex; gap: 0.75rem; flex-wrap: wrap;">
+                            <button onclick="createBotClient()" class="btn btn-primary">Criar bot</button>
+                            <span id="new-client-feedback" style="color: var(--text-secondary); font-size: 0.85rem;"></span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card" style="margin-top: 1.5rem;">
+                <div class="card-header">
+                    <h3>📋 Bots provisionados</h3>
+                    <button onclick="loadProvisioningData()" class="btn btn-secondary">Atualizar</button>
+                </div>
+                <div class="card-body">
+                    <div class="table-container">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Bot ID</th>
+                                    <th>Nome</th>
+                                    <th>Chave</th>
+                                    <th>Gemini</th>
+                                    <th>Realtime</th>
+                                    <th>Status</th>
+                                    <th>Ações</th>
+                                </tr>
+                            </thead>
+                            <tbody id="clients-table">
+                                <tr><td colspan="7" style="text-align:center; color: var(--text-secondary)">Carregando...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="form-group" style="margin-top: 1rem;">
+                        <label class="form-label">Payload para copiar na extensão</label>
+                        <textarea id="provision-payload" class="form-input" rows="8" readonly placeholder="Selecione um bot para gerar o payload"></textarea>
+                    </div>
+                </div>
+            </div>
         </div>
 
         <!-- Console Tab -->
@@ -1228,6 +1305,117 @@
             }
         }
 
+        async function loadProvisioningData() {
+            try {
+                const [runtimeResponse, clientsResponse] = await Promise.all([
+                    apiRequest('/admin/runtime-config'),
+                    apiRequest('/admin/clients'),
+                ]);
+
+                const config = runtimeResponse.config || {};
+                document.getElementById('runtime-api-url').value = config.backendApiUrl || '';
+                document.getElementById('runtime-ws-url').value = config.backendWsUrl || '';
+
+                const clients = clientsResponse.clients || [];
+                const tbody = document.getElementById('clients-table');
+                if (!clients.length) {
+                    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; color: var(--text-secondary)">Nenhum bot provisionado</td></tr>';
+                    return;
+                }
+
+                tbody.innerHTML = clients.map((client) => `
+                    <tr>
+                        <td><code>${client.clientId}</code></td>
+                        <td>${client.name || '-'}</td>
+                        <td>${client.apiKeyMasked || '-'}</td>
+                        <td><span class="badge ${client.permissions?.allowGemini ? 'badge-success' : 'badge-danger'}">${client.permissions?.allowGemini ? 'SIM' : 'NÃO'}</span></td>
+                        <td><span class="badge ${client.permissions?.allowRealtime ? 'badge-success' : 'badge-danger'}">${client.permissions?.allowRealtime ? 'SIM' : 'NÃO'}</span></td>
+                        <td><span class="badge ${client.active ? 'badge-success' : 'badge-danger'}">${client.active ? 'Ativo' : 'Inativo'}</span></td>
+                        <td>
+                            <button onclick="copyProvisionPayload('${client.clientId}')" class="btn btn-secondary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;">📋 Payload</button>
+                            <button onclick="rotateBotKey('${client.clientId}')" class="btn btn-secondary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;">🔁 Girar chave</button>
+                            <button onclick="toggleBotClient('${client.clientId}', ${!client.active})" class="btn ${client.active ? 'btn-danger' : 'btn-primary'}" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;">${client.active ? 'Desativar' : 'Ativar'}</button>
+                        </td>
+                    </tr>
+                `).join('');
+            } catch (error) {
+                console.error('Provisioning load error:', error);
+            }
+        }
+
+        async function saveRuntimeConfig() {
+            const backendApiUrl = document.getElementById('runtime-api-url').value.trim();
+            const backendWsUrl = document.getElementById('runtime-ws-url').value.trim();
+            await apiRequest('/admin/runtime-config', {
+                method: 'PUT',
+                body: JSON.stringify({ backendApiUrl, backendWsUrl })
+            });
+            showToast('Endpoints salvos com sucesso');
+            loadProvisioningData();
+        }
+
+        async function createBotClient() {
+            const name = document.getElementById('new-client-name').value.trim();
+            const description = document.getElementById('new-client-description').value.trim();
+            const permissions = {
+                allowGemini: document.getElementById('perm-gemini').checked,
+                allowRealtime: document.getElementById('perm-realtime').checked,
+                allowCampaigns: document.getElementById('perm-campaigns').checked,
+                allowContacts: document.getElementById('perm-contacts').checked,
+            };
+            const result = await apiRequest('/admin/clients', {
+                method: 'POST',
+                body: JSON.stringify({ name, description, permissions })
+            });
+            if (result?.client?.apiKey) {
+                document.getElementById('new-client-feedback').textContent = `Criado: ${result.client.clientId}`;
+                document.getElementById('provision-payload').value = JSON.stringify({
+                    backendApiUrl: document.getElementById('runtime-api-url').value.trim(),
+                    backendWsUrl: document.getElementById('runtime-ws-url').value.trim(),
+                    backendApiKey: result.client.apiKey,
+                    agentId: result.client.clientId,
+                }, null, 2);
+                showToast('Bot criado. Copie o payload para a extensão.');
+            }
+            document.getElementById('new-client-name').value = '';
+            document.getElementById('new-client-description').value = '';
+            await loadProvisioningData();
+        }
+
+        async function copyProvisionPayload(clientId) {
+            const result = await apiRequest(`/admin/clients/${encodeURIComponent(clientId)}/provision`);
+            const payload = JSON.stringify(result.provision || {}, null, 2);
+            const textarea = document.getElementById('provision-payload');
+            textarea.value = payload;
+            textarea.select();
+            document.execCommand('copy');
+            showToast(`Payload de ${clientId} copiado.`);
+        }
+
+        async function rotateBotKey(clientId) {
+            if (!confirm(`Girar a chave do bot ${clientId}? A extensão antiga perderá acesso.`)) return;
+            const result = await apiRequest(`/admin/clients/${encodeURIComponent(clientId)}/rotate-key`, {
+                method: 'POST'
+            });
+            document.getElementById('provision-payload').value = JSON.stringify({
+                backendApiUrl: document.getElementById('runtime-api-url').value.trim(),
+                backendWsUrl: document.getElementById('runtime-ws-url').value.trim(),
+                backendApiKey: result.client.apiKey,
+                agentId: result.client.clientId,
+            }, null, 2);
+            showToast(`Chave de ${clientId} rotacionada.`);
+            await loadProvisioningData();
+        }
+
+        async function toggleBotClient(clientId, active) {
+            await apiRequest(`/admin/clients/${encodeURIComponent(clientId)}`, {
+                method: 'PATCH',
+                body: JSON.stringify({ active })
+            });
+            showToast(`Bot ${active ? 'ativado' : 'desativado'} com sucesso.`);
+            await loadProvisioningData();
+        }
+
         // Cache
         async function clearAllCache() {
             if (!confirm('Limpar todo o cache do sistema?')) return;
@@ -1345,6 +1533,7 @@
         connectWebSocket();
         refreshDashboard();
         fetchBotStatus();
+        loadProvisioningData();
 
         // Refresh intervals
         setInterval(refreshDashboard, 30000);

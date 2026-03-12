@@ -2,6 +2,15 @@ const os = require("os");
 const fs = require("fs");
 const path = require("path");
 const { emitRealtimeEvent } = require("../realtime/realtime");
+const {
+  listClients,
+  createClient,
+  updateClient,
+  rotateClientKey,
+  getAppConfig,
+  updateAppConfig,
+  getProvisionPayload,
+} = require("../config/adminStore");
 
 // In-memory stores for tracking
 const activeUsers = new Map();
@@ -500,6 +509,96 @@ exports.broadcast = async (req, res) => {
     res.json({ success: true, event, data });
   } catch (err) {
     res.status(500).json({ msg: "Failed to broadcast" });
+  }
+};
+
+exports.getRuntimeConfig = async (req, res) => {
+  try {
+    res.json({
+      config: getAppConfig(),
+    });
+  } catch (err) {
+    res.status(500).json({ msg: "Failed to get runtime config" });
+  }
+};
+
+exports.updateRuntimeConfig = async (req, res) => {
+  try {
+    const config = updateAppConfig(req.body || {});
+    logSecurityEvent("runtime_config_updated", {
+      by: req.agentId,
+      backendApiUrl: config.backendApiUrl,
+      backendWsUrl: config.backendWsUrl,
+    });
+    res.json({ success: true, config });
+  } catch (err) {
+    res.status(500).json({ msg: "Failed to update runtime config" });
+  }
+};
+
+exports.listBotClients = async (req, res) => {
+  try {
+    res.json({ clients: listClients() });
+  } catch (err) {
+    res.status(500).json({ msg: "Failed to list bot clients" });
+  }
+};
+
+exports.createBotClient = async (req, res) => {
+  try {
+    const client = createClient(req.body || {});
+    logSecurityEvent("bot_client_created", {
+      by: req.agentId,
+      clientId: client.clientId,
+      name: client.name,
+    });
+    res.json({ success: true, client });
+  } catch (err) {
+    res.status(500).json({ msg: "Failed to create bot client" });
+  }
+};
+
+exports.updateBotClient = async (req, res) => {
+  try {
+    const client = updateClient(String(req.params.clientId || "").trim(), req.body || {});
+    if (!client) {
+      return res.status(404).json({ msg: "Bot client not found" });
+    }
+    logSecurityEvent("bot_client_updated", {
+      by: req.agentId,
+      clientId: client.clientId,
+    });
+    res.json({ success: true, client });
+  } catch (err) {
+    res.status(500).json({ msg: "Failed to update bot client" });
+  }
+};
+
+exports.rotateBotClientKey = async (req, res) => {
+  try {
+    const client = rotateClientKey(String(req.params.clientId || "").trim());
+    if (!client) {
+      return res.status(404).json({ msg: "Bot client not found" });
+    }
+    logSecurityEvent("bot_client_key_rotated", {
+      by: req.agentId,
+      clientId: client.clientId,
+    });
+    res.json({ success: true, client });
+  } catch (err) {
+    res.status(500).json({ msg: "Failed to rotate bot client key" });
+  }
+};
+
+exports.getBotProvision = async (req, res) => {
+  try {
+    const payload = getProvisionPayload(String(req.params.clientId || "").trim());
+    if (!payload) {
+      return res.status(404).json({ msg: "Bot client not found" });
+    }
+    res.json({ success: true, provision: payload });
+  } catch (err) {
+    res.status(500).json({ msg: "Failed to get bot provisioning data" });
   }
 };
 

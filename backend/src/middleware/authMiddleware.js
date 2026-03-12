@@ -35,11 +35,19 @@ const requireAuth = async (req, res, next) => {
     const authResult = await authenticateBearerToken(token, agentId);
     if (authResult?.kind === 'api-key') {
       req.agentId = authResult.agentId;
+      req.permissions = authResult.permissions || {};
+      return next();
+    }
+    if (authResult?.kind === 'bot-client') {
+      req.agentId = authResult.agentId;
+      req.permissions = authResult.permissions || {};
+      req.apiClient = authResult.apiClient || null;
       return next();
     }
     if (authResult?.kind === 'supabase-user') {
       req.user = authResult.user;
       req.agentId = authResult.agentId;
+      req.permissions = authResult.permissions || {};
       return next();
     }
   }

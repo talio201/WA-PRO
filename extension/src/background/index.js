@@ -762,10 +762,7 @@ async function handleDirectSendRequest(request = {}) {
       await buildApiUrl(`/messages/outbound/manual`),
       {
         method: "POST",
-        headers: await getAuthorizedHeaders(
-          { "Content-Type": "application/json" },
-          "agent-background-sync",
-        ),
+        headers: await getAuthorizedHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify(payload),
       },
     );
@@ -910,7 +907,7 @@ async function fetchNextJob(preferredCampaignId = null) {
     ? `?campaignId=${encodeURIComponent(preferredCampaignId)}`
     : "";
   const response = await fetch(await buildApiUrl(`/messages/next${queryString}`), {
-    headers: await getAuthorizedHeaders({}, "agent-background-sync"),
+    headers: await getAuthorizedHeaders({}),
   });
   if (!response.ok) {
     throw new Error(`Failed to fetch next job: ${response.status}`);
@@ -921,10 +918,7 @@ async function fetchNextJob(preferredCampaignId = null) {
 async function registerInboundReply(payload) {
   const response = await fetch(await buildApiUrl(`/messages/inbound`), {
     method: "POST",
-    headers: await getAuthorizedHeaders(
-      { "Content-Type": "application/json" },
-      "agent-background-sync",
-    ),
+    headers: await getAuthorizedHeaders({ "Content-Type": "application/json" }),
     body: JSON.stringify(payload),
   });
   if (!response.ok) {
@@ -1136,10 +1130,7 @@ async function updateJobStatus(id, status, error) {
   try {
     const response = await fetch(await buildApiUrl(`/messages/${id}/status`), {
       method: "PUT",
-      headers: await getAuthorizedHeaders(
-        { "Content-Type": "application/json" },
-        "agent-background-sync",
-      ),
+      headers: await getAuthorizedHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify({ status, error }),
     });
     if (!response.ok) {
