@@ -48,9 +48,9 @@ async function buildApiUrl(pathname = "") {
   return `${backendApiUrl}${pathname}`;
 }
 async function buildRealtimeUrl() {
-  const { backendWsUrl, backendApiKey, accessToken, agentId } = await getRuntimeConfig();
+  const { backendWsUrl, accessToken, agentId } = await getRuntimeConfig();
   const url = new URL(backendWsUrl);
-  let token = accessToken || backendApiKey || '';
+  let token = accessToken || '';
   if (!token) {
     try {
       const session = await ensureSessionToken();

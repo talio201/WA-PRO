@@ -81,6 +81,7 @@ async function ensureInstallationIdentity() {
   if (!cachedConfig.installationSecret) patch.installationSecret = randomHex(24);
   if (!cachedConfig.activationCode) patch.activationCode = generateActivationCode();
   if (!cachedConfig.agentId) patch.agentId = patch.installationId || cachedConfig.installationId || `agent_${randomHex(8)}`;
+  if (cachedConfig.backendApiKey) patch.backendApiKey = '';
   if (Object.keys(patch).length > 0) {
     await saveToStorage(patch);
   }
@@ -159,9 +160,6 @@ function hasValidSessionToken(config = cachedConfig) {
 let sessionInFlight = null;
 export async function ensureSessionToken() {
   await ensureInstallationRegistration();
-  if (cachedConfig.backendApiKey) {
-    return { token: cachedConfig.backendApiKey, legacy: true };
-  }
   if (hasValidSessionToken()) {
     return { token: cachedConfig.accessToken, legacy: false };
   }
@@ -253,12 +251,8 @@ export async function getAuthorizedHeaders(extraHeaders = {}, agentIdOverride = 
   };
 
   let token = '';
-  try {
-    const session = await ensureSessionToken();
-    token = session?.token || '';
-  } catch (error) {
-    token = config.backendApiKey || '';
-  }
+  const session = await ensureSessionToken();
+  token = session?.token || '';
 
   if (token) {
     headers.Authorization = `Bearer ${token}`;

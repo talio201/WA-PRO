@@ -16,9 +16,7 @@ const requestJson = async (
   fallbackMessage = "Request failed",
 ) => {
   const { backendApiUrl, backendApiKey } = await getRuntimeConfig();
-  if (!backendApiKey) {
-    await ensureSessionToken();
-  }
+  await ensureSessionToken();
   const mergedHeaders = await getAuthorizedHeaders(options.headers || {});
   const mergedOptions = {
     ...options,

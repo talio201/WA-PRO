@@ -56,7 +56,7 @@ export function connectRealtime({
       await runtimeConfigReady;
       const config = await getRuntimeConfig();
       const resolvedUrl = new URL(wsUrl || config.backendWsUrl);
-      let token = config.accessToken || config.backendApiKey || '';
+      let token = config.accessToken || '';
       if (!token) {
         try {
           const session = await ensureSessionToken();
