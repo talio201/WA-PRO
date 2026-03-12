@@ -10,6 +10,9 @@ const {
   emitRealtimeEvent,
 } = require("./realtime/realtime");
 const requireAuth = require("./middleware/authMiddleware");
+
+const app = express();
+
 // Enable trust proxy for Cloudflare/Proxy environments
 app.set("trust proxy", 1);
 
