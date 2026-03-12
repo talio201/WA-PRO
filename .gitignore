@@ -34,3 +34,7 @@ python_bot/__pycache__/
 python_bot/*.pyc
 python_bot/.env
 python_bot/venv/
+
+# SSH Keys
+ed25519
+ed25519.pub
