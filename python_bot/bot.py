@@ -373,8 +373,19 @@ def main():
                 time.sleep(5)
                 
         logging.info("WhatsApp pronto. Iniciando processamento da fila...")
+        last_heartbeat = 0
+        HEARTBEAT_INTERVAL = 30  # seconds
         while True:
             try:
+                # Periodic heartbeat: re-post LOGGED_IN so backend restart doesn't show DISCONNECTED
+                now_ts = time.time()
+                if now_ts - last_heartbeat >= HEARTBEAT_INTERVAL:
+                    try:
+                        requests.post(f"{API_BASE_URL}/bot/status", json={"status": "LOGGED_IN", "qrCodeBase64": None}, headers=API_HEADERS, timeout=5)
+                        last_heartbeat = now_ts
+                    except Exception as hb_err:
+                        logging.warning(f"Heartbeat falhou: {hb_err}")
+
                 response = requests.get(f"{API_BASE_URL}/messages/next", headers=API_HEADERS)
                 if response.status_code != 200:
                     if response.status_code == 401:
