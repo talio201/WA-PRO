@@ -1,0 +1,15 @@
+title = "WA-PRO secret scan policy"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Allow placeholder env examples and workflow secret references"
+paths = [
+  '''backend/.env.example''',
+  '''README.md'''
+]
+regexes = [
+  '''\$\{\{\s*secrets\.[A-Z0-9_]+\s*\}\}''',
+  '''(?i)(example|placeholder|changeme|dummy)'''
+]

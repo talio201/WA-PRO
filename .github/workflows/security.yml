@@ -1,12 +1,17 @@
-name: Deploy to DigitalOcean (Student Pack)
+name: Security Gate
 
 on:
+  pull_request:
   push:
-    branches: [ "main" ]
+    branches:
+      - "**"
 
 jobs:
-  security-gate:
+  secrets-and-policy:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
     steps:
       - name: Checkout full history
         uses: actions/checkout@v4
@@ -30,22 +35,5 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITLEAKS_CONFIG: .gitleaks.toml
-
-  deploy:
-    needs: security-gate
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Deploy via SSH
-        uses: appleboy/ssh-action@v1.0.0
-        with:
-          host: ${{ secrets.DO_HOST }}
-          username: ${{ secrets.DO_USERNAME }}
-          key: ${{ secrets.DO_SSH_KEY }}
-          script: |
-            cd /opt/EmidiaWhats
-            git pull origin main
-            docker-compose down
-            docker-compose up -d --build
+          GITLEAKS_ENABLE_UPLOAD_ARTIFACT: true
+          GITLEAKS_ENABLE_COMMENTS: false
