@@ -66,4 +66,28 @@ O backend precisa estar rodando para a extensão funcionar.
 *   React & Vite
 *   Tailwind CSS & Recharts
 *   Chrome Extension Manifest V3
+
+## 🚚 Deploy no Servidor Remoto
+Deploy é feito via terminal remoto (SSH). Conecte ao servidor e rode:
+
+```bash
+cd /opt/EmidiaWhats
+git pull origin main
+docker-compose down
+docker-compose up -d --build
+docker-compose ps
+```
+
+## 📋 Setup Inicial do Servidor (primeira vez)
+Se for um novo servidor, rode uma vez:
+
+```bash
+apt-get update && apt-get install -y git curl
+curl -fsSL https://get.docker.com -o get-docker.sh && sh get-docker.sh
+mkdir -p /opt/EmidiaWhats && cd /opt/EmidiaWhats
+git clone https://github.com/talio201/WA-PRO.git .
+git pull origin main
+docker-compose up -d --build
+```
+
 # WA-Manager-PRO

@@ -1,8 +1,18 @@
-name: Deploy to DigitalOcean (Student Pack)
+name: Deploy to DigitalOcean (Student Pack) [DEPRECATED]
 
 on:
-  push:
-    branches: [ "main" ]
+  workflow_dispatch:
+
+jobs:
+  notice:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deployment Instructions
+        run: |
+          echo "Deploy is now manual via terminal on the server:"
+          echo "  ssh root@ubuntu-s-1vcpu-1gb-sfo3-01"
+          echo "  cd /opt/EmidiaWhats && git pull origin main"
+          echo "  docker-compose down && docker-compose up -d --build"
 
 jobs:
   security-gate:

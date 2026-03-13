@@ -16,35 +16,33 @@ if ($LASTEXITCODE -ne 0) {
   exit 1
 }
 
-$body = @'
-{
-  "required_status_checks": {
-    "strict": true,
-    "contexts": [
-      "Security Gate / secrets-and-policy"
-    ]
-  },
-  "enforce_admins": true,
-  "required_pull_request_reviews": {
-    "dismiss_stale_reviews": true,
-    "require_code_owner_reviews": true,
-    "required_approving_review_count": 1,
-    "require_last_push_approval": true
-  },
-  "restrictions": null,
-  "required_linear_history": true,
-  "allow_force_pushes": false,
-  "allow_deletions": false,
-  "block_creations": true,
-  "required_conversation_resolution": true,
-  "lock_branch": false,
-  "allow_fork_syncing": false
+$bodyObject = [ordered]@{
+  required_status_checks = [ordered]@{
+    strict = $true
+    contexts = @("Security Gate / secrets-and-policy")
+  }
+  enforce_admins = $true
+  required_pull_request_reviews = [ordered]@{
+    dismiss_stale_reviews = $true
+    require_code_owner_reviews = $true
+    required_approving_review_count = 1
+    require_last_push_approval = $true
+  }
+  restrictions = $null
+  required_linear_history = $true
+  allow_force_pushes = $false
+  allow_deletions = $false
+  block_creations = $true
+  required_conversation_resolution = $true
+  lock_branch = $false
+  allow_fork_syncing = $false
 }
-'@
+
+$body = $bodyObject | ConvertTo-Json -Depth 10
 
 $endpoint = "repos/$Owner/$Repo/branches/$Branch/protection"
 $tempFile = [System.IO.Path]::GetTempFileName()
-Set-Content -Path $tempFile -Value $body -Encoding UTF8
+[System.IO.File]::WriteAllText($tempFile, $body, (New-Object System.Text.UTF8Encoding($false)))
 & $gh api -X PUT $endpoint --input $tempFile
 Remove-Item -Path $tempFile -Force -ErrorAction SilentlyContinue
 if ($LASTEXITCODE -ne 0) {
