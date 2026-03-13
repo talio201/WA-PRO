@@ -9,6 +9,7 @@ const extPages = path.resolve(__dirname, '../extension/src/pages');
 export default defineConfig({
   plugins: [react()],
   root: '.',
+  base: '/usuarios/',
   build: {
     outDir: '../backend/public/app',
     emptyOutDir: true,
