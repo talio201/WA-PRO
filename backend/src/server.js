@@ -33,6 +33,10 @@ app.get("/health", (req, res) => {
   res.status(200).json({ status: "ok", message: "Backend is running and healthy" });
 });
 
+app.get("/api/health", (req, res) => {
+  res.status(200).json({ status: "ok", message: "Backend is running and healthy" });
+});
+
 // 2. Serve static files FIRST
 app.use(express.static(path.join(__dirname, "../public"), {
   maxAge: "1d",
