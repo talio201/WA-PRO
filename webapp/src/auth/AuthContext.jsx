@@ -60,7 +60,7 @@ function syncAgentId(session) {
   if (!session?.user) return;
   const agentId =
     session.user.user_metadata?.agentId ||
-    session.user.id.slice(0, 12);
+    'admin';
   localStorage.setItem('emidia_agent_id', agentId);
   localStorage.setItem('wa-manager-agent-name', agentId);
 }

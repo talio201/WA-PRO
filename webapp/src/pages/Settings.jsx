@@ -10,7 +10,7 @@ export default function Settings() {
     const stored = localStorage.getItem('emidia_agent_id') || '';
     if (stored) setAgentId(stored);
     else if (session?.user) {
-      const id = session.user.user_metadata?.agentId || session.user.id.slice(0, 12);
+      const id = session.user.user_metadata?.agentId || 'admin';
       setAgentId(id);
     }
   }, [session]);
