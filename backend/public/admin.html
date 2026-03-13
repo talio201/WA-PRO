@@ -739,16 +739,6 @@
                 </div>
             </div>
 
-            <div class="card" style="margin-bottom: 1.5rem;">
-                <div class="card-header">
-                    <h3>📱 QR Code do WhatsApp</h3>
-                </div>
-                <div class="card-body" style="text-align:center;">
-                    <p id="bot-qr-hint" style="color: var(--text-secondary); margin-bottom: 0.75rem;">Aguardando QR Code...</p>
-                    <img id="bot-qr-image" alt="QR Code WhatsApp" style="display:none; max-width:280px; width:100%; border-radius:12px; border:1px solid #2a2f3a; background:#fff; padding:8px;">
-                </div>
-            </div>
-
             <div class="grid grid-2">
                 <div class="card">
                     <div class="card-header">
@@ -1170,7 +1160,7 @@
 
             // Handle specific events
             if (event === 'bot.status') {
-                applyBotStatus(payload || {});
+                document.getElementById('bot-status-text').textContent = payload.status || 'Desconectado';
             }
 
             if (
@@ -1674,40 +1664,15 @@
         }
 
         // Bot status
-        function applyBotStatus(data = {}) {
-            const statusText = document.getElementById('bot-status-text');
-            const qrImage = document.getElementById('bot-qr-image');
-            const qrHint = document.getElementById('bot-qr-hint');
-
-            const status = String(data.status || 'DISCONNECTED').toUpperCase();
-            statusText.textContent = status;
-            statusText.className = `stat-value ${status === 'LOGGED_IN' ? 'success' : status === 'AWAITING_QR' ? 'warning' : 'danger'}`;
-
-            const qrValue = String(data.qrCode || data.qrCodeBase64 || '').trim();
-            if (status === 'AWAITING_QR' && qrValue) {
-                qrImage.src = qrValue;
-                qrImage.style.display = 'inline-block';
-                qrHint.textContent = 'Escaneie o QR Code com o WhatsApp do aparelho.';
-                return;
-            }
-
-            qrImage.removeAttribute('src');
-            qrImage.style.display = 'none';
-            qrHint.textContent = status === 'LOGGED_IN' ? 'WhatsApp conectado. QR não é necessário.' : 'Aguardando QR Code...';
-        }
-
         async function fetchBotStatus() {
             try {
                 const response = await fetch('/api/bot/status');
                 const data = await response.json();
-                applyBotStatus(data || {});
+                const statusText = document.getElementById('bot-status-text');
+                statusText.textContent = data.status || 'Desconectado';
+                statusText.className = `stat-value ${data.status === 'CONNECTED' ? 'success' : data.status === 'SCANNING' ? 'warning' : 'danger'}`;
             } catch (e) {
                 document.getElementById('bot-status-text').textContent = 'Erro';
-                const qrImage = document.getElementById('bot-qr-image');
-                const qrHint = document.getElementById('bot-qr-hint');
-                qrImage.removeAttribute('src');
-                qrImage.style.display = 'none';
-                qrHint.textContent = 'Falha ao carregar status do bot.';
             }
         }
 
