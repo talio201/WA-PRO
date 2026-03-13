@@ -66,4 +66,17 @@ O backend precisa estar rodando para a extensão funcionar.
 *   React & Vite
 *   Tailwind CSS & Recharts
 *   Chrome Extension Manifest V3
+
+## 🚚 Deploy via Terminal (Manual)
+Deploy inicial é feito via terminal (não por push no GitHub).
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\deploy_terminal.ps1 \
+  -Host "SEU_HOST" \
+  -User "SEU_USUARIO" \
+  -KeyPath "C:\\caminho\\sua-chave.pem" \
+  -RemotePath "/opt/EmidiaWhats" \
+  -Branch "main"
+```
+
 # WA-Manager-PRO
