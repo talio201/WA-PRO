@@ -81,11 +81,14 @@ async function ensureInstallationIdentity() {
   if (!cachedConfig.installationSecret) patch.installationSecret = randomHex(24);
   if (!cachedConfig.activationCode) patch.activationCode = generateActivationCode();
   if (!cachedConfig.agentId) patch.agentId = patch.installationId || cachedConfig.installationId || `agent_${randomHex(8)}`;
-  if (cachedConfig.backendApiKey) patch.backendApiKey = '';
   if (Object.keys(patch).length > 0) {
     await saveToStorage(patch);
   }
   return { ...cachedConfig };
+}
+
+function getLegacyApiKey(config = cachedConfig) {
+  return String(config?.backendApiKey || '').trim();
 }
 
 async function requestPublicJson(pathname, options = {}) {
@@ -169,6 +172,10 @@ export async function ensureSessionToken() {
     const status = await syncActivationStatus();
     const normalizedStatus = String(status?.status || 'pending').toLowerCase();
     if (normalizedStatus !== 'active') {
+      const legacyApiKey = getLegacyApiKey(cachedConfig);
+      if (legacyApiKey) {
+        return { token: legacyApiKey, legacy: true };
+      }
       await saveToStorage({ accessToken: '', accessTokenExpiresAt: '' });
       throw new Error('Licença pendente de ativação no painel admin.');
     }
@@ -251,8 +258,15 @@ export async function getAuthorizedHeaders(extraHeaders = {}, agentIdOverride = 
   };
 
   let token = '';
-  const session = await ensureSessionToken();
-  token = session?.token || '';
+  try {
+    const session = await ensureSessionToken();
+    token = session?.token || '';
+  } catch (error) {
+    token = getLegacyApiKey(config);
+    if (!token) {
+      throw error;
+    }
+  }
 
   if (token) {
     headers.Authorization = `Bearer ${token}`;

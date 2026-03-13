@@ -48,7 +48,7 @@ async function buildApiUrl(pathname = "") {
   return `${backendApiUrl}${pathname}`;
 }
 async function buildRealtimeUrl() {
-  const { backendWsUrl, accessToken, agentId } = await getRuntimeConfig();
+  const { backendWsUrl, accessToken, agentId, backendApiKey } = await getRuntimeConfig();
   const url = new URL(backendWsUrl);
   let token = accessToken || '';
   if (!token) {
@@ -56,9 +56,12 @@ async function buildRealtimeUrl() {
       const session = await ensureSessionToken();
       token = session?.token || '';
     } catch (error) {
-      throw new Error(
-        error?.message || 'Unable to obtain session token for realtime connection.',
-      );
+      token = String(backendApiKey || '').trim();
+      if (!token) {
+        throw new Error(
+          error?.message || 'Unable to obtain session token for realtime connection.',
+        );
+      }
     }
   }
   if (!token) {

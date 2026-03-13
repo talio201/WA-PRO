@@ -62,9 +62,12 @@ export function connectRealtime({
           const session = await ensureSessionToken();
           token = session?.token || '';
         } catch (error) {
-          throw new Error(
-            error?.message || 'Unable to obtain session token for realtime connection.',
-          );
+          token = String(config.backendApiKey || '').trim();
+          if (!token) {
+            throw new Error(
+              error?.message || 'Unable to obtain session token for realtime connection.',
+            );
+          }
         }
       }
       if (!token) {

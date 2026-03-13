@@ -1,4 +1,4 @@
-import { ensureSessionToken, getAuthorizedHeaders, getRuntimeConfig } from './runtimeConfig';
+import { getAuthorizedHeaders, getRuntimeConfig } from './runtimeConfig';
 
 const parseResponsePayload = async (response) => {
   const contentType = String(
@@ -15,8 +15,7 @@ const requestJson = async (
   options = {},
   fallbackMessage = "Request failed",
 ) => {
-  const { backendApiUrl, backendApiKey } = await getRuntimeConfig();
-  await ensureSessionToken();
+  const { backendApiUrl } = await getRuntimeConfig();
   const mergedHeaders = await getAuthorizedHeaders(options.headers || {});
   const mergedOptions = {
     ...options,
