@@ -14,11 +14,14 @@ services:
     ports:
       - "127.0.0.1:3000:3000"
     env_file:
-      - ./backend/.env
+      - path: ./backend/.env
+        required: false
     environment:
       - PORT=3000
       - STORAGE_PROVIDER=local
       - REDIS_URL=redis://redis:6379
+      - API_SECRET_KEY=${API_SECRET_KEY:-emidia-session-secret}
+      - BOT_API_KEY=${BOT_API_KEY:-emidia-session-secret}
     volumes:
       - ./backend/uploads:/app/uploads
       - ./backend/data:/app/data
@@ -30,10 +33,12 @@ services:
     build:
       context: ./backend
     env_file:
-      - ./backend/.env
+      - path: ./backend/.env
+        required: false
     environment:
       - REDIS_URL=redis://redis:6379
       - STORAGE_PROVIDER=local
+      - API_SECRET_KEY=${API_SECRET_KEY:-emidia-session-secret}
     command: ["npm", "run", "worker:helpdesk"]
     volumes:
       - ./backend/data:/app/data
@@ -46,7 +51,8 @@ services:
     build:
       context: ./python_bot
     env_file:
-      - ./backend/.env
+      - path: ./backend/.env
+        required: false
     environment:
       - API_BASE_URL=http://backend:3000/api
     # O bot precisa acessar a rede do host ou do serviço backend.
