@@ -87,6 +87,9 @@ app.use("/usuarios", express.static(path.join(__dirname, "../public/app"), {
   maxAge: "1d",
   etag: false
 }));
+app.get("/usuarios.html", (req, res) => {
+  res.redirect(302, "/usuarios");
+});
 app.get("/usuarios/*", (req, res) => {
   res.sendFile(path.join(__dirname, "../public/app/index.html"));
 });
