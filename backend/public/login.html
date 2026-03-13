@@ -202,46 +202,57 @@
     </div>
 
     <script>
-        // Configuração injetada ou vinda do backend
-        const SUPABASE_URL = "https://izmellnvkwbapcrfuqgp.supabase.co";
-        const SUPABASE_ANON_KEY = "[REDACTED_JWT]";
-        
-        const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        (async function initLogin() {
+            const form = document.getElementById('login-form');
+            const btn = document.getElementById('login-btn');
+            const btnText = document.getElementById('btn-text');
+            const loader = document.getElementById('loader');
+            const errorMsg = document.getElementById('error-msg');
 
-        const form = document.getElementById('login-form');
-        const btn = document.getElementById('login-btn');
-        const btnText = document.getElementById('btn-text');
-        const loader = document.getElementById('loader');
-        const errorMsg = document.getElementById('error-msg');
-
-        form.addEventListener('submit', async (e) => {
-            e.preventDefault();
-            
-            const email = document.getElementById('email').value;
-            const password = document.getElementById('password').value;
-
-            // Reset UI
-            errorMsg.style.display = 'none';
-            btnText.style.display = 'none';
-            loader.style.display = 'block';
-            btn.disabled = true;
-
-            const { data, error } = await supabaseClient.auth.signInWithPassword({
-                email,
-                password,
-            });
-
-            if (error) {
-                errorMsg.innerText = error.message;
+            let supabaseClient = null;
+            try {
+                const response = await fetch('/api/public/runtime-config');
+                const payload = await response.json();
+                const supabaseUrl = String(payload?.config?.supabase?.url || '').trim();
+                const supabaseAnonKey = String(payload?.config?.supabase?.anonKey || '').trim();
+                if (!supabaseUrl || !supabaseAnonKey) {
+                    throw new Error('Supabase não configurado no servidor.');
+                }
+                supabaseClient = supabase.createClient(supabaseUrl, supabaseAnonKey);
+            } catch (error) {
+                errorMsg.innerText = 'Configuração de autenticação indisponível. Contate o administrador.';
                 errorMsg.style.display = 'block';
-                btnText.style.display = 'block';
-                loader.style.display = 'none';
-                btn.disabled = false;
-            } else {
-                // Sucesso! Aqui redirecionamos para o Dashboard
-                window.location.href = '/dashboard.html';
+                btn.disabled = true;
+                return;
             }
-        });
+
+            form.addEventListener('submit', async (e) => {
+                e.preventDefault();
+
+                const email = document.getElementById('email').value;
+                const password = document.getElementById('password').value;
+
+                errorMsg.style.display = 'none';
+                btnText.style.display = 'none';
+                loader.style.display = 'block';
+                btn.disabled = true;
+
+                const { error } = await supabaseClient.auth.signInWithPassword({
+                    email,
+                    password,
+                });
+
+                if (error) {
+                    errorMsg.innerText = error.message;
+                    errorMsg.style.display = 'block';
+                    btnText.style.display = 'block';
+                    loader.style.display = 'none';
+                    btn.disabled = false;
+                } else {
+                    window.location.href = '/dashboard.html';
+                }
+            });
+        })();
     </script>
 </body>
 </html>

@@ -49,9 +49,14 @@ function verifyPayload(token) {
 }
 
 function getSupabaseClient() {
+  const supabaseUrl = String(process.env.SUPABASE_URL || '').trim();
+  const supabaseAnonKey = String(process.env.SUPABASE_ANON_KEY || '').trim();
+  if (!supabaseUrl || !supabaseAnonKey) {
+    return null;
+  }
   return createClient(
-    String(process.env.SUPABASE_URL || '').trim(),
-    String(process.env.SUPABASE_ANON_KEY || '').trim(),
+    supabaseUrl,
+    supabaseAnonKey,
   );
 }
 
@@ -133,20 +138,26 @@ async function authenticateBearerToken(token, agentId = '') {
   }
 
   const supabase = getSupabaseClient();
-  const { data: { user } = {}, error } = await supabase.auth.getUser(safeToken);
-  if (!error && user) {
-    return {
-      kind: 'supabase-user',
-      user,
-      agentId: 'admin',
-      permissions: {
-        allowGemini: true,
-        allowRealtime: true,
-        allowCampaigns: true,
-        allowContacts: true,
-        allowInbox: true,
-      },
-    };
+  if (supabase) {
+    try {
+      const { data: { user } = {}, error } = await supabase.auth.getUser(safeToken);
+      if (!error && user) {
+        return {
+          kind: 'supabase-user',
+          user,
+          agentId: 'admin',
+          permissions: {
+            allowGemini: true,
+            allowRealtime: true,
+            allowCampaigns: true,
+            allowContacts: true,
+            allowInbox: true,
+          },
+        };
+      }
+    } catch (error) {
+      return null;
+    }
   }
 
   return null;
