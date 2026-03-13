@@ -1,66 +1,119 @@
-/**
- * Webapp realtime.js — WebSocket authenticated via Supabase session.
- */
-import { ensureSupabase } from '../auth/AuthContext.jsx';
+import { ensureSessionToken, getRuntimeConfig, getRuntimeConfigSync, runtimeConfigReady } from './runtimeConfig.js';
 
-export function connectRealtime(wsUrl, { onMessage, onStatus } = {}) {
+const DEFAULT_WS_URL = getRuntimeConfigSync().backendWsUrl;
+
+function safeParseMessage(raw) {
+  try {
+    return JSON.parse(String(raw || '{}'));
+  } catch (_error) {
+    return null;
+  }
+}
+
+export function connectRealtime({
+  onEvent = () => {},
+  onStatus = () => {},
+  wsUrl = DEFAULT_WS_URL,
+} = {}) {
   let socket = null;
-  let destroyed = false;
+  let isDisposed = false;
   let reconnectTimer = null;
+  let heartbeatTimer = null;
   let attempt = 0;
 
-  async function connect() {
-    if (destroyed) return;
-    onStatus?.('connecting');
-    try {
-      const sb = await ensureSupabase();
-      const { data } = await sb.auth.getSession();
-      const token = data?.session?.access_token || '';
-      if (!token) { onStatus?.('disconnected'); return; }
-
-      const base = wsUrl || (location.protocol === 'https:' ? `wss://${location.host}/ws` : `ws://${location.host}/ws`);
-      const url = new URL(base);
-      url.searchParams.set('access_token', token);
-      const agentId = localStorage.getItem('emidia_agent_id') || '';
-      if (agentId) url.searchParams.set('agentId', agentId);
-
-      socket = new WebSocket(url.toString());
-
-      socket.onopen = () => {
-        attempt = 0;
-        onStatus?.('connected');
-      };
-      socket.onmessage = (ev) => {
-        try { onMessage?.(JSON.parse(ev.data)); } catch (_) {}
-      };
-      socket.onclose = () => {
-        if (destroyed) return;
-        onStatus?.('disconnected');
-        const delay = Math.min(30000, 1200 * Math.pow(1.5, attempt++));
-        reconnectTimer = setTimeout(connect, delay);
-      };
-      socket.onerror = () => {
-        socket?.close();
-      };
-    } catch (err) {
-      onStatus?.('disconnected');
-      const delay = Math.min(30000, 1200 * Math.pow(1.5, attempt++));
-      reconnectTimer = setTimeout(connect, delay);
+  const clearTimers = () => {
+    if (reconnectTimer) {
+      clearTimeout(reconnectTimer);
+      reconnectTimer = null;
     }
-  }
+    if (heartbeatTimer) {
+      clearInterval(heartbeatTimer);
+      heartbeatTimer = null;
+    }
+  };
+
+  const scheduleReconnect = () => {
+    if (isDisposed) return;
+    const backoff = Math.min(15000, 1000 * 2 ** attempt + Math.floor(Math.random() * 400));
+    attempt += 1;
+    reconnectTimer = setTimeout(() => {
+      connect();
+    }, backoff);
+  };
+
+  const startHeartbeat = () => {
+    heartbeatTimer = setInterval(() => {
+      try {
+        if (socket && socket.readyState === WebSocket.OPEN) {
+          socket.send(JSON.stringify({ type: 'ping', at: Date.now() }));
+        }
+      } catch (_error) {}
+    }, 25000);
+  };
+
+  const connect = async () => {
+    if (isDisposed) return;
+    clearTimers();
+    onStatus('connecting');
+    try {
+      await runtimeConfigReady;
+      const config = await getRuntimeConfig();
+      const resolvedUrl = new URL(wsUrl || config.backendWsUrl);
+
+      let token = config.accessToken || '';
+      if (!token) {
+        const session = await ensureSessionToken();
+        token = session?.token || '';
+      }
+      if (!token) {
+        throw new Error('Realtime connection blocked: missing access token.');
+      }
+
+      resolvedUrl.searchParams.set('access_token', token);
+      if (config.agentId) {
+        resolvedUrl.searchParams.set('agentId', config.agentId);
+      }
+
+      socket = new WebSocket(resolvedUrl.toString());
+    } catch (error) {
+      onStatus('error');
+      scheduleReconnect();
+      return;
+    }
+
+    socket.onopen = () => {
+      attempt = 0;
+      onStatus('connected');
+      startHeartbeat();
+    };
+
+    socket.onmessage = (event) => {
+      const message = safeParseMessage(event.data);
+      if (!message || message.type !== 'event') return;
+      onEvent(message);
+    };
+
+    socket.onerror = () => {
+      onStatus('error');
+    };
+
+    socket.onclose = () => {
+      onStatus('disconnected');
+      clearTimers();
+      scheduleReconnect();
+    };
+  };
 
   connect();
 
-  return {
-    disconnect() {
-      destroyed = true;
-      clearTimeout(reconnectTimer);
-      socket?.close();
-    },
-    send(data) {
-      if (socket?.readyState === WebSocket.OPEN) {
-        socket.send(JSON.stringify(data));
-      }
-    },
+  return () => {
+    isDisposed = true;
+    clearTimers();
+    onStatus('disconnected');
+    if (socket) {
+      try {
+        socket.close();
+      } catch (_error) {}
+    }
   };
 }
