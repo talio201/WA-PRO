@@ -71,6 +71,20 @@ export const getConversations = async (params = {}) => {
     "Failed to fetch conversations",
   );
 };
+export const getHelpdeskQueues = async (params = {}) => {
+  const query = new URLSearchParams();
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && value !== "") {
+      query.set(key, String(value));
+    }
+  });
+  const suffix = query.toString() ? `?${query.toString()}` : "";
+  return requestJson(
+    `/messages/helpdesk/queues${suffix}`,
+    {},
+    "Failed to fetch helpdesk queues",
+  );
+};
 export const getConversationHistory = async (phone, params = {}) => {
   const safePhone = String(phone || "").trim();
   if (!safePhone) {
@@ -185,6 +199,42 @@ export const releaseConversation = async (phone, payload = {}) =>
       body: JSON.stringify(payload || {}),
     },
     "Failed to release conversation",
+  );
+export const transferConversation = async (phone, payload = {}) =>
+  requestJson(
+    `/messages/conversations/${encodeURIComponent(phone)}/transfer`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload || {}),
+    },
+    "Failed to transfer conversation",
+  );
+export const getConversationProtocols = async (phone) =>
+  requestJson(
+    `/messages/conversations/${encodeURIComponent(phone)}/protocols`,
+    {},
+    "Failed to fetch conversation protocols",
+  );
+export const openConversationProtocol = async (phone, payload = {}) =>
+  requestJson(
+    `/messages/conversations/${encodeURIComponent(phone)}/protocols`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload || {}),
+    },
+    "Failed to open support protocol",
+  );
+export const updateConversationProtocolStatus = async (protocolId, payload = {}) =>
+  requestJson(
+    `/messages/protocols/${encodeURIComponent(protocolId)}/status`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload || {}),
+    },
+    "Failed to update support protocol",
   );
 export const registerInboundMessage = async (payload = {}) =>
   requestJson(

@@ -1,9 +1,14 @@
 const Message = require("../models/Message");
 const Campaign = require("../models/Campaign");
 const ConversationAssignment = require("../models/ConversationAssignment");
+const SupportProtocol = require("../models/SupportProtocol");
 const { normalizePhone } = require("../utils/phone");
 const { buildServerErrorResponse } = require("../utils/httpError");
 const { emitRealtimeEvent } = require("../realtime/realtime");
+const {
+  enqueue,
+  getHelpdeskQueueOverview,
+} = require("../queues/helpdeskQueue");
 const { logSendResult } = require("../monitorSendFlow");
 function appendAudit(message, action, details, meta = {}) {
   if (!Array.isArray(message.audit)) {
@@ -125,6 +130,39 @@ function normalizeHistoryTimestamp(value) {
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) return null;
   return parsed;
+}
+function normalizeProtocolPriority(value) {
+  const normalized = String(value || "normal")
+    .trim()
+    .toLowerCase();
+  if (["low", "normal", "high", "urgent"].includes(normalized)) {
+    return normalized;
+  }
+  return "normal";
+}
+function normalizeProtocolStatus(value) {
+  const normalized = String(value || "open")
+    .trim()
+    .toLowerCase();
+  if (["open", "in_progress", "resolved", "closed"].includes(normalized)) {
+    return normalized;
+  }
+  return "open";
+}
+function buildProtocolNumber(phone) {
+  const timestamp = Date.now().toString().slice(-8);
+  const tail = String(phone || "").slice(-4) || "0000";
+  const nonce = Math.random().toString(36).slice(2, 5).toUpperCase();
+  return `PR-${timestamp}-${tail}-${nonce}`;
+}
+function resolveConversationQueueType(conversation = {}, assignment = null) {
+  if (assignment?.status === "active" && assignment?.assignedTo) {
+    return "in_attendance";
+  }
+  if (Number(conversation.inboundCount || 0) > 0) {
+    return "waiting";
+  }
+  return "monitoring";
 }
 function extractMessageFingerprint(message) {
   const auditList = Array.isArray(message?.audit) ? message.audit : [];
@@ -453,6 +491,204 @@ exports.getConversations = async (req, res) => {
     console.error(err.message);
     const errorResponse = buildServerErrorResponse(err);
     res.status(errorResponse.statusCode).json(errorResponse.body);
+  }
+};
+exports.getHelpdeskQueues = async (req, res) => {
+  try {
+    const { search = "", queue = "all", limit } = req.query;
+    const normalizedQueue = String(queue || "all")
+      .trim()
+      .toLowerCase();
+
+    const agentCampaigns = await Campaign.find({ agentId: req.agentId });
+    const agentCampaignIds = agentCampaigns.map((campaign) => campaign._id);
+
+    let allMessages = await Message.find({});
+    if (req.agentId && req.agentId !== "bot") {
+      allMessages = allMessages.filter((item) =>
+        agentCampaignIds.includes(item.campaign),
+      );
+    }
+
+    let activeAssignments = [];
+    try {
+      activeAssignments = await ConversationAssignment.find({
+        status: "active",
+      });
+    } catch (assignmentError) {
+      if (!isConversationAssignmentsTableMissing(assignmentError)) {
+        throw assignmentError;
+      }
+      activeAssignments = [];
+    }
+
+    const assignmentByPhone = new Map();
+    (Array.isArray(activeAssignments) ? activeAssignments : []).forEach(
+      (assignment) => {
+        const phone = toSafePhone(assignment.phone);
+        if (!phone) return;
+        const existing = assignmentByPhone.get(phone);
+        const nextDate = new Date(
+          assignment.updatedAt || assignment.assignedAt || 0,
+        ).getTime();
+        const currentDate = existing
+          ? new Date(existing.updatedAt || existing.assignedAt || 0).getTime()
+          : 0;
+        if (!existing || nextDate >= currentDate) {
+          assignmentByPhone.set(phone, assignment);
+        }
+      },
+    );
+
+    const openProtocols = (await SupportProtocol.find({})).filter((protocol) =>
+      ["open", "in_progress"].includes(
+        normalizeProtocolStatus(protocol?.status),
+      ),
+    );
+    const protocolCountByPhone = new Map();
+    (Array.isArray(openProtocols) ? openProtocols : []).forEach((protocol) => {
+      const phone = toSafePhone(protocol?.phone);
+      if (!phone) return;
+      protocolCountByPhone.set(phone, (protocolCountByPhone.get(phone) || 0) + 1);
+    });
+
+    const conversationMap = new Map();
+    (Array.isArray(allMessages) ? allMessages : []).forEach((message) => {
+      const phone = toSafePhone(message.phone || message.phoneOriginal);
+      if (!phone) return;
+      const messageDate = getMessageDateMs(message);
+      const direction = String(message.direction || "outbound");
+      const item = conversationMap.get(phone) || {
+        phone,
+        name: message.name || message.phoneOriginal || phone,
+        campaignId: message.campaign || null,
+        outboundCount: 0,
+        inboundCount: 0,
+        failedCount: 0,
+        lastAt:
+          message.updatedAt || message.sentAt || message.createdAt || null,
+        lastMessage: message.processedMessage || "",
+        lastDirection: direction,
+        lastStatus: message.status || "pending",
+      };
+      if (direction === "inbound") {
+        item.inboundCount += 1;
+      } else {
+        item.outboundCount += 1;
+      }
+      if (message.status === "failed") {
+        item.failedCount += 1;
+      }
+      if (!item.campaignId && message.campaign) {
+        item.campaignId = message.campaign;
+      }
+      const currentLastDate = new Date(item.lastAt || 0).getTime();
+      if (messageDate >= currentLastDate) {
+        item.lastAt =
+          message.updatedAt ||
+          message.sentAt ||
+          message.createdAt ||
+          item.lastAt;
+        item.lastMessage = message.processedMessage || item.lastMessage;
+        item.lastDirection = direction;
+        item.lastStatus = message.status || item.lastStatus;
+        if (message.name) item.name = message.name;
+        if (message.campaign) item.campaignId = message.campaign;
+      }
+      conversationMap.set(phone, item);
+    });
+
+    const parsedLimit = Number(limit);
+    const safeLimit = Number.isFinite(parsedLimit)
+      ? Math.max(1, Math.min(parsedLimit, 1000))
+      : 400;
+    const query = String(search || "")
+      .trim()
+      .toLowerCase();
+    const trimmedAgent = String(req.query?.agentId || "").trim();
+
+    const items = Array.from(conversationMap.values())
+      .map((conversation) => {
+        const assignment = assignmentByPhone.get(conversation.phone) || null;
+        const protocolOpenCount = protocolCountByPhone.get(conversation.phone) || 0;
+        const queueType = resolveConversationQueueType(conversation, assignment);
+        const assignedToMe = Boolean(
+          trimmedAgent &&
+            assignment?.assignedTo &&
+            String(assignment.assignedTo).trim() === trimmedAgent,
+        );
+        return {
+          ...conversation,
+          queueType,
+          protocolOpenCount,
+          assignedToMe,
+          assignment: assignment
+            ? {
+                _id: assignment._id,
+                assignedTo: assignment.assignedTo,
+                assignedBy: assignment.assignedBy,
+                assignedAt: assignment.assignedAt,
+                status: assignment.status,
+                campaignId:
+                  assignment.campaignId || conversation.campaignId || null,
+                updatedAt: assignment.updatedAt,
+              }
+            : null,
+        };
+      })
+      .filter((conversation) => {
+        if (normalizedQueue !== "all") {
+          if (normalizedQueue === "in_attendance" && conversation.queueType !== "in_attendance") {
+            return false;
+          }
+          if (normalizedQueue === "waiting" && conversation.queueType !== "waiting") {
+            return false;
+          }
+          if (normalizedQueue === "monitoring" && conversation.queueType !== "monitoring") {
+            return false;
+          }
+        }
+        if (!query) return true;
+        return (
+          String(conversation.phone || "")
+            .toLowerCase()
+            .includes(query) ||
+          String(conversation.name || "")
+            .toLowerCase()
+            .includes(query) ||
+          String(conversation.assignment?.assignedTo || "")
+            .toLowerCase()
+            .includes(query)
+        );
+      })
+      .sort(
+        (a, b) =>
+          new Date(b.lastAt || 0).getTime() - new Date(a.lastAt || 0).getTime(),
+      )
+      .slice(0, safeLimit);
+
+    const summary = {
+      total: items.length,
+      waiting: items.filter((item) => item.queueType === "waiting").length,
+      inAttendance: items.filter((item) => item.queueType === "in_attendance").length,
+      monitoring: items.filter((item) => item.queueType === "monitoring").length,
+      protocolsOpen: items.reduce(
+        (acc, item) => acc + Number(item.protocolOpenCount || 0),
+        0,
+      ),
+    };
+
+    const queueOverview = await getHelpdeskQueueOverview();
+
+    return res.json({
+      summary,
+      queueOverview,
+      items,
+    });
+  } catch (err) {
+    console.error(err.message);
+    const errorResponse = buildServerErrorResponse(err);
+    return res.status(errorResponse.statusCode).json(errorResponse.body);
   }
 };
 exports.getConversationHistory = async (req, res) => {
@@ -796,6 +1032,206 @@ exports.releaseConversation = async (req, res) => {
     res.status(errorResponse.statusCode).json(errorResponse.body);
   }
 };
+exports.transferConversation = async (req, res) => {
+  try {
+    const normalizedPhone = toSafePhone(req.params.phone);
+    const fromAgent = String(req.body?.fromAgent || req.body?.agentName || "").trim();
+    const toAgent = String(req.body?.toAgent || "").trim();
+    const reason = String(req.body?.reason || "").trim();
+    const force = parseBooleanFlag(req.body?.force);
+
+    if (!normalizedPhone) {
+      return res.status(400).json({ msg: "Phone is required." });
+    }
+    if (!toAgent) {
+      return res.status(400).json({ msg: "toAgent is required." });
+    }
+
+    const existingList = await ConversationAssignment.find({
+      phone: normalizedPhone,
+      status: "active",
+    });
+    const existing = pickLatestAssignment(existingList);
+    if (!existing) {
+      return res.status(404).json({ msg: "No active assignment found for this phone." });
+    }
+
+    const currentOwner = String(existing.assignedTo || "").trim();
+    if (fromAgent && currentOwner && fromAgent !== currentOwner && !force) {
+      return res.status(409).json({
+        msg: `Atendimento pertence a ${currentOwner}.`,
+        code: "CONVERSATION_ASSIGNED_TO_OTHER_AGENT",
+        assignment: existing,
+      });
+    }
+
+    const updatedAssignment = new ConversationAssignment({
+      ...existing,
+      assignedTo: toAgent,
+      assignedBy: fromAgent || currentOwner || toAgent,
+      status: "active",
+      assignedAt: new Date(),
+      updatedAt: new Date(),
+      notes: reason || existing.notes || "",
+    });
+    await updatedAssignment.save();
+
+    emitRealtimeEvent("conversation.assignment.transferred", {
+      phone: normalizedPhone,
+      fromAgent: currentOwner || null,
+      toAgent,
+      reason,
+      assignment: updatedAssignment,
+    });
+
+    await enqueue("helpdesk-events", "conversation.transfer", {
+      phone: normalizedPhone,
+      fromAgent: currentOwner || null,
+      toAgent,
+      reason,
+      transferredAt: new Date().toISOString(),
+      assignmentId: updatedAssignment._id || null,
+    });
+
+    return res.json({ assignment: updatedAssignment });
+  } catch (err) {
+    console.error(err.message);
+    const errorResponse = buildServerErrorResponse(err);
+    return res.status(errorResponse.statusCode).json(errorResponse.body);
+  }
+};
+exports.getConversationProtocols = async (req, res) => {
+  try {
+    const normalizedPhone = toSafePhone(req.params.phone);
+    if (!normalizedPhone) {
+      return res.status(400).json({ msg: "Phone is required." });
+    }
+    const rows = await SupportProtocol.find({ phone: normalizedPhone });
+    const list = (Array.isArray(rows) ? rows : [])
+      .sort((a, b) => {
+        const aTime = new Date(a.updatedAt || a.openedAt || 0).getTime();
+        const bTime = new Date(b.updatedAt || b.openedAt || 0).getTime();
+        return bTime - aTime;
+      })
+      .map((item) => ({
+        ...item,
+        priority: normalizeProtocolPriority(item.priority),
+        status: normalizeProtocolStatus(item.status),
+      }));
+    return res.json(list);
+  } catch (err) {
+    console.error(err.message);
+    const errorResponse = buildServerErrorResponse(err);
+    return res.status(errorResponse.statusCode).json(errorResponse.body);
+  }
+};
+exports.openConversationProtocol = async (req, res) => {
+  try {
+    const normalizedPhone = toSafePhone(req.params.phone || req.body?.phone);
+    const openedBy = String(req.body?.openedBy || req.body?.agentName || "").trim();
+    const subject = String(req.body?.subject || "").trim();
+    const description = String(req.body?.description || "").trim();
+    const customerName = String(req.body?.customerName || req.body?.name || "").trim();
+    const priority = normalizeProtocolPriority(req.body?.priority);
+
+    if (!normalizedPhone) {
+      return res.status(400).json({ msg: "Phone is required." });
+    }
+    if (!subject) {
+      return res.status(400).json({ msg: "subject is required." });
+    }
+
+    const history = await Message.find({ phone: normalizedPhone });
+    const relatedMessages = Array.isArray(history) ? history : [];
+    const campaignId = await resolveRelatedCampaignId({
+      normalizedPhone,
+      preferredCampaignId: req.body?.campaignId || null,
+      relatedMessages,
+    });
+
+    const protocol = new SupportProtocol({
+      phone: normalizedPhone,
+      campaignId: campaignId || null,
+      protocolNumber: buildProtocolNumber(normalizedPhone),
+      customerName,
+      subject,
+      description,
+      priority,
+      status: "open",
+      assignedTo: String(req.body?.assignedTo || "").trim(),
+      openedBy,
+      openedAt: new Date(),
+      updatedAt: new Date(),
+      metadata: req.body?.metadata || {},
+    });
+    await protocol.save();
+
+    emitRealtimeEvent("conversation.protocol.created", {
+      phone: normalizedPhone,
+      protocol,
+    });
+
+    await enqueue("helpdesk-events", "protocol.created", {
+      phone: normalizedPhone,
+      protocolId: protocol._id || null,
+      protocolNumber: protocol.protocolNumber,
+      priority,
+      openedBy,
+      createdAt: new Date().toISOString(),
+    });
+
+    return res.status(201).json({ protocol });
+  } catch (err) {
+    console.error(err.message);
+    const errorResponse = buildServerErrorResponse(err);
+    return res.status(errorResponse.statusCode).json(errorResponse.body);
+  }
+};
+exports.updateProtocolStatus = async (req, res) => {
+  try {
+    const protocolId = String(req.params.id || "").trim();
+    const status = normalizeProtocolStatus(req.body?.status);
+    const updatedBy = String(req.body?.updatedBy || req.body?.agentName || "").trim();
+    if (!protocolId) {
+      return res.status(400).json({ msg: "Protocol id is required." });
+    }
+    const protocol = await SupportProtocol.findById(protocolId);
+    if (!protocol) {
+      return res.status(404).json({ msg: "Protocol not found." });
+    }
+    const previousStatus = normalizeProtocolStatus(protocol.status);
+    protocol.status = status;
+    protocol.updatedAt = new Date();
+    if (["resolved", "closed"].includes(status)) {
+      protocol.closedAt = new Date();
+    }
+    await protocol.save();
+
+    emitRealtimeEvent("conversation.protocol.updated", {
+      phone: protocol.phone,
+      protocol,
+      previousStatus,
+      status,
+      updatedBy,
+    });
+
+    await enqueue("helpdesk-events", "protocol.updated", {
+      phone: protocol.phone,
+      protocolId,
+      protocolNumber: protocol.protocolNumber,
+      previousStatus,
+      status,
+      updatedBy,
+      updatedAt: new Date().toISOString(),
+    });
+
+    return res.json({ protocol });
+  } catch (err) {
+    console.error(err.message);
+    const errorResponse = buildServerErrorResponse(err);
+    return res.status(errorResponse.statusCode).json(errorResponse.body);
+  }
+};
 exports.registerInboundMessage = async (req, res) => {
   try {
     const rawPhone = req.body?.phone || req.body?.phoneOriginal || "";
@@ -1009,6 +1445,13 @@ exports.registerManualOutbound = async (req, res) => {
       campaignId: relatedCampaignId,
       message: createdMessage,
     });
+    await enqueue("worker-outbound", "messages.outbound.manual_sent", {
+      messageId: createdMessage?._id || null,
+      phone: normalizedPhone,
+      campaignId: relatedCampaignId,
+      source,
+      queuedAt: new Date().toISOString(),
+    });
     res.status(201).json({
       duplicate: false,
       message: createdMessage,
@@ -1212,7 +1655,15 @@ exports.requestHistorySync = async (req, res) => {
       createdAt: new Date(),
       updatedAt: new Date(),
     };
-    await Message.insertMany([payload]);
+    const created = await Message.insertMany([payload]);
+    const createdMessage = Array.isArray(created) ? created[0] : null;
+    await enqueue("worker-history-sync", "messages.history.requested", {
+      messageId: createdMessage?._id || null,
+      phone: normalizedPhone,
+      campaignId: dummyCampaignId || null,
+      agentId,
+      queuedAt: new Date().toISOString(),
+    });
     res.json({ success: true, msg: "Sync request queued successfully." });
   } catch (err) {
     console.error(err.message);

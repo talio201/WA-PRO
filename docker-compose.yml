@@ -1,4 +1,13 @@
 services:
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - redis_data:/data
+    restart: always
+
   backend:
     build:
       context: ./backend
@@ -9,9 +18,28 @@ services:
     environment:
       - PORT=3000
       - STORAGE_PROVIDER=local
+      - REDIS_URL=redis://redis:6379
     volumes:
       - ./backend/uploads:/app/uploads
       - ./backend/data:/app/data
+    depends_on:
+      - redis
+    restart: always
+
+  backend_worker:
+    build:
+      context: ./backend
+    env_file:
+      - ./backend/.env
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - STORAGE_PROVIDER=local
+    command: ["npm", "run", "worker:helpdesk"]
+    volumes:
+      - ./backend/data:/app/data
+    depends_on:
+      - backend
+      - redis
     restart: always
 
   python_bot:
@@ -25,6 +53,11 @@ services:
     # Usaremos a rede interna do docker-compose onde o host 'backend' resolve para o contêiner Node.js.
     depends_on:
       - backend
+      - backend_worker
+      - redis
     volumes:
       - ./python_bot/whatsapp_session:/app/whatsapp_session
     restart: always
+
+volumes:
+  redis_data:

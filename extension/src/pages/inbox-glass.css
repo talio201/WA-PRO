@@ -587,6 +587,147 @@
   gap: 8px;
 }
 
+.helpdesk-panel {
+  padding: 10px 20px 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.32);
+  background: rgba(255, 255, 255, 0.2);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.helpdesk-summary-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.helpdesk-summary-pill {
+  border-radius: 999px;
+  padding: 3px 9px;
+  font-size: 10px;
+  font-weight: 700;
+  color: #4a5260;
+  background: rgba(255, 255, 255, 0.65);
+  border: 1px solid rgba(255, 255, 255, 0.74);
+}
+
+.helpdesk-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.helpdesk-card {
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.72);
+  background: rgba(255, 255, 255, 0.58);
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.helpdesk-card h4 {
+  margin: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #3d4658;
+}
+
+.helpdesk-card input,
+.helpdesk-card select,
+.helpdesk-card textarea {
+  border-radius: 9px;
+  border: 1px solid rgba(255, 255, 255, 0.78);
+  background: rgba(255, 255, 255, 0.82);
+  padding: 7px 8px;
+  font-size: 12px;
+  color: #283041;
+  outline: none;
+}
+
+.helpdesk-protocols {
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.72);
+  background: rgba(255, 255, 255, 0.58);
+  padding: 10px;
+}
+
+.helpdesk-protocols-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.helpdesk-protocols-head h4 {
+  margin: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #3d4658;
+}
+
+.helpdesk-protocols-head span {
+  font-size: 11px;
+  color: #5b6578;
+}
+
+.protocol-list {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  max-height: 170px;
+  overflow-y: auto;
+}
+
+.protocol-item {
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.78);
+  background: rgba(255, 255, 255, 0.72);
+  padding: 8px;
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.protocol-item strong {
+  font-size: 12px;
+  color: #2c3548;
+}
+
+.protocol-item p {
+  margin: 3px 0;
+  font-size: 12px;
+  color: #40495c;
+}
+
+.protocol-item small {
+  font-size: 10px;
+  color: #667086;
+}
+
+.protocol-actions {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.protocol-actions button {
+  border: 1px solid rgba(255, 255, 255, 0.7);
+  background: rgba(255, 255, 255, 0.84);
+  border-radius: 999px;
+  padding: 3px 8px;
+  font-size: 10px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
 .header-btn {
   border: 1px solid rgba(255, 255, 255, 0.72);
   background: rgba(255, 255, 255, 0.62);
@@ -873,6 +1014,10 @@
 
   .chat-header {
     flex-direction: column;
+  }
+
+  .helpdesk-grid {
+    grid-template-columns: 1fr;
   }
 
   .chat-actions {

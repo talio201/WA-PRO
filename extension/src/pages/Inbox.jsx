@@ -1,10 +1,13 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+    ArrowRightLeft,
     ClipboardPaste,
     Copy,
     CornerUpRight,
     ExternalLink,
+    FileText,
     Lock,
+    ListTodo,
     MessageCircle,
     Mic,
     MoreHorizontal,
@@ -18,11 +21,16 @@ import {
 } from 'lucide-react';
 import {
     assignConversation,
+    getConversationProtocols,
     getConversationHistory,
     getConversations,
+    getHelpdeskQueues,
+    openConversationProtocol,
     registerManualOutbound,
     releaseConversation,
+    transferConversation,
     syncConversationHistory,
+    updateConversationProtocolStatus,
     requestConversationHistorySync,
     uploadFile,
 } from '../utils/api';
@@ -195,6 +203,17 @@ const openChatToolViaExtension = (payload = {}) => new Promise((resolve, reject)
 });
 
 const QUICK_EMOJIS = ['😀', '😊', '😉', '👍', '🔥', '🚀', '🎯', '🙏', '🤝', '💬'];
+const PROTOCOL_STATUS_LABELS = {
+    open: 'Aberto',
+    in_progress: 'Em andamento',
+    resolved: 'Resolvido',
+    closed: 'Fechado',
+};
+const QUEUE_LABELS = {
+    waiting: 'Fila de atendimento',
+    in_attendance: 'Em atendimento',
+    monitoring: 'Monitoramento',
+};
 
 const Inbox = () => {
     const [conversations, setConversations] = useState([]);
@@ -221,6 +240,17 @@ const Inbox = () => {
     const [actionNotice, setActionNotice] = useState('');
     const [messageActionId, setMessageActionId] = useState('');
     const [clipboardLoading, setClipboardLoading] = useState(false);
+    const [helpdeskSummary, setHelpdeskSummary] = useState(null);
+    const [queueOverview, setQueueOverview] = useState(null);
+    const [protocols, setProtocols] = useState([]);
+    const [protocolsLoading, setProtocolsLoading] = useState(false);
+    const [protocolSubject, setProtocolSubject] = useState('');
+    const [protocolDescription, setProtocolDescription] = useState('');
+    const [protocolPriority, setProtocolPriority] = useState('normal');
+    const [creatingProtocol, setCreatingProtocol] = useState(false);
+    const [transferTargetAgent, setTransferTargetAgent] = useState('');
+    const [transferReason, setTransferReason] = useState('');
+    const [transferringConversation, setTransferringConversation] = useState(false);
 
     const fileInputRef = useRef(null);
     const selectedPhoneRef = useRef('');
@@ -257,13 +287,31 @@ const Inbox = () => {
     const loadConversations = useCallback(async () => {
         try {
             setConversationError('');
-            const data = await getConversations({
-                limit: 500,
-                search: search.trim(),
-                onlyWithReplies,
-                onlyAssigned,
-            });
-            const nextConversations = Array.isArray(data) ? data : [];
+            let nextConversations = [];
+            try {
+                const queuePayload = await getHelpdeskQueues({
+                    limit: 500,
+                    search: search.trim(),
+                    agentId: String(agentName || '').trim(),
+                });
+                nextConversations = Array.isArray(queuePayload?.items) ? queuePayload.items : [];
+                if (onlyWithReplies) {
+                    nextConversations = nextConversations.filter((item) => Number(item.inboundCount || 0) > 0);
+                }
+                if (onlyAssigned) {
+                    nextConversations = nextConversations.filter((item) => Boolean(item.assignment?.assignedTo));
+                }
+                setHelpdeskSummary(queuePayload?.summary || null);
+                setQueueOverview(queuePayload?.queueOverview || null);
+            } catch (queueError) {
+                const data = await getConversations({
+                    limit: 500,
+                    search: search.trim(),
+                    onlyWithReplies,
+                    onlyAssigned,
+                });
+                nextConversations = Array.isArray(data) ? data : [];
+            }
             setConversations(nextConversations);
             setSelectedPhone((current) => {
                 if (!current && nextConversations.length > 0) {
@@ -283,7 +331,7 @@ const Inbox = () => {
         } finally {
             setLoading(false);
         }
-    }, [onlyAssigned, onlyWithReplies, search]);
+    }, [agentName, onlyAssigned, onlyWithReplies, search]);
 
     const loadSelectedMessages = useCallback(async (targetPhone = '', options = {}) => {
         const phone = normalizePhoneDigits(targetPhone || selectedPhoneRef.current);
@@ -333,6 +381,24 @@ const Inbox = () => {
         }
     }, [agentName]);
 
+    const loadConversationProtocols = useCallback(async (targetPhone = '') => {
+        const phone = normalizePhoneDigits(targetPhone || selectedPhoneRef.current);
+        if (!phone) {
+            setProtocols([]);
+            return;
+        }
+        try {
+            setProtocolsLoading(true);
+            const list = await getConversationProtocols(phone);
+            setProtocols(Array.isArray(list) ? list : []);
+        } catch (error) {
+            console.warn('Failed to load support protocols:', error?.message || error);
+            setProtocols([]);
+        } finally {
+            setProtocolsLoading(false);
+        }
+    }, []);
+
     const scheduleRealtimeRefresh = useCallback((next = {}) => {
         const pending = realtimePendingRefreshRef.current;
         pending.conversations = pending.conversations || Boolean(next.conversations);
@@ -362,7 +428,8 @@ const Inbox = () => {
 
     useEffect(() => {
         loadSelectedMessages(selectedPhone, { sync: true });
-    }, [loadSelectedMessages, selectedPhone]);
+        loadConversationProtocols(selectedPhone);
+    }, [loadConversationProtocols, loadSelectedMessages, selectedPhone]);
 
     useEffect(() => {
         const disposeRealtime = connectRealtime({
@@ -392,6 +459,16 @@ const Inbox = () => {
                     });
                     return;
                 }
+                if (eventName.startsWith('conversation.protocol')) {
+                    scheduleRealtimeRefresh({
+                        conversations: true,
+                        messages: sameConversation,
+                    });
+                    if (sameConversation) {
+                        loadConversationProtocols(payloadPhone);
+                    }
+                    return;
+                }
                 if (eventName.startsWith('campaign.')) {
                     scheduleRealtimeRefresh({
                         conversations: true,
@@ -404,7 +481,7 @@ const Inbox = () => {
         return () => {
             disposeRealtime();
         };
-    }, [scheduleRealtimeRefresh]);
+    }, [loadConversationProtocols, scheduleRealtimeRefresh]);
 
     useEffect(() => {
         if (realtimeStatus === 'connected') return undefined;
@@ -607,6 +684,83 @@ const Inbox = () => {
             alert(message || 'Nao foi possivel liberar este atendimento.');
         } finally {
             setReleasing(false);
+        }
+    };
+
+    const handleTransferConversation = async () => {
+        if (!selectedConversation) return;
+        const safeFrom = String(agentName || '').trim();
+        const safeTo = String(transferTargetAgent || '').trim();
+        if (!safeFrom) {
+            alert('Informe seu nome para transferir atendimento.');
+            return;
+        }
+        if (!safeTo) {
+            alert('Informe o atendente de destino.');
+            return;
+        }
+        try {
+            setTransferringConversation(true);
+            await transferConversation(selectedConversation.phone, {
+                fromAgent: safeFrom,
+                toAgent: safeTo,
+                reason: String(transferReason || '').trim(),
+            });
+            setTransferReason('');
+            setTransferTargetAgent('');
+            showActionFeedback(`Atendimento transferido para ${safeTo}.`);
+            await loadConversations();
+            await loadConversationProtocols(selectedConversation.phone);
+        } catch (error) {
+            alert(error?.message || 'Nao foi possivel transferir o atendimento.');
+        } finally {
+            setTransferringConversation(false);
+        }
+    };
+
+    const handleOpenProtocol = async () => {
+        if (!selectedConversation) return;
+        const safeAgent = String(agentName || '').trim();
+        const safeSubject = String(protocolSubject || '').trim();
+        if (!safeSubject) {
+            alert('Informe o assunto do protocolo.');
+            return;
+        }
+        try {
+            setCreatingProtocol(true);
+            await openConversationProtocol(selectedConversation.phone, {
+                openedBy: safeAgent,
+                subject: safeSubject,
+                description: String(protocolDescription || '').trim(),
+                priority: protocolPriority,
+                customerName: selectedConversation.name || '',
+                campaignId: selectedConversation.campaignId || null,
+            });
+            setProtocolSubject('');
+            setProtocolDescription('');
+            setProtocolPriority('normal');
+            showActionFeedback('Protocolo aberto no atendimento.');
+            await loadConversations();
+            await loadConversationProtocols(selectedConversation.phone);
+        } catch (error) {
+            alert(error?.message || 'Nao foi possivel abrir protocolo.');
+        } finally {
+            setCreatingProtocol(false);
+        }
+    };
+
+    const handleProtocolStatusChange = async (protocol, nextStatus) => {
+        if (!protocol?._id) return;
+        try {
+            await updateConversationProtocolStatus(protocol._id, {
+                status: nextStatus,
+                updatedBy: String(agentName || '').trim(),
+            });
+            showActionFeedback(`Protocolo ${protocol.protocolNumber || ''} atualizado.`);
+            await loadConversations();
+            await loadConversationProtocols(selectedConversation?.phone || '');
+        } catch (error) {
+            alert(error?.message || 'Nao foi possivel atualizar protocolo.');
         }
     };
 
@@ -1057,6 +1211,18 @@ const Inbox = () => {
                                             )}
                                         </div>
                                         <div className="conversation-foot">
+                                            {conversation.queueType && (
+                                                <span className="owner-badge">
+                                                    <ListTodo size={11} />
+                                                    {QUEUE_LABELS[conversation.queueType] || conversation.queueType}
+                                                </span>
+                                            )}
+                                            {Number(conversation.protocolOpenCount || 0) > 0 && (
+                                                <span className="owner-badge is-other">
+                                                    <FileText size={11} />
+                                                    {conversation.protocolOpenCount} protocolos
+                                                </span>
+                                            )}
                                             {conversation.failedCount > 0 && <span className="badge badge-failed">{conversation.failedCount} falhas</span>}
                                             {assignment?.assignedTo && (
                                                 <span className={`owner-badge ${ownedByCurrentAgent ? 'is-self' : ownedByAnotherAgent ? 'is-other' : ''}`}>
@@ -1085,6 +1251,10 @@ const Inbox = () => {
                                         <div className="chat-chips">
                                             <span className="pill">Respostas: {selectedConversation.inboundCount || 0}</span>
                                             <span className="pill">Enviadas: {selectedConversation.outboundCount || 0}</span>
+                                            {selectedConversation.queueType && (
+                                                <span className="pill">Fila: {QUEUE_LABELS[selectedConversation.queueType] || selectedConversation.queueType}</span>
+                                            )}
+                                            <span className="pill">Protocolos abertos: {selectedConversation.protocolOpenCount || 0}</span>
                                             {selectedAssignment?.assignedTo && (
                                                 <span className={`pill ${isCurrentAgentOwner ? 'is-owner' : 'is-owner-other'}`}>
                                                     Atendendo: {selectedAssignment.assignedTo}
@@ -1115,6 +1285,109 @@ const Inbox = () => {
                                     <button type="button" className="icon-btn" onClick={openWhatsAppChat} aria-label="Abrir no WhatsApp"><ExternalLink size={16} /></button>
                                 </div>
                             </header>
+                            <section className="helpdesk-panel">
+                                <div className="helpdesk-summary-row">
+                                    <span className="helpdesk-summary-pill">Fila: {helpdeskSummary?.waiting || 0}</span>
+                                    <span className="helpdesk-summary-pill">Em atendimento: {helpdeskSummary?.inAttendance || 0}</span>
+                                    <span className="helpdesk-summary-pill">Monitoramento: {helpdeskSummary?.monitoring || 0}</span>
+                                    <span className="helpdesk-summary-pill">Protocolos: {helpdeskSummary?.protocolsOpen || 0}</span>
+                                </div>
+                                <div className="helpdesk-grid">
+                                    <div className="helpdesk-card">
+                                        <h4><ArrowRightLeft size={14} /> Transferir atendimento</h4>
+                                        <input
+                                            type="text"
+                                            placeholder="Atendente destino"
+                                            value={transferTargetAgent}
+                                            onChange={(event) => setTransferTargetAgent(event.target.value)}
+                                        />
+                                        <input
+                                            type="text"
+                                            placeholder="Motivo (opcional)"
+                                            value={transferReason}
+                                            onChange={(event) => setTransferReason(event.target.value)}
+                                        />
+                                        <button
+                                            type="button"
+                                            className="header-btn"
+                                            onClick={handleTransferConversation}
+                                            disabled={transferringConversation || !selectedConversation}
+                                        >
+                                            {transferringConversation ? 'Transferindo...' : 'Transferir'}
+                                        </button>
+                                    </div>
+                                    <div className="helpdesk-card">
+                                        <h4><FileText size={14} /> Abrir protocolo</h4>
+                                        <input
+                                            type="text"
+                                            placeholder="Assunto do protocolo"
+                                            value={protocolSubject}
+                                            onChange={(event) => setProtocolSubject(event.target.value)}
+                                        />
+                                        <select
+                                            value={protocolPriority}
+                                            onChange={(event) => setProtocolPriority(event.target.value)}
+                                        >
+                                            <option value="low">Prioridade baixa</option>
+                                            <option value="normal">Prioridade normal</option>
+                                            <option value="high">Prioridade alta</option>
+                                            <option value="urgent">Urgente</option>
+                                        </select>
+                                        <textarea
+                                            rows={2}
+                                            value={protocolDescription}
+                                            onChange={(event) => setProtocolDescription(event.target.value)}
+                                            placeholder="Descricao do atendimento/problema"
+                                        />
+                                        <button
+                                            type="button"
+                                            className="header-btn primary"
+                                            onClick={handleOpenProtocol}
+                                            disabled={creatingProtocol || !selectedConversation}
+                                        >
+                                            {creatingProtocol ? 'Abrindo...' : 'Abrir protocolo'}
+                                        </button>
+                                    </div>
+                                </div>
+                                <div className="helpdesk-protocols">
+                                    <div className="helpdesk-protocols-head">
+                                        <h4><ListTodo size={14} /> Protocolos da conversa</h4>
+                                        <span>
+                                            Worker queue: {queueOverview?.queues?.workerOutbound?.waiting ?? 0} pendentes
+                                        </span>
+                                    </div>
+                                    {protocolsLoading ? (
+                                        <div className="conversation-placeholder">Carregando protocolos...</div>
+                                    ) : protocols.length === 0 ? (
+                                        <div className="conversation-placeholder">Sem protocolos abertos/registrados.</div>
+                                    ) : (
+                                        <div className="protocol-list">
+                                            {protocols.slice(0, 8).map((protocol) => (
+                                                <div key={protocol._id} className="protocol-item">
+                                                    <div>
+                                                        <strong>{protocol.protocolNumber}</strong>
+                                                        <p>{protocol.subject || '-'}</p>
+                                                        <small>
+                                                            {PROTOCOL_STATUS_LABELS[protocol.status] || protocol.status} · {toDateTime(protocol.updatedAt || protocol.openedAt)}
+                                                        </small>
+                                                    </div>
+                                                    <div className="protocol-actions">
+                                                        {protocol.status !== 'in_progress' && (
+                                                            <button type="button" onClick={() => handleProtocolStatusChange(protocol, 'in_progress')}>Atender</button>
+                                                        )}
+                                                        {protocol.status !== 'resolved' && (
+                                                            <button type="button" onClick={() => handleProtocolStatusChange(protocol, 'resolved')}>Resolver</button>
+                                                        )}
+                                                        {protocol.status !== 'closed' && (
+                                                            <button type="button" onClick={() => handleProtocolStatusChange(protocol, 'closed')}>Fechar</button>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                            </section>
                             <section className="chat-messages" aria-live="polite">
                                 {loadingMessages ? (
                                     <div className="conversation-placeholder">

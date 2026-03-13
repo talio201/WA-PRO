@@ -12,6 +12,7 @@ const DEFAULT_LOCAL_DB = {
   messages: [],
   contacts: [],
   conversation_assignments: [],
+  support_protocols: [],
 };
 let sharedSupabaseClient = null;
 let hasWarnedSupabaseFallback = false;
