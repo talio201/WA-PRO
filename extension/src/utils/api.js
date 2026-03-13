@@ -1,4 +1,4 @@
-import { getAuthorizedHeaders, getRuntimeConfig } from './runtimeConfig';
+import { getAuthorizedHeaders, getRuntimeConfig, saveRuntimeConfig } from './runtimeConfig';
 
 const parseResponsePayload = async (response) => {
   const contentType = String(
@@ -16,14 +16,29 @@ const requestJson = async (
   fallbackMessage = "Request failed",
 ) => {
   const { backendApiUrl } = await getRuntimeConfig();
-  const mergedHeaders = await getAuthorizedHeaders(options.headers || {});
-  const mergedOptions = {
-    ...options,
-    headers: mergedHeaders,
-  };
   const url = `${backendApiUrl}${String(path || "")}`;
-  const response = await fetch(url, mergedOptions);
-  const payload = await parseResponsePayload(response);
+
+  const execute = async () => {
+    const mergedHeaders = await getAuthorizedHeaders(options.headers || {});
+    const mergedOptions = {
+      ...options,
+      headers: mergedHeaders,
+    };
+    const response = await fetch(url, mergedOptions);
+    const payload = await parseResponsePayload(response);
+    return { response, payload };
+  };
+
+  let { response, payload } = await execute();
+
+  if (response.status === 401) {
+    await saveRuntimeConfig({
+      accessToken: '',
+      accessTokenExpiresAt: '',
+    });
+    ({ response, payload } = await execute());
+  }
+
   if (!response.ok) {
     const message = payload?.msg || payload?.message || fallbackMessage;
     throw new Error(message);
