@@ -82,7 +82,16 @@ app.use("/api/contacts", require("./routes/contactRoutes"));
 app.use("/api/upload", require("./routes/uploadRoutes"));
 app.use("/api/ai", require("./routes/aiRoutes"));
 
-// 3. SPA Fallback - Redirect unmatched non-API routes to login.html
+// 3. Web app (SaaS) - serve Vite build under /usuarios
+app.use("/usuarios", express.static(path.join(__dirname, "../public/app"), {
+  maxAge: "1d",
+  etag: false
+}));
+app.get("/usuarios/*", (req, res) => {
+  res.sendFile(path.join(__dirname, "../public/app/index.html"));
+});
+
+// 4. SPA Fallback - Redirect unmatched non-API routes to login.html
 app.get("*", (req, res) => {
   if (req.path.startsWith("/api") || req.path.startsWith("/uploads")) {
     return res.status(404).json({ msg: "Not found" });
