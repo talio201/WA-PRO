@@ -67,16 +67,27 @@ O backend precisa estar rodando para a extensão funcionar.
 *   Tailwind CSS & Recharts
 *   Chrome Extension Manifest V3
 
-## 🚚 Deploy via Terminal (Manual)
-Deploy inicial é feito via terminal (não por push no GitHub).
+## 🚚 Deploy no Servidor Remoto
+Deploy é feito via terminal remoto (SSH). Conecte ao servidor e rode:
 
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\deploy_terminal.ps1 \
-  -Host "SEU_HOST" \
-  -User "SEU_USUARIO" \
-  -KeyPath "C:\\caminho\\sua-chave.pem" \
-  -RemotePath "/opt/EmidiaWhats" \
-  -Branch "main"
+```bash
+cd /opt/EmidiaWhats
+git pull origin main
+docker-compose down
+docker-compose up -d --build
+docker-compose ps
+```
+
+## 📋 Setup Inicial do Servidor (primeira vez)
+Se for um novo servidor, rode uma vez:
+
+```bash
+apt-get update && apt-get install -y git curl
+curl -fsSL https://get.docker.com -o get-docker.sh && sh get-docker.sh
+mkdir -p /opt/EmidiaWhats && cd /opt/EmidiaWhats
+git clone https://github.com/talio201/WA-PRO.git .
+git pull origin main
+docker-compose up -d --build
 ```
 
 # WA-Manager-PRO
