@@ -17,6 +17,7 @@ import {
     deleteCampaign,
     getCampaignFailures,
     getCampaigns,
+    getLeadAnalytics,
     getMessages,
     retryMessage,
     updateMessage,
@@ -94,6 +95,7 @@ const Campaigns = () => {
     const [savingMessageId, setSavingMessageId] = useState(null);
     const [retryingMessageId, setRetryingMessageId] = useState(null);
     const [messageEdits, setMessageEdits] = useState({});
+    const [leadAnalytics, setLeadAnalytics] = useState(null);
     const syncInFlightRef = useRef(false);
     const realtimeReloadTimerRef = useRef(null);
     const loadDashboardData = useCallback(async (options = {}) => {
@@ -110,6 +112,8 @@ const Campaigns = () => {
             ]);
             setCampaigns(campaignsData || []);
             setMessages(messagesData || []);
+            const leads = await getLeadAnalytics().catch(() => null);
+            setLeadAnalytics(leads || null);
             setLastSyncAt(new Date());
         } catch (err) {
             console.error('loadDashboardData error:', err);
@@ -466,7 +470,7 @@ const Campaigns = () => {
                             {realtimeLabel}
                         </span>
                     </div>
-                    <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-6">
+                    <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-8">
                         <div className={heroMetricClass}>
                             <div className="flex items-center justify-between text-xs font-bold uppercase tracking-wide text-slate-500">
                                 <span>Enviadas</span>
@@ -508,6 +512,20 @@ const Campaigns = () => {
                                 <Activity size={15} className="text-indigo-600" />
                             </div>
                             <div className="mt-2 text-2xl font-bold text-slate-900">{totals.contacts}</div>
+                        </div>
+                        <div className={heroMetricClass}>
+                            <div className="flex items-center justify-between text-xs font-bold uppercase tracking-wide text-slate-500">
+                                <span>Leads qualif.</span>
+                                <Activity size={15} className="text-cyan-600" />
+                            </div>
+                            <div className="mt-2 text-2xl font-bold text-slate-900">{leadAnalytics?.byStage?.qualified || 0}</div>
+                        </div>
+                        <div className={heroMetricClass}>
+                            <div className="flex items-center justify-between text-xs font-bold uppercase tracking-wide text-slate-500">
+                                <span>Conv. leads</span>
+                                <CheckCircle2 size={15} className="text-emerald-600" />
+                            </div>
+                            <div className="mt-2 text-2xl font-bold text-slate-900">{leadAnalytics?.conversion?.wonRate || 0}%</div>
                         </div>
                     </div>
                 </section>

@@ -19,6 +19,19 @@ const tabs = [
   { id: 'settings', label: 'Configurações', icon: '⚙️' },
 ];
 
+function isValidQrImageSource(value) {
+  const source = String(value || '').trim();
+  if (!source) return false;
+  if (source.startsWith('data:image/')) return true;
+  if (source.startsWith('blob:')) return true;
+  try {
+    const parsed = new URL(source);
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+  } catch (_error) {
+    return false;
+  }
+}
+
 export default function App() {
   const { supabase, session } = useAuth();
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -76,17 +89,18 @@ export default function App() {
 
   const botColor = botState.status === 'LOGGED_IN' ? 'bg-emerald-400' :
     botState.status === 'AWAITING_QR' ? 'bg-amber-400' : 'bg-rose-400';
+  const qrImageSource = isValidQrImageSource(botState.qrCode) ? String(botState.qrCode).trim() : '';
 
   return (
-    <div className="flex h-screen bg-gradient-to-br from-slate-100 via-sky-50 to-emerald-50 text-slate-900 overflow-hidden">
+    <div className="flex h-screen min-h-0 bg-gradient-to-br from-slate-100 via-sky-50 to-emerald-50 text-slate-900 overflow-hidden">
       {/* Sidebar */}
-      <aside className="flex flex-col w-56 shrink-0 bg-white/66 border-r border-white/60 backdrop-blur-md shadow-md">
+      <aside className="flex flex-col w-56 shrink-0 min-h-0 bg-white/66 border-r border-white/60 backdrop-blur-md shadow-md">
         <div className="px-5 py-4 border-b border-slate-200/60">
           <h1 className="font-bold text-base text-slate-800 tracking-tight">EmidiaWhats</h1>
           <p className="text-xs text-slate-500 mt-0.5 truncate">{agentLabel}</p>
         </div>
 
-        <nav className="flex-1 py-4 space-y-0.5 px-2">
+        <nav className="flex-1 min-h-0 overflow-y-auto py-4 space-y-0.5 px-2">
           {tabs.map((tab) => (
             <button
               key={tab.id}
@@ -110,10 +124,10 @@ export default function App() {
             <span>Bot: {botState.status}</span>
           </div>
           {/* QR code if awaiting */}
-          {botState.status === 'AWAITING_QR' && botState.qrCode && (
+          {botState.status === 'AWAITING_QR' && qrImageSource && (
             <div className="rounded-lg border border-amber-300 bg-amber-50 p-2">
               <p className="text-xs text-amber-700 mb-1 font-semibold">Escaneie o QR no WhatsApp</p>
-              <img src={botState.qrCode} alt="QR Code" className="w-full rounded" />
+              <img src={qrImageSource} alt="QR Code" className="w-full rounded" />
             </div>
           )}
           {/* Version + logout */}
@@ -128,7 +142,7 @@ export default function App() {
       </aside>
 
       {/* Main content */}
-      <main className="flex-1 overflow-auto">
+      <main className="flex-1 min-h-0 overflow-auto p-3 md:p-4">
         {renderContent()}
       </main>
     </div>

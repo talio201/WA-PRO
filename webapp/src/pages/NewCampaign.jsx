@@ -97,6 +97,12 @@ const NewCampaign = ({ onCancel }) => {
   const [uploadingMedia, setUploadingMedia] = useState(false);
   const [minDelaySeconds, setMinDelaySeconds] = useState(0);
   const [maxDelaySeconds, setMaxDelaySeconds] = useState(120);
+  const [windowEnabled, setWindowEnabled] = useState(true);
+  const [windowStartTime, setWindowStartTime] = useState("08:00");
+  const [windowEndTime, setWindowEndTime] = useState("20:00");
+  const [windowTimezone, setWindowTimezone] = useState("America/Sao_Paulo");
+  const [resendOnlyAfterInbound, setResendOnlyAfterInbound] = useState(true);
+  const [resendRecentWindowHours, setResendRecentWindowHours] = useState(72);
   const [isGeneratingVariants, setIsGeneratingVariants] = useState(false);
   const [aiError, setAiError] = useState("");
   const [messageVariants, setMessageVariants] = useState([]);
@@ -294,12 +300,15 @@ const NewCampaign = ({ onCancel }) => {
   };
   const parsedMinDelay = Number(minDelaySeconds);
   const parsedMaxDelay = Number(maxDelaySeconds);
+  const parsedResendWindowHours = Number(resendRecentWindowHours);
   const isAntiBanInvalid =
     !Number.isFinite(parsedMinDelay) ||
     !Number.isFinite(parsedMaxDelay) ||
     parsedMinDelay < 0 ||
     parsedMaxDelay < 0 ||
     parsedMinDelay > parsedMaxDelay;
+  const isResendWindowInvalid =
+    !Number.isFinite(parsedResendWindowHours) || parsedResendWindowHours < 1;
   const handleSubmit = async () => {
     const campaignName = String(name || "").trim();
     const finalContacts = dedupeContacts(selectedContacts);
@@ -310,6 +319,8 @@ const NewCampaign = ({ onCancel }) => {
     if (!cleanMessage && !media)
       return alert("Informe uma mensagem ou anexe uma midia.");
     if (isAntiBanInvalid) return alert("Revise os tempos do Anti-Ban.");
+    if (isResendWindowInvalid)
+      return alert("Janela de reenvio deve ser de pelo menos 1 hora.");
     if (turboMode && !canUseTurbo)
       return alert("Turbo Mode precisa de ao menos 2 versões de mensagem.");
     try {
@@ -323,6 +334,18 @@ const NewCampaign = ({ onCancel }) => {
         antiBan: {
           minDelaySeconds: parsedMinDelay,
           maxDelaySeconds: parsedMaxDelay,
+          deliveryWindow: {
+            enabled: windowEnabled,
+            startTime: windowStartTime,
+            endTime: windowEndTime,
+            timezone: windowTimezone,
+            daysOfWeek: [0, 1, 2, 3, 4, 5, 6],
+          },
+          resendPolicy: {
+            enabled: true,
+            onlyAfterInbound: resendOnlyAfterInbound,
+            recentWindowHours: parsedResendWindowHours,
+          },
         },
       });
       alert("Campanha criada com sucesso.");
@@ -768,12 +791,100 @@ const NewCampaign = ({ onCancel }) => {
                     O mínimo não pode ser maior que o máximo.
                   </p>
                 )}
+                <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="text-sm font-semibold text-slate-700">
+                      Relógio de disparo
+                    </p>
+                    <label className="inline-flex items-center gap-2 text-xs text-slate-600">
+                      <input
+                        type="checkbox"
+                        checked={windowEnabled}
+                        onChange={(event) =>
+                          setWindowEnabled(event.target.checked)
+                        }
+                      />
+                      Ativo
+                    </label>
+                  </div>
+                  <div className="mt-3 grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="mb-1 block text-xs text-slate-500">
+                        Início
+                      </label>
+                      <input
+                        type="time"
+                        value={windowStartTime}
+                        onChange={(event) => setWindowStartTime(event.target.value)}
+                        className="new-campaign-input w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
+                      />
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-xs text-slate-500">
+                        Fim
+                      </label>
+                      <input
+                        type="time"
+                        value={windowEndTime}
+                        onChange={(event) => setWindowEndTime(event.target.value)}
+                        className="new-campaign-input w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
+                      />
+                    </div>
+                  </div>
+                  <div className="mt-3">
+                    <label className="mb-1 block text-xs text-slate-500">
+                      Timezone
+                    </label>
+                    <input
+                      type="text"
+                      value={windowTimezone}
+                      onChange={(event) => setWindowTimezone(event.target.value)}
+                      placeholder="America/Sao_Paulo"
+                      className="new-campaign-input w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
+                    />
+                  </div>
+                </div>
+
+                <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-3">
+                  <p className="text-sm font-semibold text-slate-700">
+                    Regra de reenvio
+                  </p>
+                  <label className="mt-2 inline-flex items-center gap-2 text-xs text-slate-600">
+                    <input
+                      type="checkbox"
+                      checked={resendOnlyAfterInbound}
+                      onChange={(event) =>
+                        setResendOnlyAfterInbound(event.target.checked)
+                      }
+                    />
+                    Só reenviar se houver interação posterior
+                  </label>
+                  <div className="mt-3">
+                    <label className="mb-1 block text-xs text-slate-500">
+                      Janela recente (horas)
+                    </label>
+                    <input
+                      type="number"
+                      min="1"
+                      value={resendRecentWindowHours}
+                      onChange={(event) =>
+                        setResendRecentWindowHours(event.target.value)
+                      }
+                      className="new-campaign-input w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
+                    />
+                    {isResendWindowInvalid && (
+                      <p className="mt-2 text-sm font-medium text-red-600">
+                        A janela de reenvio precisa ser maior ou igual a 1 hora.
+                      </p>
+                    )}
+                  </div>
+                </div>
               </div>
               <button
                 type="button"
                 onClick={handleSubmit}
-                disabled={isAntiBanInvalid}
-                className={`new-campaign-btn-primary new-campaign-btn-submit w-full rounded-2xl px-6 py-4 text-base font-bold text-white ${isAntiBanInvalid ? "cursor-not-allowed bg-slate-400" : "bg-emerald-600 hover:bg-emerald-700"}`}
+                disabled={isAntiBanInvalid || isResendWindowInvalid}
+                className={`new-campaign-btn-primary new-campaign-btn-submit w-full rounded-2xl px-6 py-4 text-base font-bold text-white ${(isAntiBanInvalid || isResendWindowInvalid) ? "cursor-not-allowed bg-slate-400" : "bg-emerald-600 hover:bg-emerald-700"}`}
               >
                 Criar e iniciar campanha
               </button>

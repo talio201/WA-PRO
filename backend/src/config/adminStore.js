@@ -3,6 +3,10 @@ const fs = require('fs');
 const path = require('path');
 
 const STORE_PATH = path.join(__dirname, '../../data/admin-settings.json');
+const DEFAULT_ADMIN_USERS = String(process.env.ADMIN_EMAILS || '')
+  .split(',')
+  .map((item) => String(item || '').trim().toLowerCase())
+  .filter(Boolean);
 const DEFAULT_STORE = {
   appConfig: {
     backendApiUrl: String(process.env.PUBLIC_API_URL || process.env.BASE_URL || 'https://tcgsolucoes.app/api').trim().replace(/\/+$/, '/api').replace(/\/api\/api$/, '/api'),
@@ -10,12 +14,14 @@ const DEFAULT_STORE = {
   },
   clients: [],
   installations: [],
+  adminUsers: DEFAULT_ADMIN_USERS,
 };
 
 const PLAN_TERMS = {
+  demo: 7,
   '30d': 30,
   '60d': 60,
-  '90d': 90,
+  '12m': 365,
   '365d': 365,
   lifetime: null,
 };
@@ -42,10 +48,50 @@ function readStore() {
       installations: Array.isArray(parsed.installations)
         ? parsed.installations
         : [],
+      adminUsers: Array.isArray(parsed.adminUsers)
+        ? parsed.adminUsers.map((item) => String(item || '').trim().toLowerCase()).filter(Boolean)
+        : [...DEFAULT_ADMIN_USERS],
     };
   } catch (error) {
     return JSON.parse(JSON.stringify(DEFAULT_STORE));
   }
+}
+
+function listAdminUsers() {
+  const store = readStore();
+  const entries = Array.isArray(store.adminUsers) ? store.adminUsers : [];
+  return Array.from(new Set(entries.map((item) => String(item || '').trim().toLowerCase()).filter(Boolean)));
+}
+
+function isAdminEmail(email = '') {
+  const safeEmail = String(email || '').trim().toLowerCase();
+  if (!safeEmail) return false;
+  return listAdminUsers().includes(safeEmail);
+}
+
+function addAdminUser(email = '') {
+  const safeEmail = String(email || '').trim().toLowerCase();
+  if (!safeEmail) return null;
+  const store = readStore();
+  const list = Array.isArray(store.adminUsers) ? store.adminUsers : [];
+  if (!list.includes(safeEmail)) {
+    list.push(safeEmail);
+    store.adminUsers = list;
+    writeStore(store);
+  }
+  return safeEmail;
+}
+
+function removeAdminUser(email = '') {
+  const safeEmail = String(email || '').trim().toLowerCase();
+  if (!safeEmail) return false;
+  const store = readStore();
+  const list = Array.isArray(store.adminUsers) ? store.adminUsers : [];
+  const next = list.filter((item) => String(item || '').trim().toLowerCase() !== safeEmail);
+  if (next.length === list.length) return false;
+  store.adminUsers = next;
+  writeStore(store);
+  return true;
 }
 
 function writeStore(store) {
@@ -69,12 +115,13 @@ function generateActivationCode() {
 
 function normalizePlanTerm(value) {
   const safe = String(value || '').trim().toLowerCase();
+  if (safe === 'demo' || safe === 'trial' || safe === '7d') return 'demo';
   if (safe === '30' || safe === '30d') return '30d';
   if (safe === '60' || safe === '60d') return '60d';
-  if (safe === '90' || safe === '90d') return '90d';
-  if (safe === '365' || safe === '365d' || safe === 'annual' || safe === '1y') return '365d';
+  if (safe === '90' || safe === '90d') return '60d';
+  if (safe === '12m' || safe === '12' || safe === '365' || safe === '365d' || safe === 'annual' || safe === '1y') return '12m';
   if (safe === 'lifetime' || safe === 'vitalicio' || safe === 'lifelong') return 'lifetime';
-  return '30d';
+  return 'demo';
 }
 
 function buildExpiration(planTerm, startedAt = new Date()) {
@@ -108,6 +155,7 @@ function maskInstallationSecret(secret = '') {
 
 function getPublicInstallation(installation) {
   const status = normalizeInstallationStatus(installation);
+  const normalizedPlanTerm = normalizePlanTerm(installation.planTerm || '');
   return {
     activationCode: installation.activationCode,
     installationId: installation.installationId,
@@ -118,7 +166,8 @@ function getPublicInstallation(installation) {
     revokedAt: installation.revokedAt || null,
     suspendedAt: installation.suspendedAt || null,
     expiresAt: installation.expiresAt || null,
-    planTerm: installation.planTerm || null,
+    planTerm: normalizedPlanTerm || null,
+    isDemo: normalizedPlanTerm === 'demo',
     isLifetime: installation.planTerm === 'lifetime',
     lastSeenAt: installation.lastSeenAt || null,
     notes: installation.notes || '',
@@ -234,6 +283,26 @@ function rotateClientKey(clientId) {
     ...getPublicClient(client),
     apiKey: client.apiKey,
   };
+}
+
+function deleteClient(clientId) {
+  const store = readStore();
+  const index = store.clients.findIndex((item) => item.clientId === clientId);
+  if (index < 0) return false;
+  store.clients.splice(index, 1);
+  store.installations = store.installations.map((installation) => {
+    if (installation.clientId === clientId) {
+      return {
+        ...installation,
+        clientId: null,
+        status: 'pending',
+        updatedAt: new Date().toISOString(),
+      };
+    }
+    return installation;
+  });
+  writeStore(store);
+  return true;
 }
 
 function getClientByApiKey(apiKey = '') {
@@ -360,7 +429,7 @@ function activateInstallation(activationCode, payload = {}) {
   const installation = findInstallationByCode(store, activationCode);
   if (!installation) return null;
   const now = new Date();
-  const planTerm = normalizePlanTerm(payload.planTerm || installation.planTerm || '30d');
+  const planTerm = normalizePlanTerm(payload.planTerm || installation.planTerm || 'demo');
   const permissions = normalizePermissions(payload.permissions || installation.permissions || {});
   const client = ensureInstallationClient(store, installation, payload);
   if (client) {
@@ -398,6 +467,33 @@ function revokeInstallation(activationCode, payload = {}) {
   }
   writeStore(store);
   return getPublicInstallation(installation);
+}
+
+function deleteInstallation(activationCode, payload = {}) {
+  const store = readStore();
+  const installation = findInstallationByCode(store, activationCode);
+  if (!installation) return null;
+  const removeClient = payload.removeClient === true;
+  const targetClientId = installation.clientId || null;
+  store.installations = store.installations.filter(
+    (item) => String(item.activationCode || '').trim().toUpperCase() !== String(activationCode || '').trim().toUpperCase(),
+  );
+  if (targetClientId) {
+    if (removeClient) {
+      store.clients = store.clients.filter((client) => client.clientId !== targetClientId);
+    } else {
+      const client = store.clients.find((item) => item.clientId === targetClientId);
+      if (client) {
+        client.active = false;
+        client.updatedAt = new Date().toISOString();
+      }
+    }
+  }
+  writeStore(store);
+  return {
+    activationCode: String(activationCode || '').trim().toUpperCase(),
+    removedClient: removeClient ? targetClientId : null,
+  };
 }
 
 function getInstallationByActivationCode(activationCode) {
@@ -443,6 +539,7 @@ module.exports = {
   listClients,
   createClient,
   updateClient,
+  deleteClient,
   rotateClientKey,
   getClientByApiKey,
   touchClient,
@@ -453,9 +550,14 @@ module.exports = {
   registerInstallation,
   activateInstallation,
   revokeInstallation,
+  deleteInstallation,
   getInstallationByActivationCode,
   validateInstallationCredentials,
   touchInstallation,
   normalizePlanTerm,
   buildExpiration,
+  listAdminUsers,
+  isAdminEmail,
+  addAdminUser,
+  removeAdminUser,
 };

@@ -203,6 +203,7 @@
 
     <script>
         (async function initLogin() {
+            const maintenanceBase = location.pathname.replace(/\/+$/, '');
             const form = document.getElementById('login-form');
             const btn = document.getElementById('login-btn');
             const btnText = document.getElementById('btn-text');
@@ -249,7 +250,24 @@
                     loader.style.display = 'none';
                     btn.disabled = false;
                 } else {
-                    window.location.href = '/dashboard.html';
+                    const { data: { session } } = await supabaseClient.auth.getSession();
+                    const accessResponse = await fetch('/api/admin/access/me', {
+                        headers: {
+                            'Authorization': `Bearer ${session?.access_token || ''}`,
+                            'x-agent-id': 'admin-console',
+                        }
+                    });
+                    const accessPayload = await accessResponse.json().catch(() => ({}));
+                    if (!accessPayload?.allowed) {
+                        await supabaseClient.auth.signOut();
+                        errorMsg.innerText = 'Sua conta não tem acesso administrativo.';
+                        errorMsg.style.display = 'block';
+                        btnText.style.display = 'block';
+                        loader.style.display = 'none';
+                        btn.disabled = false;
+                        return;
+                    }
+                    window.location.href = `${maintenanceBase}/dashboard`;
                 }
             });
         })();

@@ -12,7 +12,10 @@
   --msg-received-bg: rgba(255, 255, 255, 0.84);
 
   position: relative;
-  min-height: 680px;
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
   font-family: "Avenir Next", "SF Pro Display", "Segoe UI Variable", "Segoe UI", sans-serif;
   isolation: isolate;
 }
@@ -74,7 +77,8 @@
   position: relative;
   z-index: 1;
   display: flex;
-  height: clamp(620px, 78vh, 880px);
+  height: 100%;
+  min-height: 0;
   width: 100%;
   border-radius: 28px;
   border: 1px solid var(--glass-border);
@@ -88,6 +92,7 @@
 .inbox-sidebar {
   width: 360px;
   flex-shrink: 0;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   background: var(--sidebar-bg);
@@ -117,6 +122,7 @@
   display: flex;
   flex-direction: column;
   gap: 12px;
+  flex-shrink: 0;
 }
 
 .inbox-header-top {
@@ -337,6 +343,7 @@
 
 .conversation-list {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
   padding: 8px;
 }
@@ -517,9 +524,11 @@
 .chat-main {
   min-width: 0;
   flex: 1;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   background: rgba(255, 255, 255, 0.16);
+  overflow: hidden;
 }
 
 .chat-header {
@@ -530,6 +539,7 @@
   justify-content: space-between;
   align-items: flex-start;
   gap: 12px;
+  flex-shrink: 0;
 }
 
 .chat-profile {
@@ -594,6 +604,18 @@
   display: flex;
   flex-direction: column;
   gap: 10px;
+  max-height: 30vh;
+  overflow-y: auto;
+  flex-shrink: 0;
+}
+
+.helpdesk-panel::-webkit-scrollbar {
+  width: 6px;
+}
+
+.helpdesk-panel::-webkit-scrollbar-thumb {
+  background: rgba(40, 53, 79, 0.2);
+  border-radius: 999px;
 }
 
 .helpdesk-summary-row {
@@ -752,8 +774,9 @@
 
 .chat-messages {
   flex: 1;
+  min-height: 120px;
   overflow-y: auto;
-  padding: 18px 22px;
+  padding: 18px 22px 26px;
   display: flex;
   flex-direction: column;
   gap: 14px;
@@ -895,9 +918,15 @@
 }
 
 .chat-input-area {
-  position: relative;
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
   padding: 14px 18px 18px;
   border-top: 1px solid rgba(255, 255, 255, 0.4);
+  flex-shrink: 0;
+  background: rgba(255, 255, 255, 0.24);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
 }
 
 .hidden-file-input {
@@ -996,16 +1025,26 @@
 
 @media (max-width: 980px) {
   .inbox-glass-shell {
-    height: auto;
-    min-height: 760px;
+    height: 100%;
+    min-height: 0;
     flex-direction: column;
   }
 
   .inbox-sidebar {
     width: 100%;
-    max-height: 380px;
+    max-height: min(42vh, 380px);
+    overflow-y: auto;
     border-right: none;
     border-bottom: 1px solid rgba(255, 255, 255, 0.35);
+  }
+
+  .helpdesk-panel {
+    max-height: 40vh;
+  }
+
+  .chat-input-area {
+    position: relative;
+    bottom: auto;
   }
 
   .inbox-sidebar::after {

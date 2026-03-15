@@ -1,9 +1,17 @@
 import React, { useState, useEffect, useRef } from "react";
-import { getContacts, addContact, deleteContact, importContactsXlsx } from "../utils/api.js";
+import {
+  getContacts,
+  addContact,
+  deleteContact,
+  importContactsXlsx,
+  getLeadAnalytics,
+  updateContactCrm,
+} from "../utils/api.js";
 import { Users, Upload, Plus, Trash2, Search, Activity, Phone, RefreshCw } from "lucide-react";
 
 export default function Contacts() {
   const [contacts, setContacts] = useState([]);
+  const [leadAnalytics, setLeadAnalytics] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [search, setSearch] = useState("");
@@ -11,6 +19,15 @@ export default function Contacts() {
   const [nameInput, setNameInput] = useState("");
   const [phoneInput, setPhoneInput] = useState("");
   const [importing, setImporting] = useState(false);
+  const [editingLeadId, setEditingLeadId] = useState("");
+  const [leadDraft, setLeadDraft] = useState({
+    stage: "new",
+    score: 0,
+    owner: "",
+    nextActionAt: "",
+    tags: "",
+    notes: "",
+  });
 
   const fileInputRef = useRef(null);
   const agentId = localStorage.getItem("emidia_agent_id") || "agent-unknown";
@@ -18,8 +35,12 @@ export default function Contacts() {
   const fetchContacts = async () => {
     try {
       setLoading(true);
-      const data = await getContacts();
+      const [data, analytics] = await Promise.all([
+        getContacts(),
+        getLeadAnalytics().catch(() => null),
+      ]);
       setContacts(Array.isArray(data) ? data : []);
+      setLeadAnalytics(analytics || null);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -76,6 +97,44 @@ export default function Contacts() {
     }
   };
 
+  const openLeadEditor = (contact) => {
+    const crm = contact?.crm || {};
+    const nextActionAt = crm.nextActionAt
+      ? new Date(crm.nextActionAt).toISOString().slice(0, 16)
+      : "";
+    setEditingLeadId(contact._id);
+    setLeadDraft({
+      stage: crm.stage || "new",
+      score: Number(crm.score || 0),
+      owner: crm.owner || "",
+      nextActionAt,
+      tags: Array.isArray(crm.tags) ? crm.tags.join(", ") : "",
+      notes: crm.notes || "",
+    });
+  };
+
+  const saveLeadEditor = async (contactId) => {
+    try {
+      await updateContactCrm(contactId, {
+        stage: leadDraft.stage,
+        score: Number(leadDraft.score || 0),
+        owner: leadDraft.owner,
+        tags: String(leadDraft.tags || "")
+          .split(",")
+          .map((item) => item.trim())
+          .filter(Boolean),
+        notes: leadDraft.notes,
+        nextActionAt: leadDraft.nextActionAt
+          ? new Date(leadDraft.nextActionAt).toISOString()
+          : null,
+      });
+      setEditingLeadId("");
+      await fetchContacts();
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
   const filteredContacts = contacts.filter((c) => {
     const query = search.toLowerCase();
     const matchesName = (c.name || "").toLowerCase().includes(query);
@@ -128,6 +187,35 @@ export default function Contacts() {
         <div className="bg-red-500/10 border border-red-500/30 text-red-400 px-4 py-3.5 rounded-2xl flex items-center gap-3 backdrop-blur-sm animate-in fade-in slide-in-from-top-4">
           <Activity className="w-5 h-5 shrink-0" />
           <span className="text-sm">{error}</span>
+        </div>
+      )}
+
+      {leadAnalytics && (
+        <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
+          <div className="rounded-2xl border border-slate-700/50 bg-slate-800/50 px-4 py-3">
+            <p className="text-[11px] text-slate-400 uppercase tracking-wide">Leads</p>
+            <p className="text-2xl font-bold text-white">{leadAnalytics.totalLeads || 0}</p>
+          </div>
+          <div className="rounded-2xl border border-slate-700/50 bg-slate-800/50 px-4 py-3">
+            <p className="text-[11px] text-slate-400 uppercase tracking-wide">Novos</p>
+            <p className="text-2xl font-bold text-cyan-300">{leadAnalytics?.byStage?.new || 0}</p>
+          </div>
+          <div className="rounded-2xl border border-slate-700/50 bg-slate-800/50 px-4 py-3">
+            <p className="text-[11px] text-slate-400 uppercase tracking-wide">Qualificados</p>
+            <p className="text-2xl font-bold text-emerald-300">{leadAnalytics?.byStage?.qualified || 0}</p>
+          </div>
+          <div className="rounded-2xl border border-slate-700/50 bg-slate-800/50 px-4 py-3">
+            <p className="text-[11px] text-slate-400 uppercase tracking-wide">Proposta</p>
+            <p className="text-2xl font-bold text-amber-300">{leadAnalytics?.byStage?.proposal || 0}</p>
+          </div>
+          <div className="rounded-2xl border border-slate-700/50 bg-slate-800/50 px-4 py-3">
+            <p className="text-[11px] text-slate-400 uppercase tracking-wide">Ganhos</p>
+            <p className="text-2xl font-bold text-emerald-400">{leadAnalytics?.byStage?.won || 0}</p>
+          </div>
+          <div className="rounded-2xl border border-slate-700/50 bg-slate-800/50 px-4 py-3">
+            <p className="text-[11px] text-slate-400 uppercase tracking-wide">Conversão</p>
+            <p className="text-2xl font-bold text-white">{leadAnalytics?.conversion?.wonRate || 0}%</p>
+          </div>
         </div>
       )}
 
@@ -220,16 +308,36 @@ export default function Contacts() {
                           {contact.name || <span className="text-slate-500 italic">Sem Nome</span>}
                         </div>
                         <div className="text-sm text-emerald-400 tracking-wider font-mono mt-0.5 truncate">{contact.phone}</div>
+                        <div className="mt-1.5 flex items-center gap-2 text-[11px]">
+                          <span className="px-2 py-0.5 rounded-full bg-slate-800 text-cyan-300 border border-slate-700">
+                            {String(contact?.crm?.stage || "new").toUpperCase()}
+                          </span>
+                          <span className="text-slate-400">Score {Number(contact?.crm?.score || 0)}</span>
+                        </div>
+                        {contact?.crm?.nextActionAt && (
+                          <div className="text-[11px] text-amber-300 mt-1 truncate">
+                            Próxima ação: {new Date(contact.crm.nextActionAt).toLocaleString()}
+                          </div>
+                        )}
                       </div>
                     </div>
                     
-                    <button 
-                      onClick={() => handleDelete(contact._id)}
-                      className="p-2.5 text-slate-500 hover:text-red-400 hover:bg-red-500/10 rounded-xl transition-all opacity-0 group-hover:opacity-100 shrink-0"
-                      title="Apagar permanentemente"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => openLeadEditor(contact)}
+                        className="px-2.5 py-1.5 text-[11px] text-cyan-300 hover:bg-cyan-500/10 rounded-lg border border-cyan-600/30 transition-all opacity-0 group-hover:opacity-100"
+                        title="Editar CRM do lead"
+                      >
+                        CRM
+                      </button>
+                      <button 
+                        onClick={() => handleDelete(contact._id)}
+                        className="p-2.5 text-slate-500 hover:text-red-400 hover:bg-red-500/10 rounded-xl transition-all opacity-0 group-hover:opacity-100 shrink-0"
+                        title="Apagar permanentemente"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
                   </li>
                 ))}
               </ul>
@@ -237,6 +345,93 @@ export default function Contacts() {
           </div>
         </div>
       </div>
+
+      {editingLeadId && (
+        <div className="fixed inset-0 z-40 bg-black/50 flex items-center justify-center p-4">
+          <div className="w-full max-w-xl rounded-2xl border border-slate-700 bg-slate-900 p-5">
+            <h4 className="text-lg font-bold text-white mb-4">Editar Lead CRM</h4>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div>
+                <label className="text-xs text-slate-400">Estágio</label>
+                <select
+                  value={leadDraft.stage}
+                  onChange={(e) => setLeadDraft((prev) => ({ ...prev, stage: e.target.value }))}
+                  className="mt-1 w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white"
+                >
+                  <option value="new">Novo</option>
+                  <option value="qualified">Qualificado</option>
+                  <option value="proposal">Proposta</option>
+                  <option value="won">Ganho</option>
+                  <option value="lost">Perdido</option>
+                </select>
+              </div>
+              <div>
+                <label className="text-xs text-slate-400">Score (0-100)</label>
+                <input
+                  type="number"
+                  min="0"
+                  max="100"
+                  value={leadDraft.score}
+                  onChange={(e) => setLeadDraft((prev) => ({ ...prev, score: e.target.value }))}
+                  className="mt-1 w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-slate-400">Owner</label>
+                <input
+                  type="text"
+                  value={leadDraft.owner}
+                  onChange={(e) => setLeadDraft((prev) => ({ ...prev, owner: e.target.value }))}
+                  className="mt-1 w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-slate-400">Próxima ação</label>
+                <input
+                  type="datetime-local"
+                  value={leadDraft.nextActionAt}
+                  onChange={(e) => setLeadDraft((prev) => ({ ...prev, nextActionAt: e.target.value }))}
+                  className="mt-1 w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white"
+                />
+              </div>
+            </div>
+            <div className="mt-3">
+              <label className="text-xs text-slate-400">Tags (separadas por vírgula)</label>
+              <input
+                type="text"
+                value={leadDraft.tags}
+                onChange={(e) => setLeadDraft((prev) => ({ ...prev, tags: e.target.value }))}
+                className="mt-1 w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white"
+              />
+            </div>
+            <div className="mt-3">
+              <label className="text-xs text-slate-400">Notas</label>
+              <textarea
+                rows={3}
+                value={leadDraft.notes}
+                onChange={(e) => setLeadDraft((prev) => ({ ...prev, notes: e.target.value }))}
+                className="mt-1 w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white"
+              />
+            </div>
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setEditingLeadId("")}
+                className="px-4 py-2 rounded-lg border border-slate-700 text-slate-300 hover:bg-slate-800"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={() => saveLeadEditor(editingLeadId)}
+                className="px-4 py-2 rounded-lg bg-emerald-600 text-white hover:bg-emerald-500"
+              >
+                Salvar CRM
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

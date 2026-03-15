@@ -89,7 +89,9 @@ export const requestConversationHistorySync = async (phone) => {
   return requestJson('/messages/history/request-sync', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ phone: safePhone }) }, 'Failed to request sync');
 };
 export const getContacts = async () => requestJson('/contacts', {}, 'Failed to fetch contacts');
+export const getLeadAnalytics = async () => requestJson('/contacts/analytics', {}, 'Failed to fetch lead analytics');
 export const addContact = async (payload) => requestJson('/contacts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }, 'Failed to add contact');
+export const updateContactCrm = async (id, payload = {}) => requestJson(`/contacts/${id}/crm`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }, 'Failed to update lead CRM');
 export const deleteContact = async (id) => requestJson(`/contacts/${id}`, { method: 'DELETE' }, 'Failed to delete contact');
 export const importContactsXlsx = async (file) => {
   const fd = new FormData(); fd.append('file', file);
