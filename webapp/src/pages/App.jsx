@@ -2,11 +2,11 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useAuth } from '../auth/AuthContext.jsx';
 import { fetchBotStatus } from '../utils/api.js';
 
-// Import pages directly from extension source via Vite alias
-import Campaigns from '@pages/Campaigns.jsx';
-import NewCampaign from '@pages/NewCampaign.jsx';
-import Inbox from '@pages/Inbox.jsx';
-import Contacts from '@pages/Contacts.jsx';
+// Import pages directly from local directory
+import Campaigns from './Campaigns.jsx';
+import NewCampaign from './NewCampaign.jsx';
+import Inbox from './Inbox.jsx';
+import Contacts from './Contacts.jsx';
 
 // Webapp-native Settings (lighter version without Chrome-specific features)
 import Settings from './Settings.jsx';

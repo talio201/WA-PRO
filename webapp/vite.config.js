@@ -15,24 +15,9 @@ export default defineConfig({
     emptyOutDir: true,
   },
   resolve: {
-    // Intercept any import ending in /utils/api, /utils/runtimeConfig, /utils/realtime
-    // from extension pages and redirect to our webapp implementations.
-    alias: [
-      {
-        find: /.*\/utils\/api$/,
-        replacement: path.resolve(__dirname, 'src/utils/api.js'),
-      },
-      {
-        find: /.*\/utils\/runtimeConfig$/,
-        replacement: path.resolve(__dirname, 'src/utils/runtimeConfig.js'),
-      },
-      {
-        find: /.*\/utils\/realtime$/,
-        replacement: path.resolve(__dirname, 'src/utils/realtime.js'),
-      },
-      // Expose extension pages under @pages alias
-      { find: '@pages', replacement: extPages },
-    ],
+    alias: {
+      '@': path.resolve(__dirname, './src'),
+    },
   },
   server: {
     port: 5174,
