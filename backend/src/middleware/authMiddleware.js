@@ -62,6 +62,12 @@ const requireAuth = async (req, res, next) => {
       req.apiClient = authResult.apiClient || null;
       return next();
     }
+    if (authResult?.kind === 'installation-session') {
+      req.agentId = authResult.agentId;
+      req.permissions = authResult.permissions || {};
+      req.installation = authResult.installation || null;
+      return next();
+    }
     if (authResult?.kind === 'supabase-user') {
       req.user = authResult.user;
       req.agentId = authResult.agentId;

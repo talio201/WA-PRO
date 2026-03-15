@@ -326,7 +326,10 @@ def scrape_history_for_job(page, phone):
 def main():
     logging.info("Iniciando o Worker Python do WhatsApp...")
     with sync_playwright() as p:
-        user_data_dir = os.path.join(os.getcwd(), "whatsapp_session")
+        # Dinamic user data dir based on agent id for multi-session support
+        session_folder = f"session_{BOT_AGENT_ID}"
+        user_data_dir = os.path.join(os.getcwd(), "sessions", session_folder)
+        os.makedirs(os.path.dirname(user_data_dir), exist_ok=True)
         browser = p.chromium.launch_persistent_context(
             user_data_dir=user_data_dir,
             headless=True, 
@@ -349,7 +352,7 @@ def main():
                 pane = page.locator('div#pane-side')
                 if pane.is_visible():
                     logging.info("WhatsApp logado com sucesso. Status atualizado.")
-                    requests.post(f"{API_BASE_URL}/bot/status", json={"status": "LOGGED_IN", "qrCodeBase64": None}, headers=API_HEADERS)
+                    requests.post(f"{API_BASE_URL}/bot/status", json={"status": "LOGGED_IN", "qrCodeBase64": None, "agentId": BOT_AGENT_ID}, headers=API_HEADERS)
                     break
                 
                 qr_canvas = page.locator('canvas')
@@ -360,7 +363,7 @@ def main():
                         base64_encoded = base64.b64encode(qr_image_bytes).decode('utf-8')
                         base64_str = f"data:image/png;base64,{base64_encoded}"
                         logging.info("QR Code capturado e enviado ao backend.")
-                        requests.post(f"{API_BASE_URL}/bot/status", json={"status": "AWAITING_QR", "qrCodeBase64": base64_str}, headers=API_HEADERS)
+                        requests.post(f"{API_BASE_URL}/bot/status", json={"status": "AWAITING_QR", "qrCodeBase64": base64_str, "agentId": BOT_AGENT_ID}, headers=API_HEADERS)
                     except Exception as e_ss:
                         logging.warning(f"Falha ao capturar screenshot do QR (pode estar carregando): {e_ss}")
                     
@@ -373,8 +376,19 @@ def main():
                 time.sleep(5)
                 
         logging.info("WhatsApp pronto. Iniciando processamento da fila...")
+        last_heartbeat = 0
+        HEARTBEAT_INTERVAL = 30  # seconds
         while True:
             try:
+                # Periodic heartbeat: re-post LOGGED_IN so backend restart doesn't show DISCONNECTED
+                now_ts = time.time()
+                if now_ts - last_heartbeat >= HEARTBEAT_INTERVAL:
+                    try:
+                        requests.post(f"{API_BASE_URL}/bot/status", json={"status": "LOGGED_IN", "qrCodeBase64": None, "agentId": BOT_AGENT_ID}, headers=API_HEADERS, timeout=5)
+                        last_heartbeat = now_ts
+                    except Exception as hb_err:
+                        logging.warning(f"Heartbeat falhou: {hb_err}")
+
                 response = requests.get(f"{API_BASE_URL}/messages/next", headers=API_HEADERS)
                 if response.status_code != 200:
                     if response.status_code == 401:

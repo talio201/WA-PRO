@@ -107,11 +107,23 @@
     </div>
 
     <script>
-        const SUPABASE_URL = "https://izmellnvkwbapcrfuqgp.supabase.co";
-        const SUPABASE_ANON_KEY = "[REDACTED_JWT]";
-        const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        let supabaseClient = null;
+
+        async function initSupabase() {
+            const response = await fetch('/api/public/runtime-config');
+            const payload = await response.json();
+            const supabaseUrl = String(payload?.config?.supabase?.url || '').trim();
+            const supabaseAnonKey = String(payload?.config?.supabase?.anonKey || '').trim();
+            if (!supabaseUrl || !supabaseAnonKey) {
+                throw new Error('Supabase não configurado no servidor.');
+            }
+            supabaseClient = supabase.createClient(supabaseUrl, supabaseAnonKey);
+        }
 
         async function checkAuth() {
+            if (!supabaseClient) {
+                await initSupabase();
+            }
             const { data: { session } } = await supabaseClient.auth.getSession();
             if (!session) {
                 window.location.href = '/login.html';

@@ -6,5 +6,6 @@ router.post('/installations/register', publicActivationController.registerInstal
 router.get('/installations/:activationCode/status', publicActivationController.getActivationStatus);
 router.post('/installations/session', publicActivationController.createSession);
 router.post('/installations/heartbeat', publicActivationController.heartbeat);
+router.get('/runtime-config', publicActivationController.getPublicRuntimeConfig);
 
 module.exports = router;

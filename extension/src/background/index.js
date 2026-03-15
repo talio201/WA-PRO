@@ -48,18 +48,26 @@ async function buildApiUrl(pathname = "") {
   return `${backendApiUrl}${pathname}`;
 }
 async function buildRealtimeUrl() {
-  const { backendWsUrl, accessToken, agentId } = await getRuntimeConfig();
+  const { backendWsUrl, accessToken, agentId, backendApiKey } = await getRuntimeConfig();
   const url = new URL(backendWsUrl);
   let token = accessToken || '';
   if (!token) {
     try {
       const session = await ensureSessionToken();
       token = session?.token || '';
-    } catch (error) {}
+    } catch (error) {
+      token = String(backendApiKey || '').trim();
+      if (!token) {
+        throw new Error(
+          error?.message || 'Unable to obtain session token for realtime connection.',
+        );
+      }
+    }
   }
-  if (token) {
-    url.searchParams.set("access_token", token);
+  if (!token) {
+    throw new Error('Realtime connection blocked: missing access token.');
   }
+  url.searchParams.set("access_token", token);
   if (agentId) {
     url.searchParams.set("agentId", agentId);
   }
@@ -535,6 +543,7 @@ async function connectRealtimeBridge() {
       } catch (error) {}
     });
   } catch (error) {
+      console.warn('Realtime connection skipped:', error?.message || error);
     scheduleRealtimeReconnect();
   }
 }
