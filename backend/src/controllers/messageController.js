@@ -5,6 +5,7 @@ const SupportProtocol = require("../models/SupportProtocol");
 const { normalizePhone } = require("../utils/phone");
 const { buildServerErrorResponse } = require("../utils/httpError");
 const { emitRealtimeEvent } = require("../realtime/realtime");
+const { ensureLead, updateLead } = require("../config/crmStore");
 const {
   enqueue,
   getHelpdeskQueueOverview,
@@ -87,6 +88,65 @@ function parseBooleanFlag(value) {
   if (typeof value === "boolean") return value;
   const normalized = String(value).trim().toLowerCase();
   return normalized === "1" || normalized === "true" || normalized === "yes";
+}
+function parseWindowTimeToMinutes(value, fallback) {
+  const safe = String(value || '').trim();
+  const match = safe.match(/^(\d{2}):(\d{2})$/);
+  if (!match) return fallback;
+  const hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  if (!Number.isFinite(hours) || !Number.isFinite(minutes)) return fallback;
+  if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59) return fallback;
+  return (hours * 60) + minutes;
+}
+function getZonedTimeParts(timezone = 'America/Sao_Paulo') {
+  const formatter = new Intl.DateTimeFormat('en-US', {
+    timeZone: String(timezone || 'America/Sao_Paulo'),
+    weekday: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  });
+  const parts = formatter.formatToParts(new Date());
+  const byType = new Map(parts.map((part) => [part.type, part.value]));
+  const weekdayMap = {
+    Sun: 0,
+    Mon: 1,
+    Tue: 2,
+    Wed: 3,
+    Thu: 4,
+    Fri: 5,
+    Sat: 6,
+  };
+  return {
+    weekday: weekdayMap[byType.get('weekday')] ?? new Date().getDay(),
+    hour: Number(byType.get('hour') || 0),
+    minute: Number(byType.get('minute') || 0),
+  };
+}
+function isInsideDeliveryWindow(windowConfig = {}) {
+  if (!windowConfig || windowConfig.enabled !== true) return true;
+  let zoned;
+  try {
+    zoned = getZonedTimeParts(windowConfig.timezone || 'America/Sao_Paulo');
+  } catch (error) {
+    zoned = {
+      weekday: new Date().getDay(),
+      hour: new Date().getHours(),
+      minute: new Date().getMinutes(),
+    };
+  }
+  const allowedDays = Array.isArray(windowConfig.daysOfWeek)
+    ? windowConfig.daysOfWeek.map((item) => Number(item)).filter((item) => Number.isInteger(item) && item >= 0 && item <= 6)
+    : [0, 1, 2, 3, 4, 5, 6];
+  if (!allowedDays.includes(zoned.weekday)) return false;
+  const startMinutes = parseWindowTimeToMinutes(windowConfig.startTime, 8 * 60);
+  const endMinutes = parseWindowTimeToMinutes(windowConfig.endTime, 20 * 60);
+  const currentMinutes = (zoned.hour * 60) + zoned.minute;
+  if (startMinutes <= endMinutes) {
+    return currentMinutes >= startMinutes && currentMinutes <= endMinutes;
+  }
+  return currentMinutes >= startMinutes || currentMinutes <= endMinutes;
 }
 function extractCampaignIdFromPayload(value) {
   if (!value) return null;
@@ -1311,6 +1371,13 @@ exports.registerInboundMessage = async (req, res) => {
       ],
     };
     const [createdMessage] = await Message.insertMany([payload]);
+    ensureLead(req.agentId || 'admin', normalizedPhone, {
+      owner: req.agentId || 'admin',
+    });
+    updateLead(req.agentId || 'admin', normalizedPhone, {
+      lastInboundAt: messageDate,
+      stage: 'qualified',
+    });
     emitRealtimeEvent("messages.inbound.received", {
       phone: normalizedPhone,
       campaignId: relatedCampaignId,
@@ -1440,6 +1507,12 @@ exports.registerManualOutbound = async (req, res) => {
       ],
     };
     const [createdMessage] = await Message.insertMany([payload]);
+    ensureLead(req.agentId || 'admin', normalizedPhone, {
+      owner: req.agentId || 'admin',
+    });
+    updateLead(req.agentId || 'admin', normalizedPhone, {
+      lastOutboundAt: messageDate,
+    });
     emitRealtimeEvent("messages.outbound.manual_sent", {
       phone: normalizedPhone,
       campaignId: relatedCampaignId,
@@ -1573,6 +1646,26 @@ exports.getNextJob = async (req, res) => {
       try {
         const campaignDoc = await Campaign.findById(campaignId);
         if (campaignDoc) {
+          const deliveryWindow = campaignDoc?.antiBan?.deliveryWindow || null;
+          if (!isInsideDeliveryWindow(deliveryWindow)) {
+            const deferredMessage = await Message.findById(job._id);
+            if (deferredMessage && deferredMessage.status === "processing") {
+              deferredMessage.status = "pending";
+              deferredMessage.updatedAt = new Date();
+              appendAudit(
+                deferredMessage,
+                "deferred_by_delivery_window",
+                "Message returned to queue because campaign is outside configured delivery window.",
+                {
+                  timezone: deliveryWindow?.timezone || 'America/Sao_Paulo',
+                  startTime: deliveryWindow?.startTime || '08:00',
+                  endTime: deliveryWindow?.endTime || '20:00',
+                },
+              );
+              await deferredMessage.save();
+            }
+            return res.json({ job: null, deferredByWindow: true });
+          }
           job.media = campaignDoc.media || null;
           job.antiBan = campaignDoc.antiBan || null;
           job.campaign = {

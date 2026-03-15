@@ -7,6 +7,9 @@ router.get("/dashboard", adminController.getDashboard);
 
 // Users management
 router.get("/users", adminController.getActiveUsers);
+router.get('/admin-users', adminController.listAdminUsers);
+router.post('/admin-users', adminController.addAdminUser);
+router.delete('/admin-users/:email', adminController.removeAdminUser);
 router.get("/users/permissions", adminController.getUserPermissions);
 router.post("/users/permission", adminController.setUserPermission);
 router.post("/users/disconnect", adminController.disconnectUser);
@@ -20,11 +23,13 @@ router.put("/runtime-config", adminController.updateRuntimeConfig);
 router.get("/clients", adminController.listBotClients);
 router.post("/clients", adminController.createBotClient);
 router.patch("/clients/:clientId", adminController.updateBotClient);
+router.delete("/clients/:clientId", adminController.deleteBotClient);
 router.post("/clients/:clientId/rotate-key", adminController.rotateBotClientKey);
 router.get("/clients/:clientId/provision", adminController.getBotProvision);
 router.get("/installations", adminController.listInstallations);
 router.post("/installations/:activationCode/activate", adminController.activateInstallation);
 router.post("/installations/:activationCode/revoke", adminController.revokeInstallation);
+router.delete("/installations/:activationCode", adminController.deleteInstallation);
 
 // Security logs
 router.get("/security", adminController.getSecurityLogs);

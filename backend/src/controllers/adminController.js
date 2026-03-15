@@ -6,6 +6,7 @@ const {
   listClients,
   createClient,
   updateClient,
+  deleteClient,
   rotateClientKey,
   getAppConfig,
   updateAppConfig,
@@ -13,7 +14,12 @@ const {
   listInstallations,
   activateInstallation,
   revokeInstallation,
+  deleteInstallation,
+  listAdminUsers: listConfiguredAdminUsers,
+  addAdminUser: addConfiguredAdminUser,
+  removeAdminUser: removeConfiguredAdminUser,
 } = require("../config/adminStore");
+const { canAccessAdmin } = require("../middleware/adminAccessMiddleware");
 
 // In-memory stores for tracking
 const activeUsers = new Map();
@@ -184,6 +190,67 @@ exports.getDashboard = async (req, res) => {
   } catch (err) {
     console.error("Dashboard error:", err);
     res.status(500).json({ msg: "Failed to get dashboard data" });
+  }
+};
+
+exports.getMyAdminAccess = async (req, res) => {
+  try {
+    const allowed = canAccessAdmin(req);
+    return res.json({
+      allowed,
+      email: req.user?.email || null,
+    });
+  } catch (err) {
+    return res.status(500).json({ msg: "Failed to check admin access" });
+  }
+};
+
+exports.listAdminUsers = async (_req, res) => {
+  try {
+    return res.json({ adminUsers: listConfiguredAdminUsers() });
+  } catch (err) {
+    return res.status(500).json({ msg: "Failed to list admin users" });
+  }
+};
+
+exports.addAdminUser = async (req, res) => {
+  try {
+    const email = String(req.body?.email || '').trim().toLowerCase();
+    if (!email) {
+      return res.status(400).json({ msg: 'email is required' });
+    }
+    const added = addConfiguredAdminUser(email);
+    logSecurityEvent('admin_user_added', {
+      by: req.user?.email || req.agentId,
+      email: added,
+    });
+    return res.json({ success: true, email: added, adminUsers: listConfiguredAdminUsers() });
+  } catch (err) {
+    return res.status(500).json({ msg: 'Failed to add admin user' });
+  }
+};
+
+exports.removeAdminUser = async (req, res) => {
+  try {
+    const email = String(req.params.email || '').trim().toLowerCase();
+    if (!email) {
+      return res.status(400).json({ msg: 'email is required' });
+    }
+    const requesterEmail = String(req.user?.email || '').trim().toLowerCase();
+    if (email === requesterEmail) {
+      return res.status(400).json({ msg: 'Você não pode remover seu próprio acesso admin.' });
+    }
+    const removed = removeConfiguredAdminUser(email);
+    if (!removed) {
+      return res.status(404).json({ msg: 'Admin user not found' });
+    }
+    logSecurityEvent('admin_user_removed', {
+      by: requesterEmail || req.agentId,
+      email,
+    });
+    return res.json({ success: true, email, adminUsers: listConfiguredAdminUsers() });
+  } catch (err) {
+    return res.status(500).json({ msg: 'Failed to remove admin user' });
   }
 };
 
@@ -577,6 +644,26 @@ exports.updateBotClient = async (req, res) => {
   }
 };
 
+exports.deleteBotClient = async (req, res) => {
+  try {
+    const clientId = String(req.params.clientId || "").trim();
+    if (!clientId) {
+      return res.status(400).json({ msg: "clientId is required" });
+    }
+    const deleted = deleteClient(clientId);
+    if (!deleted) {
+      return res.status(404).json({ msg: "Bot client not found" });
+    }
+    logSecurityEvent("bot_client_deleted", {
+      by: req.agentId,
+      clientId,
+    });
+    return res.json({ success: true, clientId });
+  } catch (err) {
+    return res.status(500).json({ msg: "Failed to delete bot client" });
+  }
+};
+
 exports.rotateBotClientKey = async (req, res) => {
   try {
     const client = rotateClientKey(String(req.params.clientId || "").trim());
@@ -648,6 +735,24 @@ exports.revokeInstallation = async (req, res) => {
     res.json({ success: true, installation });
   } catch (err) {
     res.status(500).json({ msg: "Failed to revoke installation" });
+  }
+};
+
+exports.deleteInstallation = async (req, res) => {
+  try {
+    const activationCode = String(req.params.activationCode || '').trim().toUpperCase();
+    const deleted = deleteInstallation(activationCode, req.body || {});
+    if (!deleted) {
+      return res.status(404).json({ msg: "Installation not found" });
+    }
+    logSecurityEvent("installation_deleted", {
+      by: req.agentId,
+      activationCode,
+      removedClient: deleted.removedClient || null,
+    });
+    return res.json({ success: true, deleted });
+  } catch (err) {
+    return res.status(500).json({ msg: "Failed to delete installation" });
   }
 };
 

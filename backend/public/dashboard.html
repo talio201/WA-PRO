@@ -85,7 +85,7 @@
         <div class="header">
             <h1>Dashboard de Manutenção</h1>
             <div class="header-actions">
-                <button onclick="location.href='/admin.html'" class="btn-admin">🛡️ Admin Console</button>
+                    <button onclick="location.href=`${maintenanceBase}/admin`" class="btn-admin">🛡️ Admin Console</button>
                 <button onclick="logout()" class="btn-logout">Sair</button>
             </div>
         </div>
@@ -107,20 +107,45 @@
     </div>
 
     <script>
-        const SUPABASE_URL = "https://izmellnvkwbapcrfuqgp.supabase.co";
-        const SUPABASE_ANON_KEY = "[REDACTED_JWT]";
-        const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        let supabaseClient = null;
+            const maintenanceBase = location.pathname.replace(/\/dashboard\/?$/, '');
+
+        async function initSupabase() {
+            const response = await fetch('/api/public/runtime-config');
+            const payload = await response.json();
+            const supabaseUrl = String(payload?.config?.supabase?.url || '').trim();
+            const supabaseAnonKey = String(payload?.config?.supabase?.anonKey || '').trim();
+            if (!supabaseUrl || !supabaseAnonKey) {
+                throw new Error('Supabase não configurado no servidor.');
+            }
+            supabaseClient = supabase.createClient(supabaseUrl, supabaseAnonKey);
+        }
 
         async function checkAuth() {
+            if (!supabaseClient) {
+                await initSupabase();
+            }
             const { data: { session } } = await supabaseClient.auth.getSession();
             if (!session) {
-                window.location.href = '/login.html';
+                 window.location.href = maintenanceBase;
+                return;
+            }
+            const accessResponse = await fetch('/api/admin/access/me', {
+                headers: {
+                    'Authorization': `Bearer ${session.access_token}`,
+                    'x-agent-id': 'admin-console',
+                }
+            });
+            const accessPayload = await accessResponse.json().catch(() => ({}));
+            if (!accessPayload?.allowed) {
+                await supabaseClient.auth.signOut();
+                window.location.href = '/usuarios';
             }
         }
 
         async function logout() {
             await supabaseClient.auth.signOut();
-            window.location.href = '/login.html';
+              window.location.href = maintenanceBase;
         }
 
         async function fetchBotStatus() {

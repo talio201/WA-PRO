@@ -6,6 +6,55 @@ const { emitRealtimeEvent } = require("../realtime/realtime");
 const DEFAULT_MIN_DELAY_SECONDS = 0;
 const DEFAULT_MAX_DELAY_SECONDS = 120;
 const MAX_ALLOWED_DELAY_SECONDS = 3600;
+const DEFAULT_RESEND_WINDOW_HOURS = 72;
+
+function parseTimeToMinutes(value, fallback) {
+  const safe = String(value || '').trim();
+  const match = safe.match(/^(\d{2}):(\d{2})$/);
+  if (!match) return fallback;
+  const hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  if (!Number.isFinite(hours) || !Number.isFinite(minutes)) return fallback;
+  if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59) return fallback;
+  return hours * 60 + minutes;
+}
+
+function sanitizeDeliveryWindow(input = {}) {
+  const enabled = input?.enabled === true;
+  const timezone = String(input?.timezone || 'America/Sao_Paulo').trim() || 'America/Sao_Paulo';
+  const startMinutes = parseTimeToMinutes(input?.startTime, 8 * 60);
+  const endMinutes = parseTimeToMinutes(input?.endTime, 20 * 60);
+  const startHour = String(Math.floor(startMinutes / 60)).padStart(2, '0');
+  const startMinute = String(startMinutes % 60).padStart(2, '0');
+  const endHour = String(Math.floor(endMinutes / 60)).padStart(2, '0');
+  const endMinute = String(endMinutes % 60).padStart(2, '0');
+  const rawDays = Array.isArray(input?.daysOfWeek) ? input.daysOfWeek : [0, 1, 2, 3, 4, 5, 6];
+  const daysOfWeek = rawDays
+    .map((item) => Number(item))
+    .filter((item) => Number.isInteger(item) && item >= 0 && item <= 6);
+  return {
+    enabled,
+    timezone,
+    startTime: `${startHour}:${startMinute}`,
+    endTime: `${endHour}:${endMinute}`,
+    daysOfWeek: daysOfWeek.length > 0 ? Array.from(new Set(daysOfWeek)) : [0, 1, 2, 3, 4, 5, 6],
+  };
+}
+
+function sanitizeResendPolicy(input = {}) {
+  const enabled = input?.enabled !== false;
+  const onlyAfterInbound = input?.onlyAfterInbound !== false;
+  const parsedWindow = Number(input?.recentWindowHours);
+  const recentWindowHours = Number.isFinite(parsedWindow)
+    ? Math.max(1, Math.min(24 * 30, parsedWindow))
+    : DEFAULT_RESEND_WINDOW_HOURS;
+  return {
+    enabled,
+    onlyAfterInbound,
+    recentWindowHours,
+  };
+}
+
 function sanitizeAntiBanSettings(input = {}) {
   let minDelaySeconds = Number(input.minDelaySeconds);
   let maxDelaySeconds = Number(input.maxDelaySeconds);
@@ -24,7 +73,12 @@ function sanitizeAntiBanSettings(input = {}) {
   if (maxDelaySeconds < minDelaySeconds) {
     [minDelaySeconds, maxDelaySeconds] = [maxDelaySeconds, minDelaySeconds];
   }
-  return { minDelaySeconds, maxDelaySeconds };
+  return {
+    minDelaySeconds,
+    maxDelaySeconds,
+    deliveryWindow: sanitizeDeliveryWindow(input.deliveryWindow || {}),
+    resendPolicy: sanitizeResendPolicy(input.resendPolicy || {}),
+  };
 }
 function sanitizeMessageVariants(input, baseMessageTemplate) {
   const list = Array.isArray(input) ? input : [];
@@ -53,8 +107,14 @@ exports.createCampaign = async (req, res) => {
       contacts = [],
       media = null,
       antiBan = {},
+      deliveryWindow = {},
+      resendPolicy = {},
     } = req.body;
-    const antiBanSettings = sanitizeAntiBanSettings(antiBan);
+    const antiBanSettings = sanitizeAntiBanSettings({
+      ...(antiBan || {}),
+      deliveryWindow,
+      resendPolicy,
+    });
     const sanitizedVariants = sanitizeMessageVariants(
       messageVariants,
       messageTemplate,
@@ -77,11 +137,42 @@ exports.createCampaign = async (req, res) => {
       media,
     });
     await campaign.save();
+    const allMessages = await Message.find({});
+    const messagesByPhone = new Map();
+    (Array.isArray(allMessages) ? allMessages : []).forEach((item) => {
+      const phone = normalizePhone(item.phone || item.phoneOriginal).normalized;
+      if (!phone) return;
+      const list = messagesByPhone.get(phone) || [];
+      list.push(item);
+      messagesByPhone.set(phone, list);
+    });
+
+    const nowMs = Date.now();
+    const resendWindowMs = Number(antiBanSettings.resendPolicy?.recentWindowHours || DEFAULT_RESEND_WINDOW_HOURS) * 60 * 60 * 1000;
+
     const messages = contacts.map((contact, index) => {
       const phoneNormalization = normalizePhone(contact.phone);
       const normalizedPhone =
         phoneNormalization.normalized ||
         String(contact.phone || "").replace(/\D/g, "");
+      const existingByPhone = messagesByPhone.get(normalizedPhone) || [];
+      const lastOutboundAt = existingByPhone
+        .filter((item) => String(item.direction || "outbound") === "outbound" && String(item.status || "") === "sent")
+        .map((item) => new Date(item.updatedAt || item.sentAt || item.createdAt || 0).getTime())
+        .filter((value) => Number.isFinite(value) && value > 0)
+        .sort((a, b) => b - a)[0] || 0;
+      const lastInboundAt = existingByPhone
+        .filter((item) => String(item.direction || "outbound") === "inbound")
+        .map((item) => new Date(item.updatedAt || item.sentAt || item.createdAt || 0).getTime())
+        .filter((value) => Number.isFinite(value) && value > 0)
+        .sort((a, b) => b - a)[0] || 0;
+      const withinRecentWindow = lastOutboundAt > 0 && (nowMs - lastOutboundAt) <= resendWindowMs;
+      const shouldBlockResend = Boolean(
+        antiBanSettings.resendPolicy?.enabled
+        && antiBanSettings.resendPolicy?.onlyAfterInbound
+        && withinRecentWindow
+        && (!lastInboundAt || lastInboundAt <= lastOutboundAt),
+      );
       const template = shouldRotateVariants
         ? sanitizedVariants[
             Math.floor(Math.random() * sanitizedVariants.length)
@@ -98,19 +189,28 @@ exports.createCampaign = async (req, res) => {
           /{name}/g,
           contact.name || "",
         ),
-        status: "pending",
+        status: shouldBlockResend ? "failed" : "pending",
         attemptCount: 0,
-        lastError: null,
+        lastError: shouldBlockResend
+          ? "Reenvio bloqueado: contato recebeu mensagem recente sem interação posterior."
+          : null,
         audit: [
           {
             at: new Date(),
-            action: "queued",
-            details: "Message added to queue",
+            action: shouldBlockResend ? "blocked_by_resend_policy" : "queued",
+            details: shouldBlockResend
+              ? "Message blocked by resend policy (no inbound after last outbound in recent window)."
+              : "Message added to queue",
           },
         ],
         updatedAt: new Date(),
       };
     });
+    const blockedCount = messages.filter((item) => item.status === "failed").length;
+    if (blockedCount > 0) {
+      campaign.stats.failed = (campaign.stats.failed || 0) + blockedCount;
+      await campaign.save();
+    }
     if (messages.length > 0) {
       await Message.insertMany(messages);
     }

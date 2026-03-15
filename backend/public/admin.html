@@ -673,6 +673,58 @@
                     </div>
                 </div>
             </div>
+
+            <div class="card" style="margin-top: 1.5rem;">
+                <div class="card-header">
+                    <h3>🛡️ Administradores autorizados</h3>
+                    <button onclick="loadAdminUsers()" class="btn btn-secondary">🔄 Atualizar</button>
+                </div>
+                <div class="card-body">
+                    <div style="display:flex; gap:0.5rem; margin-bottom: 1rem;">
+                        <input id="new-admin-email" class="form-input" placeholder="email@dominio.com" style="max-width: 340px;">
+                        <button onclick="addAdminUser()" class="btn btn-primary">Adicionar admin</button>
+                    </div>
+                    <div class="table-container">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Email</th>
+                                    <th>Ações</th>
+                                </tr>
+                            </thead>
+                            <tbody id="admin-users-table">
+                                <tr><td colspan="2" style="text-align:center; color: var(--text-secondary)">Carregando...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card" style="margin-top: 1.5rem;">
+                <div class="card-header">
+                    <h3>🪪 Usuários SaaS e Licenças</h3>
+                    <button onclick="refreshUsersAndLicenses()" class="btn btn-secondary">🔄 Atualizar</button>
+                </div>
+                <div class="card-body">
+                    <div class="table-container">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Código</th>
+                                    <th>Status</th>
+                                    <th>Plano</th>
+                                    <th>Expira</th>
+                                    <th>Última atividade</th>
+                                    <th>Ações</th>
+                                </tr>
+                            </thead>
+                            <tbody id="users-licenses-table">
+                                <tr><td colspan="6" style="text-align:center; color: var(--text-secondary)">Carregando...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
         </div>
 
         <!-- Security Tab -->
@@ -993,10 +1045,28 @@
     <script>
         const API_URL = '/api';
         const WS_URL = location.protocol === 'https:' ? 'wss://' + location.host + '/ws' : 'ws://' + location.host + '/ws';
+        const maintenanceBase = location.pathname.replace(/\/admin\/?$/, '');
         
-        const SUPABASE_URL = "https://izmellnvkwbapcrfuqgp.supabase.co";
-        const SUPABASE_ANON_KEY = "[REDACTED_JWT]";
-        const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        let supabaseClient = null;
+        let _supabaseInitPromise = null;
+
+        async function initSupabase() {
+            // Singleton: guarantee only one createClient call ever runs
+            if (supabaseClient) return supabaseClient;
+            if (_supabaseInitPromise) return _supabaseInitPromise;
+            _supabaseInitPromise = (async () => {
+                const response = await fetch('/api/public/runtime-config');
+                const payload = await response.json();
+                const supabaseUrl = String(payload?.config?.supabase?.url || '').trim();
+                const supabaseAnonKey = String(payload?.config?.supabase?.anonKey || '').trim();
+                if (!supabaseUrl || !supabaseAnonKey) {
+                    throw new Error('Supabase não configurado no servidor.');
+                }
+                supabaseClient = supabase.createClient(supabaseUrl, supabaseAnonKey);
+                return supabaseClient;
+            })();
+            return _supabaseInitPromise;
+        }
 
         let ws = null;
         let autoScroll = true;
@@ -1007,9 +1077,24 @@
 
         // Auth check
         async function checkAuth() {
+            if (!supabaseClient) {
+                await initSupabase();
+            }
             const { data: { session } } = await supabaseClient.auth.getSession();
             if (!session) {
-                window.location.href = '/login.html';
+                window.location.href = maintenanceBase;
+                return null;
+            }
+            const accessResponse = await fetch('/api/admin/access/me', {
+                headers: {
+                    'Authorization': `Bearer ${session.access_token}`,
+                    'x-agent-id': 'admin-console',
+                }
+            });
+            const accessPayload = await accessResponse.json().catch(() => ({}));
+            if (!accessPayload?.allowed) {
+                await supabaseClient.auth.signOut();
+                window.location.href = '/usuarios';
                 return null;
             }
             return session;
@@ -1017,7 +1102,7 @@
 
         async function logout() {
             await supabaseClient.auth.signOut();
-            window.location.href = '/login.html';
+            window.location.href = maintenanceBase;
         }
 
         // API Helper
@@ -1308,6 +1393,94 @@
             }
         }
 
+        function renderInstallationsRows(targetId, installations = []) {
+            const tbody = document.getElementById(targetId);
+            if (!tbody) return;
+            if (!installations.length) {
+                tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; color: var(--text-secondary)">Nenhuma instalação registrada</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = installations.map((installation) => {
+                const status = String(installation.status || 'pending').toLowerCase();
+                const badgeClass = status === 'active'
+                    ? 'badge-success'
+                    : status === 'pending'
+                        ? 'badge-warning'
+                        : 'badge-danger';
+                return `
+                    <tr>
+                        <td><code>${installation.activationCode}</code></td>
+                        <td><span class="badge ${badgeClass}">${status.toUpperCase()}</span></td>
+                        <td>${installation.planTerm || '-'}</td>
+                        <td>${installation.expiresAt ? new Date(installation.expiresAt).toLocaleString() : 'Vitalício / -'}</td>
+                        <td>${installation.lastSeenAt ? new Date(installation.lastSeenAt).toLocaleString() : '-'}</td>
+                        <td>
+                            <button onclick="approveInstallation('${installation.activationCode}', 'demo')" class="btn btn-primary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;">Demo</button>
+                            <button onclick="approveInstallation('${installation.activationCode}', '30d')" class="btn btn-primary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;">30d</button>
+                            <button onclick="approveInstallation('${installation.activationCode}', '60d')" class="btn btn-primary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;">60d</button>
+                            <button onclick="approveInstallation('${installation.activationCode}', '12m')" class="btn btn-primary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;">12m</button>
+                            <button onclick="approveInstallation('${installation.activationCode}', 'lifetime')" class="btn btn-secondary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;">Vitalício</button>
+                            <button onclick="blockInstallation('${installation.activationCode}')" class="btn btn-secondary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;">Bloquear</button>
+                            <button onclick="revokeInstallation('${installation.activationCode}')" class="btn btn-danger" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;">Revogar</button>
+                            <button onclick="deleteInstallation('${installation.activationCode}')" class="btn btn-danger" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;">Excluir</button>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        async function refreshUsersAndLicenses() {
+            await refreshUsers();
+            const installationsResponse = await apiRequest('/admin/installations');
+            const installations = installationsResponse.installations || [];
+            renderInstallationsRows('users-licenses-table', installations);
+            await loadAdminUsers();
+        }
+
+        async function loadAdminUsers() {
+            const result = await apiRequest('/admin/admin-users');
+            const list = result.adminUsers || [];
+            const tbody = document.getElementById('admin-users-table');
+            if (!list.length) {
+                tbody.innerHTML = '<tr><td colspan="2" style="text-align:center; color: var(--text-secondary)">Nenhum administrador cadastrado</td></tr>';
+                return;
+            }
+            tbody.innerHTML = list.map((email) => `
+                <tr>
+                    <td><code>${email}</code></td>
+                    <td>
+                        <button onclick="removeAdminUser('${email}')" class="btn btn-danger" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;">Remover</button>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        async function addAdminUser() {
+            const input = document.getElementById('new-admin-email');
+            const email = String(input?.value || '').trim().toLowerCase();
+            if (!email) {
+                showToast('Digite o email do administrador', 'error');
+                return;
+            }
+            await apiRequest('/admin/admin-users', {
+                method: 'POST',
+                body: JSON.stringify({ email })
+            });
+            input.value = '';
+            showToast(`Administrador ${email} adicionado.`);
+            await loadAdminUsers();
+        }
+
+        async function removeAdminUser(email) {
+            if (!confirm(`Remover acesso admin de ${email}?`)) return;
+            await apiRequest(`/admin/admin-users/${encodeURIComponent(email)}`, {
+                method: 'DELETE'
+            });
+            showToast(`Administrador ${email} removido.`, 'warning');
+            await loadAdminUsers();
+        }
+
         async function togglePermission(agentId, allowed) {
             await apiRequest('/admin/users/permission', {
                 method: 'POST',
@@ -1425,36 +1598,8 @@
                 `).join('');
 
                 const installations = installationsResponse.installations || [];
-                const installTbody = document.getElementById('installations-table');
-                if (!installations.length) {
-                    installTbody.innerHTML = '<tr><td colspan="6" style="text-align:center; color: var(--text-secondary)">Nenhuma instalação registrada</td></tr>';
-                } else {
-                    installTbody.innerHTML = installations.map((installation) => {
-                        const status = String(installation.status || 'pending').toLowerCase();
-                        const badgeClass = status === 'active'
-                            ? 'badge-success'
-                            : status === 'pending'
-                                ? 'badge-warning'
-                                : 'badge-danger';
-                        return `
-                            <tr>
-                                <td><code>${installation.activationCode}</code></td>
-                                <td><span class="badge ${badgeClass}">${status.toUpperCase()}</span></td>
-                                <td>${installation.planTerm || '-'}</td>
-                                <td>${installation.expiresAt ? new Date(installation.expiresAt).toLocaleString() : 'Vitalício / -'}</td>
-                                <td>${installation.lastSeenAt ? new Date(installation.lastSeenAt).toLocaleString() : '-'}</td>
-                                <td>
-                                    <button onclick="approveInstallation('${installation.activationCode}', '30d')" class="btn btn-primary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;">30d</button>
-                                    <button onclick="approveInstallation('${installation.activationCode}', '60d')" class="btn btn-primary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;">60d</button>
-                                    <button onclick="approveInstallation('${installation.activationCode}', '90d')" class="btn btn-primary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;">90d</button>
-                                    <button onclick="approveInstallation('${installation.activationCode}', '365d')" class="btn btn-primary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;">Anual</button>
-                                    <button onclick="approveInstallation('${installation.activationCode}', 'lifetime')" class="btn btn-secondary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;">Vitalício</button>
-                                    <button onclick="revokeInstallation('${installation.activationCode}')" class="btn btn-danger" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;">Revogar</button>
-                                </td>
-                            </tr>
-                        `;
-                    }).join('');
-                }
+                renderInstallationsRows('installations-table', installations);
+                renderInstallationsRows('users-licenses-table', installations);
             } catch (error) {
                 console.error('Provisioning load error:', error);
             }
@@ -1476,6 +1621,25 @@
                 body: JSON.stringify({ status: 'revoked' })
             });
             showToast(`Instalação ${activationCode} revogada.`, 'warning');
+            await loadProvisioningData();
+        }
+
+        async function blockInstallation(activationCode) {
+            if (!confirm(`Bloquear temporariamente instalação ${activationCode}?`)) return;
+            await apiRequest(`/admin/installations/${encodeURIComponent(activationCode)}/revoke`, {
+                method: 'POST',
+                body: JSON.stringify({ status: 'suspended' })
+            });
+            showToast(`Instalação ${activationCode} bloqueada.`, 'warning');
+            await loadProvisioningData();
+        }
+
+        async function deleteInstallation(activationCode) {
+            if (!confirm(`Excluir definitivamente instalação ${activationCode}?`)) return;
+            await apiRequest(`/admin/installations/${encodeURIComponent(activationCode)}`, {
+                method: 'DELETE'
+            });
+            showToast(`Instalação ${activationCode} excluída.`, 'warning');
             await loadProvisioningData();
         }
 
@@ -1654,8 +1818,7 @@
         // Bot status
         async function fetchBotStatus() {
             try {
-                const response = await fetch('/api/bot/status');
-                const data = await response.json();
+                const data = await apiRequest('/bot/status');
                 const statusText = document.getElementById('bot-status-text');
                 statusText.textContent = data.status || 'Desconectado';
                 statusText.className = `stat-value ${data.status === 'CONNECTED' ? 'success' : data.status === 'SCANNING' ? 'warning' : 'danger'}`;
@@ -1670,6 +1833,7 @@
         refreshDashboard();
         fetchBotStatus();
         loadProvisioningData();
+        loadAdminUsers();
 
         // Refresh intervals
         setInterval(refreshDashboard, 30000);

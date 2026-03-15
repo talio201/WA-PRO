@@ -1,13 +1,15 @@
-import { ensureSessionToken, getRuntimeConfig, getRuntimeConfigSync, runtimeConfigReady } from './runtimeConfig';
+import { ensureSessionToken, getRuntimeConfig, getRuntimeConfigSync, runtimeConfigReady } from './runtimeConfig.js';
 
 const DEFAULT_WS_URL = getRuntimeConfigSync().backendWsUrl;
+
 function safeParseMessage(raw) {
   try {
-    return JSON.parse(String(raw || "{}"));
-  } catch (error) {
+    return JSON.parse(String(raw || '{}'));
+  } catch (_error) {
     return null;
   }
 }
+
 export function connectRealtime({
   onEvent = () => {},
   onStatus = () => {},
@@ -18,6 +20,7 @@ export function connectRealtime({
   let reconnectTimer = null;
   let heartbeatTimer = null;
   let attempt = 0;
+
   const clearTimers = () => {
     if (reconnectTimer) {
       clearTimeout(reconnectTimer);
@@ -28,91 +31,89 @@ export function connectRealtime({
       heartbeatTimer = null;
     }
   };
+
   const scheduleReconnect = () => {
     if (isDisposed) return;
-    const backoff = Math.min(
-      15000,
-      1000 * 2 ** attempt + Math.floor(Math.random() * 400),
-    );
+    const backoff = Math.min(15000, 1000 * 2 ** attempt + Math.floor(Math.random() * 400));
     attempt += 1;
     reconnectTimer = setTimeout(() => {
       connect();
     }, backoff);
   };
+
   const startHeartbeat = () => {
     heartbeatTimer = setInterval(() => {
       try {
         if (socket && socket.readyState === WebSocket.OPEN) {
-          socket.send(JSON.stringify({ type: "ping", at: Date.now() }));
+          socket.send(JSON.stringify({ type: 'ping', at: Date.now() }));
         }
-      } catch (error) {}
+      } catch (_error) {}
     }, 25000);
   };
+
   const connect = async () => {
     if (isDisposed) return;
     clearTimers();
-    onStatus("connecting");
+    onStatus('connecting');
     try {
       await runtimeConfigReady;
       const config = await getRuntimeConfig();
       const resolvedUrl = new URL(wsUrl || config.backendWsUrl);
+
       let token = config.accessToken || '';
       if (!token) {
-        try {
-          const session = await ensureSessionToken();
-          token = session?.token || '';
-        } catch (error) {
-          token = String(config.backendApiKey || '').trim();
-          if (!token) {
-            throw new Error(
-              error?.message || 'Unable to obtain session token for realtime connection.',
-            );
-          }
-        }
+        const session = await ensureSessionToken();
+        token = session?.token || '';
       }
       if (!token) {
         throw new Error('Realtime connection blocked: missing access token.');
       }
+
       resolvedUrl.searchParams.set('access_token', token);
       if (config.agentId) {
         resolvedUrl.searchParams.set('agentId', config.agentId);
       }
+
       socket = new WebSocket(resolvedUrl.toString());
     } catch (error) {
-      console.warn('Realtime connection skipped:', error?.message || error);
-      onStatus("error");
+      onStatus('error');
       scheduleReconnect();
       return;
     }
+
     socket.onopen = () => {
       attempt = 0;
-      onStatus("connected");
+      onStatus('connected');
       startHeartbeat();
     };
+
     socket.onmessage = (event) => {
       const message = safeParseMessage(event.data);
-      if (!message) return;
-      if (message.type !== "event") return;
+      if (!message || message.type !== 'event') return;
       onEvent(message);
     };
+
     socket.onerror = () => {
-      onStatus("error");
+      onStatus('error');
     };
+
     socket.onclose = () => {
-      onStatus("disconnected");
+      onStatus('disconnected');
       clearTimers();
       scheduleReconnect();
     };
   };
+
   connect();
+
   return () => {
     isDisposed = true;
     clearTimers();
-    onStatus("disconnected");
+    onStatus('disconnected');
     if (socket) {
       try {
         socket.close();
-      } catch (error) {}
+      } catch (_error) {}
     }
   };
 }

@@ -10,8 +10,11 @@ const {
   emitRealtimeEvent,
 } = require("./realtime/realtime");
 const requireAuth = require("./middleware/authMiddleware");
+const { requireAdminAccess } = require("./middleware/adminAccessMiddleware");
 
 const app = express();
+const maintenanceBasePath = (`/${String(process.env.ADMIN_PORTAL_PATH || 'painel-interno').trim().replace(/^\/+|\/+$/g, '')}`).replace(/\/+/g, '/');
+const blockedMaintenancePublicPaths = new Set(['/login.html', '/dashboard.html', '/admin.html']);
 
 // Enable trust proxy for Cloudflare/Proxy environments
 app.set("trust proxy", 1);
@@ -33,6 +36,25 @@ app.get("/health", (req, res) => {
   res.status(200).json({ status: "ok", message: "Backend is running and healthy" });
 });
 
+app.get("/api/health", (req, res) => {
+  res.status(200).json({ status: "ok", message: "Backend is running and healthy" });
+});
+
+app.get("/", (_req, res) => {
+  return res.redirect(302, "/usuarios");
+});
+
+app.get("/index.html", (_req, res) => {
+  return res.redirect(302, "/usuarios");
+});
+
+app.use((req, res, next) => {
+  if (blockedMaintenancePublicPaths.has(req.path)) {
+    return res.status(404).send('Not found');
+  }
+  return next();
+});
+
 // 2. Serve static files FIRST
 app.use(express.static(path.join(__dirname, "../public"), {
   maxAge: "1d",
@@ -46,20 +68,27 @@ app.use("/uploads", express.static(path.join(__dirname, "../uploads"), {
 const { sendFlowLogger } = require("./monitorSendFlow");
 app.use("/api/messages", sendFlowLogger);
 
-// Bot status endpoints - public (before auth middleware)
-let botState = { status: 'DISCONNECTED', qrCode: null };
+// Bot status endpoints - multi-tenant
+const botStates = new Map(); // agentId -> { status, qrCode }
 
-app.post("/api/bot/status", (req, res) => {
-  const { status, qrCodeBase64 } = req.body;
-  if (status) botState.status = status;
-  if (qrCodeBase64 !== undefined) botState.qrCode = qrCodeBase64;
+app.post("/api/bot/status", requireAuth, (req, res) => {
+  const { status, qrCodeBase64, agentId } = req.body;
+  const targetId = agentId || req.agentId || "system";
   
-  emitRealtimeEvent("bot.status", botState);
-  res.json({ success: true, botState });
+  const currentState = botStates.get(targetId) || { status: 'DISCONNECTED', qrCode: null };
+  if (status) currentState.status = status;
+  if (qrCodeBase64 !== undefined) currentState.qrCode = qrCodeBase64;
+  
+  botStates.set(targetId, currentState);
+  
+  emitRealtimeEvent("bot.status", { ...currentState, agentId: targetId });
+  res.json({ success: true, botState: currentState });
 });
 
-app.get("/api/bot/status", (req, res) => {
-  res.json(botState);
+app.get("/api/bot/status", requireAuth, (req, res) => {
+  const agentId = req.headers["x-agent-id"] || req.query.agentId || req.agentId || "system";
+  const state = botStates.get(agentId) || { status: 'DISCONNECTED', qrCode: null };
+  res.json(state);
 });
 
 app.use("/api/public", require("./routes/publicRoutes"));
@@ -68,22 +97,58 @@ app.use("/api/public", require("./routes/publicRoutes"));
 app.use("/api", requireAuth);
 
 // Track user activity for admin dashboard
-const { trackUserActivity } = require("./controllers/adminController");
+const adminController = require("./controllers/adminController");
+const { trackUserActivity } = adminController;
 app.use(trackUserActivity);
 
-app.use("/api/admin", require("./routes/adminRoutes"));
+app.get('/api/admin/access/me', adminController.getMyAdminAccess);
+
+app.use("/api/admin", requireAdminAccess, require("./routes/adminRoutes"));
 app.use("/api/campaigns", require("./routes/campaignRoutes"));
 app.use("/api/messages", require("./routes/messageRoutes"));
 app.use("/api/contacts", require("./routes/contactRoutes"));
 app.use("/api/upload", require("./routes/uploadRoutes"));
 app.use("/api/ai", require("./routes/aiRoutes"));
 
-// 3. SPA Fallback - Redirect unmatched non-API routes to login.html
+// 3. Web app (SaaS) - serve Vite build under /usuarios
+app.use("/usuarios", express.static(path.join(__dirname, "../public/app"), {
+  index: false,
+  maxAge: "1d",
+  etag: false
+}));
+app.get("/usuarios", (req, res) => {
+  res.set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+  res.sendFile(path.join(__dirname, "../public/app/index.html"));
+});
+app.get("/usuarios.html", (req, res) => {
+  res.redirect(302, "/usuarios");
+});
+app.get("/usuarios/*", (req, res) => {
+  res.set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+  res.sendFile(path.join(__dirname, "../public/app/index.html"));
+});
+
+app.get(maintenanceBasePath, (req, res) => {
+  res.set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+  res.sendFile(path.join(__dirname, "../public/login.html"));
+});
+
+app.get(`${maintenanceBasePath}/dashboard`, (req, res) => {
+  res.set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+  res.sendFile(path.join(__dirname, "../public/dashboard.html"));
+});
+
+app.get(`${maintenanceBasePath}/admin`, (req, res) => {
+  res.set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+  res.sendFile(path.join(__dirname, "../public/admin.html"));
+});
+
+// 4. SPA Fallback - Redirect unmatched non-API routes to login.html
 app.get("*", (req, res) => {
   if (req.path.startsWith("/api") || req.path.startsWith("/uploads")) {
     return res.status(404).json({ msg: "Not found" });
   }
-  res.sendFile(path.join(__dirname, "../public/login.html"));
+  return res.redirect(302, "/usuarios");
 });
 
 app.use((err, req, res, next) => {

@@ -73,10 +73,11 @@ Deploy é feito via terminal remoto (SSH). Conecte ao servidor e rode:
 ```bash
 cd /opt/EmidiaWhats
 git pull origin main
-docker-compose down
 docker-compose up -d --build
 docker-compose ps
 ```
+
+Observação: evite `docker-compose down` no deploy padrão para não causar indisponibilidade quando houver erro de configuração.
 
 ## 📋 Setup Inicial do Servidor (primeira vez)
 Se for um novo servidor, rode uma vez:

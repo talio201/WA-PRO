@@ -3,6 +3,7 @@ const {
   getInstallationByActivationCode,
   validateInstallationCredentials,
   touchInstallation,
+  getAppConfig,
 } = require('../config/adminStore');
 const {
   issueInstallationSessionToken,
@@ -100,5 +101,24 @@ exports.heartbeat = async (req, res) => {
     return res.json({ success: true, installation: updated });
   } catch (error) {
     return res.status(500).json({ msg: 'Failed to update heartbeat.' });
+  }
+};
+
+exports.getPublicRuntimeConfig = async (req, res) => {
+  try {
+    const appConfig = getAppConfig();
+    return res.json({
+      success: true,
+      config: {
+        backendApiUrl: appConfig.backendApiUrl,
+        backendWsUrl: appConfig.backendWsUrl,
+        supabase: {
+          url: String(process.env.SUPABASE_URL || '').trim(),
+          anonKey: String(process.env.SUPABASE_ANON_KEY || '').trim(),
+        },
+      },
+    });
+  } catch (error) {
+    return res.status(500).json({ msg: 'Failed to get runtime config.' });
   }
 };
