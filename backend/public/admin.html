@@ -617,6 +617,22 @@
                     </div>
                 </div>
             </div>
+        </div>
+
+        <!-- Users Tab -->
+        <div id="tab-users" class="tab-content">
+            <div class="card">
+                <div class="card-header">
+                    <h3>👥 Usuários Conectados</h3>
+                    <button onclick="refreshUsers()" class="btn btn-secondary">🔄 Atualizar</button>
+                </div>
+                <div class="card-body">
+                    <div class="table-container">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Agent ID</th>
+                                    <th>IP</th>
                                     <th>Última Atividade</th>
                                     <th>Tempo de Sessão</th>
                                     <th>Permissão</th>
@@ -1141,7 +1157,10 @@
                 document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
                 document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
                 tab.classList.add('active');
-                document.getElementById(`tab-${tab.dataset.tab}`).classList.add('active');
+                const targetTab = document.getElementById(`tab-${tab.dataset.tab}`);
+                if (targetTab) {
+                    targetTab.classList.add('active');
+                }
             });
         });
 
