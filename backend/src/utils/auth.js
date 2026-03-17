@@ -10,6 +10,7 @@ const {
   getSaasUserByEmail,
   touchSaasUserLogin,
   isAdminEmail,
+  upsertSaasUser,
 } = require('../config/adminStore');
 
 function toBase64Url(value) {
@@ -168,13 +169,31 @@ async function authenticateBearerToken(token, agentId = '') {
         if (!adminBypass) {
           saasUser = getSaasUserByEmail(email);
           if (!saasUser) {
-            return null;
+            const defaultAgentId = String(
+              user?.user_metadata?.agentId
+              || user?.app_metadata?.agentId
+              || `user_${String(user.id || '').slice(0, 12)}`,
+            ).trim();
+            saasUser = upsertSaasUser({
+              email,
+              agentId: defaultAgentId,
+              status: 'pending',
+              metadata: {
+                source: 'supabase-signin',
+                createdBy: 'auto-registration',
+              },
+            });
           }
-          if (saasUser.status !== 'active') {
-            return null;
-          }
-          if (saasUser.expiresAt && new Date(saasUser.expiresAt).getTime() <= Date.now()) {
-            return null;
+          const nowMs = Date.now();
+          if (saasUser.expiresAt && new Date(saasUser.expiresAt).getTime() <= nowMs) {
+            saasUser = upsertSaasUser({
+              email,
+              status: 'suspended',
+              metadata: {
+                autoSuspendedAt: new Date().toISOString(),
+                reason: 'license_expired',
+              },
+            });
           }
           touchSaasUserLogin(email, {
             lastAuthAt: new Date().toISOString(),
@@ -197,11 +216,11 @@ async function authenticateBearerToken(token, agentId = '') {
           agentId: resolvedAgentId || 'admin',
           saasUser,
           permissions: {
-            allowGemini: true,
-            allowRealtime: true,
-            allowCampaigns: true,
-            allowContacts: true,
-            allowInbox: true,
+            allowGemini: adminBypass || saasUser?.status === 'active',
+            allowRealtime: adminBypass || saasUser?.status === 'active',
+            allowCampaigns: adminBypass || saasUser?.status === 'active',
+            allowContacts: adminBypass || saasUser?.status === 'active',
+            allowInbox: adminBypass || saasUser?.status === 'active',
           },
         };
       }

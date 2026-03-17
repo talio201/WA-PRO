@@ -100,6 +100,7 @@ function removeAdminUser(email = '') {
 
 function normalizeSaasUserStatus(value = '') {
   const safe = String(value || '').trim().toLowerCase();
+  if (safe === 'pending' || safe === 'awaiting_approval' || safe === 'aguardando') return 'pending';
   if (safe === 'suspended' || safe === 'blocked') return 'suspended';
   if (safe === 'deleted' || safe === 'removed') return 'deleted';
   return 'active';

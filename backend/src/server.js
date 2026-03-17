@@ -73,6 +73,15 @@ app.use("/api/messages", sendFlowLogger);
 const botStates = new Map(); // agentId -> { status, qrCode }
 
 app.post("/api/bot/status", requireAuth, (req, res) => {
+  if (req.user && req.agentId !== 'admin') {
+    const status = String(req.saasUser?.status || 'pending').trim().toLowerCase();
+    if (status !== 'active') {
+      return res.status(403).json({ msg: 'Conta aguardando aprovação para ativar WhatsApp.' });
+    }
+    if (req.saasUser?.expiresAt && new Date(req.saasUser.expiresAt).getTime() <= Date.now()) {
+      return res.status(403).json({ msg: 'Licença expirada para ativação do WhatsApp.' });
+    }
+  }
   const { status, qrCodeBase64, agentId } = req.body;
   const targetId = agentId || req.agentId || "system";
   
@@ -87,6 +96,21 @@ app.post("/api/bot/status", requireAuth, (req, res) => {
 });
 
 app.get("/api/bot/status", requireAuth, (req, res) => {
+  if (req.user && req.agentId !== 'admin') {
+    const status = String(req.saasUser?.status || 'pending').trim().toLowerCase();
+    if (status !== 'active') {
+      return res.status(403).json({
+        status: 'PENDING_APPROVAL',
+        msg: 'Conta aguardando aprovação administrativa.',
+      });
+    }
+    if (req.saasUser?.expiresAt && new Date(req.saasUser.expiresAt).getTime() <= Date.now()) {
+      return res.status(403).json({
+        status: 'LICENSE_EXPIRED',
+        msg: 'Licença expirada.',
+      });
+    }
+  }
   const agentId = req.headers["x-agent-id"] || req.query.agentId || req.agentId || "system";
   const state = botStates.get(agentId) || { status: 'DISCONNECTED', qrCode: null };
   res.json(state);
@@ -106,6 +130,51 @@ app.use("/api/public", require("./routes/publicRoutes"));
 // Protected API routes
 app.use("/api", requireAuth);
 
+app.get('/api/account/status', (req, res) => {
+  const saasUser = req.saasUser || null;
+  const isAdmin = req.user && req.agentId === 'admin';
+  const now = Date.now();
+  const expiresAt = saasUser?.expiresAt || null;
+  const expired = Boolean(expiresAt && new Date(expiresAt).getTime() <= now);
+  const status = isAdmin
+    ? 'active'
+    : String(saasUser?.status || 'pending').trim().toLowerCase();
+
+  return res.json({
+    success: true,
+    account: {
+      email: req.user?.email || null,
+      agentId: req.agentId || null,
+      status: expired ? 'expired' : status,
+      isAdmin,
+      planTerm: saasUser?.planTerm || null,
+      expiresAt,
+      activationCode: saasUser?.activationCode || null,
+      clientId: saasUser?.clientId || null,
+    },
+  });
+});
+
+function requireActiveSaasAccount(req, res, next) {
+  if (!req.user) return next();
+  if (req.agentId === 'admin') return next();
+  const saasUser = req.saasUser || null;
+  const status = String(saasUser?.status || 'pending').trim().toLowerCase();
+  if (status !== 'active') {
+    return res.status(403).json({
+      msg: 'Sua conta está aguardando aprovação administrativa.',
+      accountStatus: status,
+    });
+  }
+  if (saasUser?.expiresAt && new Date(saasUser.expiresAt).getTime() <= Date.now()) {
+    return res.status(403).json({
+      msg: 'Sua licença expirou. Solicite renovação ao administrador.',
+      accountStatus: 'expired',
+    });
+  }
+  return next();
+}
+
 // Track user activity for admin dashboard
 const adminController = require("./controllers/adminController");
 const { trackUserActivity } = adminController;
@@ -114,11 +183,11 @@ app.use(trackUserActivity);
 app.get('/api/admin/access/me', adminController.getMyAdminAccess);
 
 app.use("/api/admin", requireAdminAccess, require("./routes/adminRoutes"));
-app.use("/api/campaigns", require("./routes/campaignRoutes"));
-app.use("/api/messages", require("./routes/messageRoutes"));
-app.use("/api/contacts", require("./routes/contactRoutes"));
-app.use("/api/upload", require("./routes/uploadRoutes"));
-app.use("/api/ai", require("./routes/aiRoutes"));
+app.use('/api/campaigns', requireActiveSaasAccount, require("./routes/campaignRoutes"));
+app.use('/api/messages', requireActiveSaasAccount, require("./routes/messageRoutes"));
+app.use('/api/contacts', requireActiveSaasAccount, require("./routes/contactRoutes"));
+app.use('/api/upload', requireActiveSaasAccount, require("./routes/uploadRoutes"));
+app.use('/api/ai', requireActiveSaasAccount, require("./routes/aiRoutes"));
 
 // 3. Web app (SaaS) - serve Vite build under /usuarios
 app.use("/usuarios", express.static(path.join(__dirname, "../public/app"), {

@@ -72,6 +72,7 @@ const requireAuth = async (req, res, next) => {
       req.user = authResult.user;
       req.agentId = authResult.agentId;
       req.permissions = authResult.permissions || {};
+      req.saasUser = authResult.saasUser || null;
       return next();
     }
   }
