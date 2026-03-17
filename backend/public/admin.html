@@ -561,8 +561,7 @@
             <button class="tab" data-tab="users">👥 Usuários</button>
             <button class="tab" data-tab="security">🔒 Segurança</button>
             <button class="tab" data-tab="bot">🤖 Bot Monitor</button>
-            <button class="tab" data-tab="extension">📦 Extensão</button>
-            <button class="tab" data-tab="console">💻 Console</button>
+            <button class="tab" data-tab="extension">🧩 Operações SaaS</button>
         </div>
 
         <!-- Overview Tab -->
@@ -618,48 +617,6 @@
                     </div>
                 </div>
             </div>
-
-            <div class="card" style="margin-top: 1.5rem;">
-                <div class="card-header">
-                    <h3>🖥️ Informações do Sistema</h3>
-                </div>
-                <div class="card-body">
-                    <div class="grid grid-4" id="system-info">
-                        <div>
-                            <div class="stat-label">Plataforma</div>
-                            <div id="sys-platform">-</div>
-                        </div>
-                        <div>
-                            <div class="stat-label">Node.js</div>
-                            <div id="sys-node">-</div>
-                        </div>
-                        <div>
-                            <div class="stat-label">Hostname</div>
-                            <div id="sys-hostname">-</div>
-                        </div>
-                        <div>
-                            <div class="stat-label">Arquitetura</div>
-                            <div id="sys-arch">-</div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Users Tab -->
-        <div id="tab-users" class="tab-content">
-            <div class="card">
-                <div class="card-header">
-                    <h3>👥 Usuários Conectados</h3>
-                    <button onclick="refreshUsers()" class="btn btn-secondary">🔄 Atualizar</button>
-                </div>
-                <div class="card-body">
-                    <div class="table-container">
-                        <table>
-                            <thead>
-                                <tr>
-                                    <th>Agent ID</th>
-                                    <th>IP</th>
                                     <th>Última Atividade</th>
                                     <th>Tempo de Sessão</th>
                                     <th>Permissão</th>
@@ -870,33 +827,27 @@
             </div>
         </div>
 
-        <!-- Extension Tab -->
+        <!-- SaaS Operations Tab -->
         <div id="tab-extension" class="tab-content">
             <div class="grid grid-2">
                 <div class="card extension-card">
-                    <div class="extension-icon">📦</div>
-                    <div class="extension-title">EmidiaWhats Extension</div>
-                    <div class="extension-version" id="ext-version">v2.0.0 PRO</div>
-                    <div class="extension-actions">
-                        <button onclick="downloadExtension()" class="btn btn-primary">⬇️ Download ZIP</button>
-                        <button onclick="showSendModal()" class="btn btn-secondary">📧 Enviar por Email</button>
-                    </div>
+                    <div class="extension-icon">🧩</div>
+                    <div class="extension-title">Operações da Plataforma SaaS</div>
+                    <div class="extension-version" id="ext-version">Gestão de bots, licenças e runtime</div>
                     <div style="margin-top: 2rem; text-align: left;">
-                        <h4 style="margin-bottom: 1rem;">📋 Instruções de Instalação:</h4>
+                        <h4 style="margin-bottom: 1rem;">📋 Fluxo recomendado:</h4>
                         <ol id="install-instructions" style="color: var(--text-secondary); line-height: 2;">
-                            <li>Clique em Download para baixar a extensão</li>
-                            <li>Extraia o arquivo ZIP</li>
-                            <li>Abra chrome://extensions no Chrome</li>
-                            <li>Ative "Modo do desenvolvedor"</li>
-                            <li>Clique em "Carregar sem compactação"</li>
-                            <li>Selecione a pasta extraída</li>
+                            <li>Cliente cria conta e entra em status pendente</li>
+                            <li>Admin aprova e define plano/licença</li>
+                            <li>Cliente ativo escaneia QR e começa a usar</li>
+                            <li>Admin pode desconectar WhatsApp por agentId</li>
                         </ol>
                     </div>
                 </div>
 
                 <div class="card">
                     <div class="card-header">
-                        <h3>📊 Estatísticas da Extensão</h3>
+                        <h3>📊 Estatísticas Operacionais</h3>
                     </div>
                     <div class="card-body">
                         <div class="grid grid-2">
@@ -910,7 +861,7 @@
                             </div>
                         </div>
                         <div style="margin-top: 1.5rem;">
-                            <h4 style="margin-bottom: 0.5rem;">Recursos:</h4>
+                            <h4 style="margin-bottom: 0.5rem;">Recursos ativos:</h4>
                             <ul style="color: var(--text-secondary); line-height: 2;">
                                 <li>✅ Envio de mensagens em massa</li>
                                 <li>✅ Anti-ban com comportamento humanizado</li>
@@ -1294,6 +1245,11 @@
 
             if (event === 'admin.security') {
                 refreshSecurityLogs();
+            }
+
+            if (event === 'admin.saas_signup_requested') {
+                refreshSaasUsers();
+                showToast(`Novo cadastro aguardando aprovação: ${payload?.email || 'cliente'}`, 'warning');
             }
 
             if (event === 'admin.extension_error') {

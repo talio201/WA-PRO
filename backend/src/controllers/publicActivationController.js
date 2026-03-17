@@ -4,7 +4,9 @@ const {
   validateInstallationCredentials,
   touchInstallation,
   getAppConfig,
+  upsertSaasUser,
 } = require('../config/adminStore');
+const { emitRealtimeEvent } = require('../realtime/realtime');
 const {
   issueInstallationSessionToken,
   getInstallationPublicStatus,
@@ -120,5 +122,38 @@ exports.getPublicRuntimeConfig = async (req, res) => {
     });
   } catch (error) {
     return res.status(500).json({ msg: 'Failed to get runtime config.' });
+  }
+};
+
+exports.requestSaasSignupApproval = async (req, res) => {
+  try {
+    const email = safeString(req.body?.email).toLowerCase();
+    const requestedAgentId = safeString(req.body?.agentId) || `user_${Date.now().toString(36)}`;
+    if (!email) {
+      return res.status(400).json({ msg: 'email is required.' });
+    }
+
+    const user = upsertSaasUser({
+      email,
+      agentId: requestedAgentId,
+      status: 'pending',
+      metadata: {
+        requestSource: 'webapp-signup',
+        requestedAt: new Date().toISOString(),
+        ip: req.ip || req.connection?.remoteAddress,
+        userAgent: req.headers['user-agent'],
+      },
+    });
+
+    emitRealtimeEvent('admin.saas_signup_requested', {
+      email: user.email,
+      agentId: user.agentId,
+      status: user.status,
+      requestedAt: new Date().toISOString(),
+    });
+
+    return res.json({ success: true, user });
+  } catch (error) {
+    return res.status(500).json({ msg: 'Failed to create signup approval request.' });
   }
 };

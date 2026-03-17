@@ -143,6 +143,30 @@ export default function App() {
 
       {/* Main content */}
       <main className="flex-1 min-h-0 overflow-auto p-3 md:p-4">
+        {botState.status === 'AWAITING_QR' && qrImageSource && (
+          <section className="mb-3 rounded-2xl border border-amber-300 bg-amber-50 p-3 md:p-4">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h3 className="text-amber-800 font-semibold">Conectar WhatsApp</h3>
+                <p className="text-amber-700 text-sm">Escaneie este QR Code no WhatsApp Web para ativar o envio para sua conta.</p>
+              </div>
+              <button
+                onClick={async () => {
+                  try {
+                    const res = await fetchBotStatus();
+                    if (res) setBotState({ status: res.status || 'DISCONNECTED', qrCode: res.qrCode || null });
+                  } catch (_) {}
+                }}
+                className="px-3 py-1.5 text-xs rounded-lg bg-amber-200 text-amber-900 hover:bg-amber-300"
+              >
+                Atualizar QR
+              </button>
+            </div>
+            <div className="mt-3 flex justify-center">
+              <img src={qrImageSource} alt="QR Code WhatsApp" className="w-56 max-w-full rounded-lg border border-amber-300 bg-white p-2" />
+            </div>
+          </section>
+        )}
         {renderContent()}
       </main>
     </div>

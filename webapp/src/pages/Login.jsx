@@ -17,18 +17,26 @@ export default function Login() {
     setInfo('');
 
     if (mode === 'signup') {
+      const requestedAgentId = `user_${String(email || '').split('@')[0].replace(/[^a-z0-9_-]/gi, '').slice(0, 20)}`;
       const { error: err } = await supabase.auth.signUp({
         email,
         password,
         options: {
           data: {
-            agentId: `user_${String(email || '').split('@')[0].replace(/[^a-z0-9_-]/gi, '').slice(0, 20)}`,
+            agentId: requestedAgentId,
           },
         },
       });
       if (err) {
         setError(err.message);
       } else {
+        try {
+          await fetch('/api/public/saas/signup-request', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email, agentId: requestedAgentId }),
+          });
+        } catch (_error) {}
         setInfo('Cadastro enviado. Sua conta ficará em aprovação até o admin liberar a licença.');
         setMode('login');
       }

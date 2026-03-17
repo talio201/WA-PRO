@@ -112,7 +112,7 @@ app.get("/api/bot/status", requireAuth, (req, res) => {
     }
   }
   const agentId = req.headers["x-agent-id"] || req.query.agentId || req.agentId || "system";
-  const state = botStates.get(agentId) || { status: 'DISCONNECTED', qrCode: null };
+  const state = botStates.get(agentId) || botStates.get('bot') || { status: 'DISCONNECTED', qrCode: null };
   res.json(state);
 });
 
