@@ -9,6 +9,7 @@ const {
   initRealtimeServer,
   emitRealtimeEvent,
 } = require("./realtime/realtime");
+const { getNextBotCommand } = require("./config/botControlStore");
 const requireAuth = require("./middleware/authMiddleware");
 const { requireAdminAccess } = require("./middleware/adminAccessMiddleware");
 
@@ -89,6 +90,15 @@ app.get("/api/bot/status", requireAuth, (req, res) => {
   const agentId = req.headers["x-agent-id"] || req.query.agentId || req.agentId || "system";
   const state = botStates.get(agentId) || { status: 'DISCONNECTED', qrCode: null };
   res.json(state);
+});
+
+app.get('/api/bot/commands/next', requireAuth, (req, res) => {
+  const agentId = String(req.headers['x-agent-id'] || req.query.agentId || req.agentId || '').trim();
+  if (!agentId) {
+    return res.status(400).json({ msg: 'agentId is required' });
+  }
+  const command = getNextBotCommand(agentId);
+  return res.json({ success: true, command: command || null });
 });
 
 app.use("/api/public", require("./routes/publicRoutes"));

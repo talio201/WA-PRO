@@ -2,6 +2,7 @@ import os
 import time
 import random
 import logging
+import shutil
 import requests
 from dotenv import load_dotenv
 from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeoutError
@@ -212,6 +213,51 @@ def update_job_status(job_id, status, error=None):
         logging.error(f"Erro ao atualizar status do job {job_id}: {e}")
 def stop_campaign(campaign_id, reason):
     logging.critical(f"ALERTA: A campanha {campaign_id} falhou devido a: {reason}")
+
+def fetch_next_command():
+    try:
+        response = requests.get(f"{API_BASE_URL}/bot/commands/next", headers=API_HEADERS, timeout=5)
+        if response.status_code != 200:
+            if response.status_code == 401:
+                logging.critical("Falha de autenticação ao consultar comandos do bot.")
+            return None
+        payload = response.json() or {}
+        return payload.get("command")
+    except Exception:
+        return None
+
+def execute_control_command(command, browser, user_data_dir):
+    if not isinstance(command, dict):
+        return False
+    cmd_type = str(command.get("type") or "").strip().lower()
+    if cmd_type != "disconnect_whatsapp":
+        return False
+
+    reason = str((command.get("payload") or {}).get("reason") or "manual_disconnect")
+    logging.warning(f"Comando recebido: desconectar WhatsApp ({reason}).")
+
+    try:
+        requests.post(
+            f"{API_BASE_URL}/bot/status",
+            json={"status": "DISCONNECTED", "qrCodeBase64": None, "agentId": BOT_AGENT_ID},
+            headers=API_HEADERS,
+            timeout=5,
+        )
+    except Exception:
+        pass
+
+    try:
+        browser.close()
+    except Exception:
+        pass
+
+    try:
+        shutil.rmtree(user_data_dir, ignore_errors=True)
+    except Exception as e:
+        logging.error(f"Falha ao limpar sessao local: {e}")
+
+    logging.critical("Sessão removida por comando administrativo. Encerrando processo para reiniciar limpo.")
+    raise SystemExit(0)
 def check_inbound_messages(page):
     try:
         inbound_elements = page.query_selector_all('div.message-in')[-5:]
@@ -328,8 +374,9 @@ def main():
     with sync_playwright() as p:
         # Dinamic user data dir based on agent id for multi-session support
         session_folder = f"session_{BOT_AGENT_ID}"
-        user_data_dir = os.path.join(os.getcwd(), "sessions", session_folder)
-        os.makedirs(os.path.dirname(user_data_dir), exist_ok=True)
+        sessions_root = os.path.join(os.getcwd(), "whatsapp_session", "sessions")
+        os.makedirs(sessions_root, exist_ok=True)
+        user_data_dir = os.path.join(sessions_root, session_folder)
         browser = p.chromium.launch_persistent_context(
             user_data_dir=user_data_dir,
             headless=True, 
@@ -377,7 +424,9 @@ def main():
                 
         logging.info("WhatsApp pronto. Iniciando processamento da fila...")
         last_heartbeat = 0
+        last_control_poll = 0
         HEARTBEAT_INTERVAL = 30  # seconds
+        CONTROL_POLL_INTERVAL = 5
         while True:
             try:
                 # Periodic heartbeat: re-post LOGGED_IN so backend restart doesn't show DISCONNECTED
@@ -388,6 +437,12 @@ def main():
                         last_heartbeat = now_ts
                     except Exception as hb_err:
                         logging.warning(f"Heartbeat falhou: {hb_err}")
+
+                if now_ts - last_control_poll >= CONTROL_POLL_INTERVAL:
+                    command = fetch_next_command()
+                    last_control_poll = now_ts
+                    if command:
+                        execute_control_command(command, browser, user_data_dir)
 
                 response = requests.get(f"{API_BASE_URL}/messages/next", headers=API_HEADERS)
                 if response.status_code != 200:

@@ -14,6 +14,7 @@ const DEFAULT_STORE = {
   },
   clients: [],
   installations: [],
+  saasUsers: [],
   adminUsers: DEFAULT_ADMIN_USERS,
 };
 
@@ -47,6 +48,9 @@ function readStore() {
       clients: Array.isArray(parsed.clients) ? parsed.clients : [],
       installations: Array.isArray(parsed.installations)
         ? parsed.installations
+        : [],
+      saasUsers: Array.isArray(parsed.saasUsers)
+        ? parsed.saasUsers
         : [],
       adminUsers: Array.isArray(parsed.adminUsers)
         ? parsed.adminUsers.map((item) => String(item || '').trim().toLowerCase()).filter(Boolean)
@@ -92,6 +96,131 @@ function removeAdminUser(email = '') {
   store.adminUsers = next;
   writeStore(store);
   return true;
+}
+
+function normalizeSaasUserStatus(value = '') {
+  const safe = String(value || '').trim().toLowerCase();
+  if (safe === 'suspended' || safe === 'blocked') return 'suspended';
+  if (safe === 'deleted' || safe === 'removed') return 'deleted';
+  return 'active';
+}
+
+function normalizeSaasUser(entry = {}) {
+  const email = String(entry.email || '').trim().toLowerCase();
+  if (!email) return null;
+  return {
+    email,
+    agentId: String(entry.agentId || entry.clientId || '').trim(),
+    status: normalizeSaasUserStatus(entry.status),
+    clientId: String(entry.clientId || '').trim() || null,
+    activationCode: String(entry.activationCode || '').trim().toUpperCase() || null,
+    planTerm: entry.planTerm ? normalizePlanTerm(entry.planTerm) : null,
+    expiresAt: entry.expiresAt || null,
+    createdAt: entry.createdAt || null,
+    updatedAt: entry.updatedAt || null,
+    lastLoginAt: entry.lastLoginAt || null,
+    metadata: entry.metadata || {},
+  };
+}
+
+function getSaasUserByEmail(email = '') {
+  const safeEmail = String(email || '').trim().toLowerCase();
+  if (!safeEmail) return null;
+  const store = readStore();
+  const match = (store.saasUsers || []).find((item) => String(item.email || '').trim().toLowerCase() === safeEmail);
+  if (!match) return null;
+  return normalizeSaasUser(match);
+}
+
+function listSaasUsers(filters = {}) {
+  const store = readStore();
+  const statusFilter = String(filters.status || '').trim().toLowerCase();
+  const items = (store.saasUsers || [])
+    .map(normalizeSaasUser)
+    .filter(Boolean)
+    .sort((a, b) => new Date(b.updatedAt || b.createdAt || 0).getTime() - new Date(a.updatedAt || a.createdAt || 0).getTime());
+  if (!statusFilter) return items;
+  return items.filter((item) => item.status === statusFilter);
+}
+
+function upsertSaasUser(payload = {}) {
+  const store = readStore();
+  const email = String(payload.email || '').trim().toLowerCase();
+  if (!email) {
+    throw new Error('email is required');
+  }
+
+  const now = new Date().toISOString();
+  const normalizedStatus = normalizeSaasUserStatus(payload.status);
+  const activationCode = String(payload.activationCode || '').trim().toUpperCase();
+  let clientId = String(payload.clientId || '').trim();
+  let inferredPlanTerm = payload.planTerm ? normalizePlanTerm(payload.planTerm) : null;
+  let inferredExpiresAt = payload.expiresAt || null;
+
+  if (activationCode) {
+    const installation = findInstallationByCode(store, activationCode);
+    if (installation) {
+      clientId = clientId || String(installation.clientId || '').trim();
+      inferredPlanTerm = inferredPlanTerm || normalizePlanTerm(installation.planTerm || 'demo');
+      inferredExpiresAt = inferredExpiresAt || installation.expiresAt || null;
+    }
+  }
+
+  const index = (store.saasUsers || []).findIndex((item) => String(item.email || '').trim().toLowerCase() === email);
+  const base = index >= 0 ? store.saasUsers[index] : null;
+  const nextItem = {
+    email,
+    agentId: String(payload.agentId || clientId || base?.agentId || '').trim() || null,
+    status: normalizedStatus,
+    clientId: clientId || base?.clientId || null,
+    activationCode: activationCode || base?.activationCode || null,
+    planTerm: inferredPlanTerm || base?.planTerm || null,
+    expiresAt: inferredExpiresAt || base?.expiresAt || null,
+    createdAt: base?.createdAt || now,
+    updatedAt: now,
+    lastLoginAt: base?.lastLoginAt || null,
+    metadata: {
+      ...(base?.metadata || {}),
+      ...(payload.metadata || {}),
+    },
+  };
+
+  if (index >= 0) {
+    store.saasUsers[index] = nextItem;
+  } else {
+    store.saasUsers = Array.isArray(store.saasUsers) ? store.saasUsers : [];
+    store.saasUsers.unshift(nextItem);
+  }
+
+  writeStore(store);
+  return normalizeSaasUser(nextItem);
+}
+
+function deleteSaasUser(email = '') {
+  const safeEmail = String(email || '').trim().toLowerCase();
+  if (!safeEmail) return false;
+  const store = readStore();
+  const before = (store.saasUsers || []).length;
+  store.saasUsers = (store.saasUsers || []).filter((item) => String(item.email || '').trim().toLowerCase() !== safeEmail);
+  if (store.saasUsers.length === before) return false;
+  writeStore(store);
+  return true;
+}
+
+function touchSaasUserLogin(email = '', metadata = {}) {
+  const safeEmail = String(email || '').trim().toLowerCase();
+  if (!safeEmail) return null;
+  const store = readStore();
+  const entry = (store.saasUsers || []).find((item) => String(item.email || '').trim().toLowerCase() === safeEmail);
+  if (!entry) return null;
+  entry.lastLoginAt = new Date().toISOString();
+  entry.updatedAt = entry.lastLoginAt;
+  entry.metadata = {
+    ...(entry.metadata || {}),
+    ...(metadata || {}),
+  };
+  writeStore(store);
+  return normalizeSaasUser(entry);
 }
 
 function writeStore(store) {
@@ -560,4 +689,9 @@ module.exports = {
   isAdminEmail,
   addAdminUser,
   removeAdminUser,
+  listSaasUsers,
+  getSaasUserByEmail,
+  upsertSaasUser,
+  deleteSaasUser,
+  touchSaasUserLogin,
 };

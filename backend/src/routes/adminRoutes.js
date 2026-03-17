@@ -7,12 +7,16 @@ router.get("/dashboard", adminController.getDashboard);
 
 // Users management
 router.get("/users", adminController.getActiveUsers);
+router.get('/saas-users', adminController.listSaasUsers);
+router.post('/saas-users', adminController.upsertSaasUser);
+router.delete('/saas-users/:email', adminController.deleteSaasUser);
 router.get('/admin-users', adminController.listAdminUsers);
 router.post('/admin-users', adminController.addAdminUser);
 router.delete('/admin-users/:email', adminController.removeAdminUser);
 router.get("/users/permissions", adminController.getUserPermissions);
 router.post("/users/permission", adminController.setUserPermission);
 router.post("/users/disconnect", adminController.disconnectUser);
+router.post('/bot/disconnect', adminController.disconnectWhatsappBot);
 
 // System metrics
 router.get("/metrics", adminController.getMetrics);

@@ -7,6 +7,9 @@ const {
   getInstallationByActivationCode,
   touchInstallation,
   getAppConfig,
+  getSaasUserByEmail,
+  touchSaasUserLogin,
+  isAdminEmail,
 } = require('../config/adminStore');
 
 function toBase64Url(value) {
@@ -62,6 +65,23 @@ function getSupabaseClient() {
 
 function getValidApiKey() {
   return String(process.env.API_SECRET_KEY || '').trim();
+}
+
+function isTruthy(value) {
+  if (value === true) return true;
+  const normalized = String(value || '').trim().toLowerCase();
+  return normalized === 'true' || normalized === '1' || normalized === 'yes' || normalized === 'admin';
+}
+
+function userHasAdminFlag(user = {}) {
+  return (
+    isTruthy(user?.user_metadata?.isAdmin)
+    || isTruthy(user?.user_metadata?.is_admin)
+    || isTruthy(user?.app_metadata?.isAdmin)
+    || isTruthy(user?.app_metadata?.is_admin)
+    || String(user?.app_metadata?.role || '').trim().toLowerCase() === 'admin'
+    || String(user?.user_metadata?.role || '').trim().toLowerCase() === 'admin'
+  );
 }
 
 async function authenticateBearerToken(token, agentId = '') {
@@ -142,10 +162,40 @@ async function authenticateBearerToken(token, agentId = '') {
     try {
       const { data: { user } = {}, error } = await supabase.auth.getUser(safeToken);
       if (!error && user) {
+        const email = String(user.email || '').trim().toLowerCase();
+        const adminBypass = userHasAdminFlag(user) || (email && isAdminEmail(email));
+        let saasUser = null;
+        if (!adminBypass) {
+          saasUser = getSaasUserByEmail(email);
+          if (!saasUser) {
+            return null;
+          }
+          if (saasUser.status !== 'active') {
+            return null;
+          }
+          if (saasUser.expiresAt && new Date(saasUser.expiresAt).getTime() <= Date.now()) {
+            return null;
+          }
+          touchSaasUserLogin(email, {
+            lastAuthAt: new Date().toISOString(),
+            source: 'supabase-auth',
+          });
+        }
+
+        const resolvedAgentId = adminBypass
+          ? 'admin'
+          : String(
+              saasUser?.agentId
+                || saasUser?.clientId
+                || user?.user_metadata?.agentId
+                || `user_${String(user.id || '').slice(0, 12)}`,
+            ).trim();
+
         return {
           kind: 'supabase-user',
           user,
-          agentId: 'admin',
+          agentId: resolvedAgentId || 'admin',
+          saasUser,
           permissions: {
             allowGemini: true,
             allowRealtime: true,

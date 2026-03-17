@@ -15,11 +15,18 @@ const {
   activateInstallation,
   revokeInstallation,
   deleteInstallation,
+  listSaasUsers: listSaasUsersStore,
+  upsertSaasUser: upsertSaasUserStore,
+  deleteSaasUser: deleteSaasUserStore,
   listAdminUsers: listConfiguredAdminUsers,
   addAdminUser: addConfiguredAdminUser,
   removeAdminUser: removeConfiguredAdminUser,
 } = require("../config/adminStore");
 const { canAccessAdmin } = require("../middleware/adminAccessMiddleware");
+const {
+  enqueueBotCommand,
+  getBotCommandStats,
+} = require("../config/botControlStore");
 
 // In-memory stores for tracking
 const activeUsers = new Map();
@@ -269,6 +276,53 @@ exports.getActiveUsers = async (req, res) => {
   }
 };
 
+exports.listSaasUsers = async (req, res) => {
+  try {
+    const status = String(req.query?.status || '').trim().toLowerCase();
+    return res.json({ users: listSaasUsersStore({ status }) });
+  } catch (err) {
+    return res.status(500).json({ msg: 'Failed to list SaaS users' });
+  }
+};
+
+exports.upsertSaasUser = async (req, res) => {
+  try {
+    const user = upsertSaasUserStore(req.body || {});
+    logSecurityEvent('saas_user_upserted', {
+      by: req.agentId,
+      email: user.email,
+      status: user.status,
+      clientId: user.clientId,
+    });
+    return res.json({ success: true, user });
+  } catch (err) {
+    if (String(err?.message || '').includes('email is required')) {
+      return res.status(400).json({ msg: 'email is required' });
+    }
+    return res.status(500).json({ msg: 'Failed to save SaaS user' });
+  }
+};
+
+exports.deleteSaasUser = async (req, res) => {
+  try {
+    const email = String(req.params.email || '').trim().toLowerCase();
+    if (!email) {
+      return res.status(400).json({ msg: 'email is required' });
+    }
+    const removed = deleteSaasUserStore(email);
+    if (!removed) {
+      return res.status(404).json({ msg: 'SaaS user not found' });
+    }
+    logSecurityEvent('saas_user_deleted', {
+      by: req.agentId,
+      email,
+    });
+    return res.json({ success: true, email });
+  } catch (err) {
+    return res.status(500).json({ msg: 'Failed to delete SaaS user' });
+  }
+};
+
 // Track user activity (called from middleware)
 exports.trackUserActivity = (req, res, next) => {
   const agentId = req.headers["x-agent-id"] || req.agentId;
@@ -421,11 +475,40 @@ exports.disconnectUser = async (req, res) => {
     }
     activeUsers.delete(agentId);
     setUserPermission(agentId, false);
+    const botCommand = enqueueBotCommand(agentId, {
+      type: 'disconnect_whatsapp',
+      payload: { reason: 'admin_disconnect_user' },
+      requestedBy: req.headers['x-agent-id'] || req.agentId || 'admin',
+    });
     emitRealtimeEvent("admin.user_disconnected", { agentId });
     logSecurityEvent("user_disconnected", { agentId, by: req.headers["x-agent-id"] });
-    res.json({ success: true, agentId });
+    res.json({ success: true, agentId, command: botCommand });
   } catch (err) {
     res.status(500).json({ msg: "Failed to disconnect user" });
+  }
+};
+
+exports.disconnectWhatsappBot = async (req, res) => {
+  try {
+    const agentId = String(req.body?.agentId || req.params?.agentId || '').trim();
+    if (!agentId) {
+      return res.status(400).json({ msg: 'agentId is required' });
+    }
+    const command = enqueueBotCommand(agentId, {
+      type: 'disconnect_whatsapp',
+      payload: {
+        reason: String(req.body?.reason || 'manual_disconnect').trim(),
+      },
+      requestedBy: req.agentId || req.headers['x-agent-id'] || 'admin',
+    });
+    logBotActivity('disconnect_whatsapp_requested', {
+      by: req.agentId,
+      agentId,
+      commandId: command.id,
+    });
+    return res.json({ success: true, command });
+  } catch (err) {
+    return res.status(500).json({ msg: 'Failed to request WhatsApp disconnect' });
   }
 };
 
@@ -561,6 +644,7 @@ exports.getRealtimeInfo = async (req, res) => {
         "message.failed",
         "campaign.progress",
       ],
+      botCommandQueue: getBotCommandStats(),
       instructions: "Connect to WebSocket at /ws to receive real-time events",
     });
   } catch (err) {
