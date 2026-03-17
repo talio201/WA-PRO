@@ -9,6 +9,8 @@ const {
   initRealtimeServer,
   emitRealtimeEvent,
 } = require("./realtime/realtime");
+const Campaign = require('./models/Campaign');
+const Message = require('./models/Message');
 const { getNextBotCommand } = require("./config/botControlStore");
 const requireAuth = require("./middleware/authMiddleware");
 const { requireAdminAccess } = require("./middleware/adminAccessMiddleware");
@@ -158,6 +160,16 @@ app.get('/api/account/status', (req, res) => {
 function requireActiveSaasAccount(req, res, next) {
   if (!req.user) return next();
   if (req.agentId === 'admin') return next();
+  const lastSignInAt = req.user?.last_sign_in_at ? new Date(req.user.last_sign_in_at).getTime() : 0;
+  if (Number.isFinite(lastSignInAt) && lastSignInAt > 0) {
+    const elapsedMs = Date.now() - lastSignInAt;
+    if (elapsedMs > 24 * 60 * 60 * 1000) {
+      return res.status(401).json({
+        msg: 'Sessão expirada por política de segurança (24h). Faça login novamente.',
+        accountStatus: 'session_refresh_required',
+      });
+    }
+  }
   const saasUser = req.saasUser || null;
   const status = String(saasUser?.status || 'pending').trim().toLowerCase();
   if (status !== 'active') {
@@ -175,6 +187,46 @@ function requireActiveSaasAccount(req, res, next) {
   return next();
 }
 
+async function enforceDemoOutboundPolicy(req, res, next) {
+  try {
+    if (!req.user || req.agentId === 'admin') return next();
+    const planTerm = String(req.saasUser?.planTerm || '').trim().toLowerCase();
+    if (planTerm !== 'demo') return next();
+
+    const agentCampaigns = await Campaign.find({ agentId: req.agentId }).select('_id');
+    const campaignIds = (Array.isArray(agentCampaigns) ? agentCampaigns : []).map((item) => item._id);
+    if (!campaignIds.length) return next();
+
+    const allOutbound = await Message.find({
+      campaign: { $in: campaignIds },
+      direction: 'outbound',
+    });
+    const sentCount = Array.isArray(allOutbound) ? allOutbound.length : 0;
+    if (sentCount >= 10) {
+      return res.status(403).json({
+        msg: 'Plano DEMO permite até 10 mensagens. Solicite upgrade para continuar.',
+        code: 'demo_limit_reached',
+      });
+    }
+
+    const inFlight = await Message.find({
+      campaign: { $in: campaignIds },
+      direction: 'outbound',
+      status: { $in: ['pending', 'processing'] },
+    });
+    if (Array.isArray(inFlight) && inFlight.length > 0) {
+      return res.status(429).json({
+        msg: 'Plano DEMO permite apenas um envio por vez. Aguarde o envio atual finalizar.',
+        code: 'demo_single_flight_required',
+      });
+    }
+
+    return next();
+  } catch (_error) {
+    return res.status(500).json({ msg: 'Falha ao validar política DEMO.' });
+  }
+}
+
 // Track user activity for admin dashboard
 const adminController = require("./controllers/adminController");
 const { trackUserActivity } = adminController;
@@ -183,7 +235,17 @@ app.use(trackUserActivity);
 app.get('/api/admin/access/me', adminController.getMyAdminAccess);
 
 app.use("/api/admin", requireAdminAccess, require("./routes/adminRoutes"));
-app.use('/api/campaigns', requireActiveSaasAccount, require("./routes/campaignRoutes"));
+app.use('/api/campaigns', requireActiveSaasAccount, (req, res, next) => {
+  const planTerm = String(req.saasUser?.planTerm || '').trim().toLowerCase();
+  if (req.user && req.agentId !== 'admin' && planTerm === 'demo' && req.method !== 'GET') {
+    return res.status(403).json({
+      msg: 'Plano DEMO não permite disparos de campanha. Use envio manual de teste.',
+      code: 'demo_campaigns_blocked',
+    });
+  }
+  return next();
+}, require("./routes/campaignRoutes"));
+app.post('/api/messages/outbound/manual', requireActiveSaasAccount, enforceDemoOutboundPolicy);
 app.use('/api/messages', requireActiveSaasAccount, require("./routes/messageRoutes"));
 app.use('/api/contacts', requireActiveSaasAccount, require("./routes/contactRoutes"));
 app.use('/api/upload', requireActiveSaasAccount, require("./routes/uploadRoutes"));

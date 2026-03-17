@@ -5,6 +5,7 @@ const {
   touchInstallation,
   getAppConfig,
   upsertSaasUser,
+  canStartDemoForIp,
 } = require('../config/adminStore');
 const { emitRealtimeEvent } = require('../realtime/realtime');
 const {
@@ -129,19 +130,41 @@ exports.requestSaasSignupApproval = async (req, res) => {
   try {
     const email = safeString(req.body?.email).toLowerCase();
     const requestedAgentId = safeString(req.body?.agentId) || `user_${Date.now().toString(36)}`;
+    const desiredPlan = safeString(req.body?.desiredPlan || 'demo').toLowerCase();
+    const documentId = safeString(req.body?.documentId || req.body?.cpfCnpj || '').replace(/\D/g, '');
+    const companyName = safeString(req.body?.companyName || req.body?.fullName || '');
+    const seats = Math.max(1, Math.min(1000, Number(req.body?.seats || req.body?.usersCount || 1) || 1));
+    const requestIp = req.ip || req.connection?.remoteAddress;
     if (!email) {
       return res.status(400).json({ msg: 'email is required.' });
+    }
+    if (documentId && documentId.length !== 11 && documentId.length !== 14) {
+      return res.status(400).json({ msg: 'CPF/CNPJ inválido. Use 11 ou 14 dígitos.' });
+    }
+    if (desiredPlan === 'demo') {
+      const demoEligibility = canStartDemoForIp(requestIp);
+      if (!demoEligibility.allowed) {
+        return res.status(403).json({
+          msg: demoEligibility.msg || 'Período DEMO indisponível para este IP. Escolha plano pago.',
+          code: demoEligibility.reason || 'demo_blocked',
+        });
+      }
     }
 
     const user = upsertSaasUser({
       email,
       agentId: requestedAgentId,
       status: 'pending',
+      planTerm: desiredPlan,
       metadata: {
         requestSource: 'webapp-signup',
         requestedAt: new Date().toISOString(),
-        ip: req.ip || req.connection?.remoteAddress,
+        requestIp,
         userAgent: req.headers['user-agent'],
+        desiredPlan,
+        cpfCnpj: documentId || null,
+        companyName: companyName || null,
+        seats,
       },
     });
 
@@ -149,6 +172,9 @@ exports.requestSaasSignupApproval = async (req, res) => {
       email: user.email,
       agentId: user.agentId,
       status: user.status,
+      desiredPlan,
+      companyName: companyName || null,
+      seats,
       requestedAt: new Date().toISOString(),
     });
 

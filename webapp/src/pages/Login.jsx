@@ -6,6 +6,10 @@ export default function Login() {
   const [mode, setMode] = useState('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [companyName, setCompanyName] = useState('');
+  const [documentId, setDocumentId] = useState('');
+  const [seats, setSeats] = useState(1);
+  const [desiredPlan, setDesiredPlan] = useState('demo');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [info, setInfo] = useState('');
@@ -34,7 +38,14 @@ export default function Login() {
           await fetch('/api/public/saas/signup-request', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ email, agentId: requestedAgentId }),
+            body: JSON.stringify({
+              email,
+              agentId: requestedAgentId,
+              desiredPlan,
+              companyName,
+              documentId,
+              seats,
+            }),
           });
         } catch (_error) {}
         setInfo('Cadastro enviado. Sua conta ficará em aprovação até o admin liberar a licença.');
@@ -88,6 +99,54 @@ export default function Login() {
               placeholder="••••••••"
             />
           </div>
+          {mode === 'signup' && (
+            <>
+              <div>
+                <label className="block text-sm text-slate-400 mb-1">Razão social / Nome</label>
+                <input
+                  value={companyName}
+                  onChange={(e) => setCompanyName(e.target.value)}
+                  className="w-full rounded-lg bg-white/8 border border-white/15 text-white px-4 py-2.5 outline-none focus:border-emerald-500 transition placeholder-slate-500"
+                  placeholder="Nome da empresa ou responsável"
+                />
+              </div>
+              <div>
+                <label className="block text-sm text-slate-400 mb-1">CPF/CNPJ</label>
+                <input
+                  value={documentId}
+                  onChange={(e) => setDocumentId(e.target.value)}
+                  className="w-full rounded-lg bg-white/8 border border-white/15 text-white px-4 py-2.5 outline-none focus:border-emerald-500 transition placeholder-slate-500"
+                  placeholder="Somente números"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm text-slate-400 mb-1">Usuários</label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={1000}
+                    value={seats}
+                    onChange={(e) => setSeats(Number(e.target.value) || 1)}
+                    className="w-full rounded-lg bg-white/8 border border-white/15 text-white px-4 py-2.5 outline-none focus:border-emerald-500 transition"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm text-slate-400 mb-1">Plano desejado</label>
+                  <select
+                    value={desiredPlan}
+                    onChange={(e) => setDesiredPlan(e.target.value)}
+                    className="w-full rounded-lg bg-white/8 border border-white/15 text-white px-4 py-2.5 outline-none focus:border-emerald-500 transition"
+                  >
+                    <option value="demo">DEMO (7 dias)</option>
+                    <option value="30d">Plano Teste 30 dias</option>
+                    <option value="60d">Plano Profissional</option>
+                    <option value="12m">Plano Business</option>
+                  </select>
+                </div>
+              </div>
+            </>
+          )}
           {error && <p className="text-rose-400 text-sm">{error}</p>}
           {info && <p className="text-emerald-300 text-sm">{info}</p>}
           <button

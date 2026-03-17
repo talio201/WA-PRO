@@ -659,12 +659,15 @@
                                 <tr>
                                     <th>Email</th>
                                     <th>Agent ID</th>
+                                    <th>Plano solicitado</th>
+                                    <th>CPF/CNPJ</th>
+                                    <th>Usuários</th>
                                     <th>Criado em</th>
                                     <th>Ações</th>
                                 </tr>
                             </thead>
                             <tbody id="pending-requests-table">
-                                <tr><td colspan="4" style="text-align:center; color: var(--text-secondary)">Nenhuma solicitação pendente</td></tr>
+                                <tr><td colspan="7" style="text-align:center; color: var(--text-secondary)">Nenhuma solicitação pendente</td></tr>
                             </tbody>
                         </table>
                     </div>
@@ -685,6 +688,27 @@
                         <div class="form-group">
                             <label class="form-label">Agent ID</label>
                             <input id="saas-agent-id" class="form-input" placeholder="bot_xxx ou user_xxx">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Razão social / Nome</label>
+                            <input id="saas-company-name" class="form-input" placeholder="Nome da empresa ou responsável">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">CPF/CNPJ</label>
+                            <input id="saas-cpf-cnpj" class="form-input" placeholder="Somente números">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Quantidade de usuários</label>
+                            <input id="saas-seats" type="number" min="1" max="1000" class="form-input" value="1">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Plano desejado</label>
+                            <select id="saas-desired-plan" class="form-input">
+                                <option value="demo">DEMO (7 dias)</option>
+                                <option value="30d">Plano 30 dias</option>
+                                <option value="60d">Plano Profissional</option>
+                                <option value="12m">Plano Business</option>
+                            </select>
                         </div>
                         <div class="form-group">
                             <label class="form-label">Client ID</label>
@@ -728,6 +752,7 @@
                                 <tr>
                                     <th>Email</th>
                                     <th>Agent ID</th>
+                                    <th>Cadastro</th>
                                     <th>Status</th>
                                     <th>Plano</th>
                                     <th>Expira</th>
@@ -736,7 +761,7 @@
                                 </tr>
                             </thead>
                             <tbody id="saas-users-table">
-                                <tr><td colspan="7" style="text-align:center; color: var(--text-secondary)">Carregando...</td></tr>
+                                <tr><td colspan="8" style="text-align:center; color: var(--text-secondary)">Carregando...</td></tr>
                             </tbody>
                         </table>
                     </div>
@@ -1431,6 +1456,10 @@
         function clearSaasForm() {
             document.getElementById('saas-email').value = '';
             document.getElementById('saas-agent-id').value = '';
+            document.getElementById('saas-company-name').value = '';
+            document.getElementById('saas-cpf-cnpj').value = '';
+            document.getElementById('saas-seats').value = 1;
+            document.getElementById('saas-desired-plan').value = 'demo';
             document.getElementById('saas-client-id').value = '';
             document.getElementById('saas-activation-code').value = '';
             document.getElementById('saas-plan-term').value = '';
@@ -1441,6 +1470,10 @@
         function fillSaasForm(user = {}) {
             document.getElementById('saas-email').value = user.email || '';
             document.getElementById('saas-agent-id').value = user.agentId || '';
+            document.getElementById('saas-company-name').value = user?.metadata?.companyName || '';
+            document.getElementById('saas-cpf-cnpj').value = user?.metadata?.cpfCnpj || '';
+            document.getElementById('saas-seats').value = Number(user?.metadata?.seats || 1);
+            document.getElementById('saas-desired-plan').value = user?.metadata?.desiredPlan || user.planTerm || 'demo';
             document.getElementById('saas-client-id').value = user.clientId || '';
             document.getElementById('saas-activation-code').value = user.activationCode || '';
             document.getElementById('saas-plan-term').value = user.planTerm || '';
@@ -1460,15 +1493,18 @@
                 if (pendingCountBadge) pendingCountBadge.textContent = String(pendingUsers.length);
                 if (pendingTbody) {
                     if (!pendingUsers.length) {
-                        pendingTbody.innerHTML = '<tr><td colspan="4" style="text-align:center; color: var(--text-secondary)">Nenhuma solicitação pendente</td></tr>';
+                        pendingTbody.innerHTML = '<tr><td colspan="7" style="text-align:center; color: var(--text-secondary)">Nenhuma solicitação pendente</td></tr>';
                     } else {
                         pendingTbody.innerHTML = pendingUsers.map((user) => `
                             <tr>
                                 <td><code>${user.email || '-'}</code></td>
                                 <td><code>${user.agentId || '-'}</code></td>
+                                <td>${user?.metadata?.desiredPlan || user.planTerm || 'demo'}</td>
+                                <td>${user?.metadata?.cpfCnpj || '-'}</td>
+                                <td>${user?.metadata?.seats || 1}</td>
                                 <td>${user.createdAt ? new Date(user.createdAt).toLocaleString() : '-'}</td>
                                 <td>
-                                    <button onclick="setSaasUserStatus('${user.email}', 'active')" class="btn btn-primary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;">✅ Aprovar</button>
+                                    <button onclick="approveSaasUser('${user.email}', '${user?.metadata?.desiredPlan || user.planTerm || 'demo'}')" class="btn btn-primary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;">✅ Aprovar</button>
                                     <button onclick="setSaasUserStatus('${user.email}', 'suspended')" class="btn btn-secondary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;">⛔ Negar</button>
                                 </td>
                             </tr>
@@ -1476,7 +1512,7 @@
                     }
                 }
                 if (!users.length) {
-                    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; color: var(--text-secondary)">Nenhum usuário SaaS cadastrado</td></tr>';
+                    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; color: var(--text-secondary)">Nenhum usuário SaaS cadastrado</td></tr>';
                     return;
                 }
                 tbody.innerHTML = users.map((user) => {
@@ -1485,17 +1521,20 @@
                     const expiresLabel = user.expiresAt ? new Date(user.expiresAt).toLocaleString() : '-';
                     const nextStatusLabel = status === 'active' ? '⏸️ Suspender' : '✅ Aprovar';
                     const nextStatusValue = status === 'active' ? 'suspended' : 'active';
+                    const requestedPlan = user?.metadata?.desiredPlan || user.planTerm || 'demo';
+                    const registry = user?.metadata?.cpfCnpj || '-';
                     return `
                         <tr>
                             <td><code>${user.email || '-'}</code></td>
                             <td><code>${user.agentId || '-'}</code></td>
+                            <td>${registry}</td>
                             <td><span class="badge ${statusBadge}">${status.toUpperCase()}</span></td>
                             <td>${user.planTerm || '-'}</td>
                             <td>${expiresLabel}</td>
                             <td>${user.lastLoginAt ? new Date(user.lastLoginAt).toLocaleString() : '-'}</td>
                             <td>
                                 <button onclick='fillSaasForm(${JSON.stringify(user).replace(/'/g, "&#39;")})' class="btn btn-secondary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;">✏️ Editar</button>
-                                <button onclick="setSaasUserStatus('${user.email}', '${nextStatusValue}')" class="btn btn-secondary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;">${nextStatusLabel}</button>
+                                <button onclick="${nextStatusValue === 'active' ? `approveSaasUser('${user.email}', '${requestedPlan}')` : `setSaasUserStatus('${user.email}', 'suspended')`}" class="btn btn-secondary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;">${nextStatusLabel}</button>
                                 <button onclick="disconnectWhatsappByAgent('${user.agentId || ''}')" class="btn btn-secondary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;">📵 WhatsApp</button>
                                 <button onclick="removeSaasUser('${user.email}')" class="btn btn-danger" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;">🗑️ Excluir</button>
                             </td>
@@ -1510,6 +1549,10 @@
         async function saveSaasUser() {
             const email = String(document.getElementById('saas-email').value || '').trim().toLowerCase();
             const agentId = String(document.getElementById('saas-agent-id').value || '').trim();
+            const companyName = String(document.getElementById('saas-company-name').value || '').trim();
+            const cpfCnpj = String(document.getElementById('saas-cpf-cnpj').value || '').replace(/\D/g, '');
+            const seats = Math.max(1, Math.min(1000, Number(document.getElementById('saas-seats').value || 1) || 1));
+            const desiredPlan = String(document.getElementById('saas-desired-plan').value || 'demo').trim().toLowerCase();
             const clientId = String(document.getElementById('saas-client-id').value || '').trim();
             const activationCode = String(document.getElementById('saas-activation-code').value || '').trim().toUpperCase();
             const planTerm = String(document.getElementById('saas-plan-term').value || '').trim();
@@ -1528,6 +1571,12 @@
                 planTerm: planTerm || undefined,
                 status,
                 expiresAt: expiresAtInput ? new Date(expiresAtInput).toISOString() : null,
+                metadata: {
+                    companyName: companyName || null,
+                    cpfCnpj: cpfCnpj || null,
+                    seats,
+                    desiredPlan,
+                },
             };
 
             await apiRequest('/admin/saas-users', {
@@ -1546,6 +1595,22 @@
                 body: JSON.stringify({ email: safeEmail, status }),
             });
             showToast(`Status de ${safeEmail} atualizado para ${status}.`, status === 'active' ? 'success' : 'warning');
+            await refreshSaasUsers();
+        }
+
+        async function approveSaasUser(email, planTerm = 'demo') {
+            const safeEmail = String(email || '').trim().toLowerCase();
+            const safePlan = String(planTerm || 'demo').trim().toLowerCase();
+            if (!safeEmail) return;
+            await apiRequest('/admin/saas-users', {
+                method: 'POST',
+                body: JSON.stringify({
+                    email: safeEmail,
+                    status: 'active',
+                    planTerm: safePlan,
+                }),
+            });
+            showToast(`Usuário ${safeEmail} aprovado no plano ${safePlan}.`, 'success');
             await refreshSaasUsers();
         }
 

@@ -209,6 +209,8 @@ async function authenticateBearerToken(token, agentId = '') {
                 || user?.user_metadata?.agentId
                 || `user_${String(user.id || '').slice(0, 12)}`,
             ).trim();
+        const activeAccess = adminBypass || saasUser?.status === 'active';
+        const isDemo = String(saasUser?.planTerm || '').trim().toLowerCase() === 'demo';
 
         return {
           kind: 'supabase-user',
@@ -216,11 +218,11 @@ async function authenticateBearerToken(token, agentId = '') {
           agentId: resolvedAgentId || 'admin',
           saasUser,
           permissions: {
-            allowGemini: adminBypass || saasUser?.status === 'active',
-            allowRealtime: adminBypass || saasUser?.status === 'active',
-            allowCampaigns: adminBypass || saasUser?.status === 'active',
-            allowContacts: adminBypass || saasUser?.status === 'active',
-            allowInbox: adminBypass || saasUser?.status === 'active',
+            allowGemini: activeAccess && !isDemo,
+            allowRealtime: activeAccess,
+            allowCampaigns: activeAccess && !isDemo,
+            allowContacts: activeAccess,
+            allowInbox: activeAccess,
           },
         };
       }
