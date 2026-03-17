@@ -561,7 +561,7 @@
             <button class="tab" data-tab="users">👥 Usuários</button>
             <button class="tab" data-tab="security">🔒 Segurança</button>
             <button class="tab" data-tab="bot">🤖 Bot Monitor</button>
-            <button class="tab" data-tab="extension">🧩 Operações SaaS</button>
+            <button class="tab" data-tab="operations">🧩 Operações SaaS</button>
         </div>
 
         <!-- Overview Tab -->
@@ -641,6 +641,30 @@
                             </thead>
                             <tbody id="users-table">
                                 <tr><td colspan="6" style="text-align: center; color: var(--text-secondary)">Carregando...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card" style="margin-top: 1.5rem;">
+                <div class="card-header">
+                    <h3>⏳ Solicitações pendentes de aprovação</h3>
+                    <span class="badge badge-warning" id="pending-requests-count">0</span>
+                </div>
+                <div class="card-body">
+                    <div class="table-container">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Email</th>
+                                    <th>Agent ID</th>
+                                    <th>Criado em</th>
+                                    <th>Ações</th>
+                                </tr>
+                            </thead>
+                            <tbody id="pending-requests-table">
+                                <tr><td colspan="4" style="text-align:center; color: var(--text-secondary)">Nenhuma solicitação pendente</td></tr>
                             </tbody>
                         </table>
                     </div>
@@ -828,11 +852,11 @@
 
                 <div class="card">
                     <div class="card-header">
-                        <h3>❌ Erros da Extensão</h3>
-                        <button onclick="refreshExtensionErrors()" class="btn btn-secondary">🔄</button>
+                        <h3>❌ Erros de Runtime</h3>
+                        <button onclick="refreshRuntimeErrors()" class="btn btn-secondary">🔄</button>
                     </div>
                     <div class="card-body">
-                        <div class="live-console" id="extension-errors-log">
+                        <div class="live-console" id="runtime-errors-log">
                             <div class="console-line">
                                 <span class="time">[--:--:--]</span>
                                 <span class="event">Nenhum erro registrado</span>
@@ -844,7 +868,7 @@
         </div>
 
         <!-- SaaS Operations Tab -->
-        <div id="tab-extension" class="tab-content">
+        <div id="tab-operations" class="tab-content">
             <div class="grid grid-2">
                 <div class="card extension-card">
                     <div class="extension-icon">🧩</div>
@@ -868,11 +892,11 @@
                     <div class="card-body">
                         <div class="grid grid-2">
                             <div class="stat-card">
-                                <div class="stat-label">Instalações Ativas</div>
+                                <div class="stat-label">Clientes Ativos</div>
                                 <div class="stat-value primary" id="ext-installs">-</div>
                             </div>
                             <div class="stat-card">
-                                <div class="stat-label">Downloads</div>
+                                <div class="stat-label">Bots Provisionados</div>
                                 <div class="stat-value success" id="ext-downloads">-</div>
                             </div>
                         </div>
@@ -962,7 +986,7 @@
                         </table>
                     </div>
                     <div class="form-group" style="margin-top: 1rem;">
-                        <label class="form-label">Payload para copiar na extensão</label>
+                        <label class="form-label">Payload de provisionamento do bot</label>
                         <textarea id="provision-payload" class="form-input" rows="8" readonly placeholder="Selecione um bot para gerar o payload"></textarea>
                     </div>
                 </div>
@@ -970,7 +994,7 @@
 
             <div class="card" style="margin-top: 1.5rem;">
                 <div class="card-header">
-                    <h3>🔐 Instalações da extensão</h3>
+                    <h3>🔐 Instalações e licenças SaaS</h3>
                     <button onclick="loadProvisioningData()" class="btn btn-secondary">Atualizar</button>
                 </div>
                 <div class="card-body">
@@ -1030,28 +1054,6 @@
             </div>
         </div>
     </main>
-
-    <!-- Send Extension Modal -->
-    <div class="modal-overlay" id="send-modal">
-        <div class="modal">
-            <div class="modal-header">
-                <h3>📧 Enviar Extensão</h3>
-            </div>
-            <div class="modal-body">
-                <div class="form-group">
-                    <label class="form-label">Email do Cliente</label>
-                    <input type="email" id="send-email" class="form-input" placeholder="cliente@email.com">
-                </div>
-                <p style="color: var(--text-secondary); font-size: 0.875rem; margin-top: 1rem;">
-                    O cliente receberá um email com link para download e instruções de instalação.
-                </p>
-            </div>
-            <div class="modal-footer">
-                <button onclick="closeSendModal()" class="btn btn-secondary">Cancelar</button>
-                <button onclick="sendExtensionEmail()" class="btn btn-primary">Enviar</button>
-            </div>
-        </div>
-    </div>
 
     <!-- Toast Container -->
     <div class="toast-container" id="toast-container"></div>
@@ -1272,7 +1274,7 @@
             }
 
             if (event === 'admin.extension_error') {
-                addExtensionError(payload);
+                addRuntimeError(payload);
             }
         }
 
@@ -1314,8 +1316,8 @@
             }
         }
 
-        function addExtensionError(error) {
-            const log = document.getElementById('extension-errors-log');
+        function addRuntimeError(error) {
+            const log = document.getElementById('runtime-errors-log');
             const time = new Date().toLocaleTimeString();
             const line = document.createElement('div');
             line.className = 'console-line';
@@ -1452,6 +1454,27 @@
                 const data = await apiRequest('/admin/saas-users');
                 const users = data.users || [];
                 const tbody = document.getElementById('saas-users-table');
+                const pendingTbody = document.getElementById('pending-requests-table');
+                const pendingCountBadge = document.getElementById('pending-requests-count');
+                const pendingUsers = users.filter((user) => String(user.status || '').toLowerCase() === 'pending');
+                if (pendingCountBadge) pendingCountBadge.textContent = String(pendingUsers.length);
+                if (pendingTbody) {
+                    if (!pendingUsers.length) {
+                        pendingTbody.innerHTML = '<tr><td colspan="4" style="text-align:center; color: var(--text-secondary)">Nenhuma solicitação pendente</td></tr>';
+                    } else {
+                        pendingTbody.innerHTML = pendingUsers.map((user) => `
+                            <tr>
+                                <td><code>${user.email || '-'}</code></td>
+                                <td><code>${user.agentId || '-'}</code></td>
+                                <td>${user.createdAt ? new Date(user.createdAt).toLocaleString() : '-'}</td>
+                                <td>
+                                    <button onclick="setSaasUserStatus('${user.email}', 'active')" class="btn btn-primary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;">✅ Aprovar</button>
+                                    <button onclick="setSaasUserStatus('${user.email}', 'suspended')" class="btn btn-secondary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;">⛔ Negar</button>
+                                </td>
+                            </tr>
+                        `).join('');
+                    }
+                }
                 if (!users.length) {
                     tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; color: var(--text-secondary)">Nenhum usuário SaaS cadastrado</td></tr>';
                     return;
@@ -1694,13 +1717,13 @@
             refreshSecurityLogs();
         }
 
-        // Extension errors
-        async function refreshExtensionErrors() {
+        // Runtime errors
+        async function refreshRuntimeErrors() {
             try {
                 const data = await apiRequest('/admin/extension/errors?limit=50');
                 document.getElementById('bot-errors').textContent = data.total || 0;
                 
-                const log = document.getElementById('extension-errors-log');
+                const log = document.getElementById('runtime-errors-log');
                 if (!data.errors || data.errors.length === 0) {
                     log.innerHTML = '<div class="console-line"><span class="event">Nenhum erro registrado</span></div>';
                     return;
@@ -1714,7 +1737,7 @@
                     </div>
                 `).join('');
             } catch (e) {
-                console.error('Extension errors refresh error:', e);
+                console.error('Runtime errors refresh error:', e);
             }
         }
 
@@ -1882,57 +1905,6 @@
             refreshDashboard();
         }
 
-        // Extension
-        async function downloadExtension() {
-            const session = await checkAuth();
-            if (!session?.access_token) return;
-            const response = await fetch('/api/admin/extension/download', {
-                headers: {
-                    'Authorization': `Bearer ${session.access_token}`,
-                    'x-agent-id': 'admin-console',
-                }
-            });
-            if (!response.ok) {
-                const payload = await response.json().catch(() => ({}));
-                showToast(payload.msg || 'Falha ao baixar extensão', 'error');
-                return;
-            }
-            const blob = await response.blob();
-            const link = document.createElement('a');
-            link.href = URL.createObjectURL(blob);
-            link.download = 'EmidiaWhats-Extension.zip';
-            link.click();
-            URL.revokeObjectURL(link.href);
-        }
-
-        function showSendModal() {
-            document.getElementById('send-modal').classList.add('active');
-        }
-
-        function closeSendModal() {
-            document.getElementById('send-modal').classList.remove('active');
-        }
-
-        async function sendExtensionEmail() {
-            const email = document.getElementById('send-email').value;
-            if (!email) {
-                showToast('Digite um email válido', 'error');
-                return;
-            }
-            
-            const result = await apiRequest('/admin/extension/send-email', {
-                method: 'POST',
-                body: JSON.stringify({ email })
-            });
-            
-            if (result.success) {
-                showToast('Email enviado com sucesso!');
-                closeSendModal();
-            } else {
-                showToast(result.msg || 'Erro ao enviar email', 'error');
-            }
-        }
-
         // Console
         function clearConsole() {
             const console = document.getElementById('realtime-console');
@@ -1990,10 +1962,12 @@
         loadProvisioningData();
         refreshUsersAndLicenses();
         loadAdminUsers();
+        refreshRuntimeErrors();
 
         // Refresh intervals
         setInterval(refreshDashboard, 30000);
         setInterval(fetchBotStatus, 5000);
+        setInterval(refreshSaasUsers, 15000);
     </script>
 </body>
 </html>
