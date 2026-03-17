@@ -387,13 +387,13 @@
             color: #8b949e;
         }
 
-        /* Extension Card */
-        .extension-card {
+        /* Operations Card */
+        .ops-card {
             text-align: center;
             padding: 3rem;
         }
 
-        .extension-icon {
+        .ops-icon {
             width: 80px;
             height: 80px;
             background: linear-gradient(135deg, #6366f1, #8b5cf6);
@@ -405,22 +405,15 @@
             font-size: 2rem;
         }
 
-        .extension-title {
+        .ops-title {
             font-size: 1.5rem;
             font-weight: 600;
             margin-bottom: 0.5rem;
         }
 
-        .extension-version {
+        .ops-version {
             color: var(--text-secondary);
             margin-bottom: 2rem;
-        }
-
-        .extension-actions {
-            display: flex;
-            gap: 1rem;
-            justify-content: center;
-            flex-wrap: wrap;
         }
 
         /* Form */
@@ -895,10 +888,10 @@
         <!-- SaaS Operations Tab -->
         <div id="tab-operations" class="tab-content">
             <div class="grid grid-2">
-                <div class="card extension-card">
-                    <div class="extension-icon">🧩</div>
-                    <div class="extension-title">Operações da Plataforma SaaS</div>
-                    <div class="extension-version" id="ext-version">Gestão de bots, licenças e runtime</div>
+                <div class="card ops-card">
+                    <div class="ops-icon">🧩</div>
+                    <div class="ops-title">Operações da Plataforma SaaS</div>
+                    <div class="ops-version" id="ops-version">Gestão de bots, licenças e runtime</div>
                     <div style="margin-top: 2rem; text-align: left;">
                         <h4 style="margin-bottom: 1rem;">📋 Fluxo recomendado:</h4>
                         <ol id="install-instructions" style="color: var(--text-secondary); line-height: 2;">
@@ -918,11 +911,11 @@
                         <div class="grid grid-2">
                             <div class="stat-card">
                                 <div class="stat-label">Clientes Ativos</div>
-                                <div class="stat-value primary" id="ext-installs">-</div>
+                                <div class="stat-value primary" id="ops-active-clients">-</div>
                             </div>
                             <div class="stat-card">
                                 <div class="stat-label">Bots Provisionados</div>
-                                <div class="stat-value success" id="ext-downloads">-</div>
+                                <div class="stat-value success" id="ops-provisioned-bots">-</div>
                             </div>
                         </div>
                         <div style="margin-top: 1.5rem;">
@@ -1918,7 +1911,7 @@
                     backendApiKey: result.client.apiKey,
                     agentId: result.client.clientId,
                 }, null, 2);
-                showToast('Bot criado. Copie o payload para a extensão.');
+                showToast('Bot criado. Copie o payload para provisionar o cliente SaaS.');
             }
             document.getElementById('new-client-name').value = '';
             document.getElementById('new-client-description').value = '';
@@ -1936,7 +1929,7 @@
         }
 
         async function rotateBotKey(clientId) {
-            if (!confirm(`Girar a chave do bot ${clientId}? A extensão antiga perderá acesso.`)) return;
+            if (!confirm(`Girar a chave do bot ${clientId}? Tokens antigos perderão acesso.`)) return;
             const result = await apiRequest(`/admin/clients/${encodeURIComponent(clientId)}/rotate-key`, {
                 method: 'POST'
             });
