@@ -15,7 +15,11 @@ async function loadSupabase() {
       const url = String(payload?.config?.supabase?.url || '').trim();
       const key = String(payload?.config?.supabase?.anonKey || '').trim();
       if (!url || !key) throw new Error('Supabase não configurado no servidor.');
-      _supabase = createClient(url, key);
+      _supabase = createClient(url, key, {
+        auth: {
+          storageKey: 'emidia-users-auth-token',
+        },
+      });
       return _supabase;
     });
   return _loadPromise;
