@@ -119,8 +119,7 @@ exports.createCampaign = async (req, res) => {
       messageVariants,
       messageTemplate,
     );
-    const shouldRotateVariants =
-      Boolean(turboMode) && sanitizedVariants.length > 1;
+    const shouldRotateVariants = sanitizedVariants.length > 1;
     const campaign = new Campaign({
       name,
       agentId: req.agentId,
@@ -173,11 +172,7 @@ exports.createCampaign = async (req, res) => {
         && withinRecentWindow
         && (!lastInboundAt || lastInboundAt <= lastOutboundAt),
       );
-      const template = shouldRotateVariants
-        ? sanitizedVariants[
-            Math.floor(Math.random() * sanitizedVariants.length)
-          ]
-        : messageTemplate || sanitizedVariants[0] || "";
+      const template = shouldRotateVariants ? sanitizedVariants[index % sanitizedVariants.length] : messageTemplate || sanitizedVariants[0] || "";
       return {
         campaign: campaign._id,
         phone: normalizedPhone,
