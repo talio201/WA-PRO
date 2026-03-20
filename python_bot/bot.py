@@ -26,6 +26,8 @@ if not API_SECRET_KEY:
 else:
     masked = f"{API_SECRET_KEY[:4]}...{API_SECRET_KEY[-4:]}" if len(API_SECRET_KEY) > 8 else "***"
     logging.info(f"Bot autenticando com x-agent-id={BOT_AGENT_ID} | key={masked} | api={API_BASE_URL}")
+if BOT_AGENT_ID == "bot":
+    logging.warning("BOT_AGENT_ID está como 'bot' (compartilhado). Para multiusuario real, execute uma instância do python_bot por agentId.")
 def type_like_human(page, text, is_priority=False):
     logging.info("Iniciando digitação...")
     if text:
@@ -388,7 +390,13 @@ def main():
                 "--disable-features=IsolateOrigins,site-per-process",
             ]
         )
-        page = browser.new_page()
+        pages = browser.pages
+        page = pages[0] if pages else browser.new_page()
+        for extra_page in browser.pages[1:]:
+            try:
+                extra_page.close()
+            except Exception:
+                pass
         page.goto(WHATSAPP_URL, timeout=60000)
         logging.info("Aguardando carregamento da página e verificando estado de login...")
         

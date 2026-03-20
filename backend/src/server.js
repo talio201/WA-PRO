@@ -85,7 +85,9 @@ app.post("/api/bot/status", requireAuth, (req, res) => {
     }
   }
   const { status, qrCodeBase64, agentId } = req.body;
-  const targetId = agentId || req.agentId || "system";
+  const targetId = (req.user && req.agentId !== 'admin')
+    ? req.agentId
+    : (agentId || req.agentId || "system");
   
   const currentState = botStates.get(targetId) || { status: 'DISCONNECTED', qrCode: null };
   if (status) currentState.status = status;
@@ -113,8 +115,10 @@ app.get("/api/bot/status", requireAuth, (req, res) => {
       });
     }
   }
-  const agentId = req.headers["x-agent-id"] || req.query.agentId || req.agentId || "system";
-  const state = botStates.get(agentId) || botStates.get('bot') || { status: 'DISCONNECTED', qrCode: null };
+  const targetAgentId = (req.user && req.agentId !== 'admin')
+    ? req.agentId
+    : (req.headers["x-agent-id"] || req.query.agentId || req.agentId || "system");
+  const state = botStates.get(targetAgentId) || { status: 'DISCONNECTED', qrCode: null };
   res.json(state);
 });
 

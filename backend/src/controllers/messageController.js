@@ -1546,8 +1546,7 @@ exports.getNextJob = async (req, res) => {
         ? configuredStaleTimeoutMs
         : 90 * 1000;
     const query = { status: "running" };
-    // Se não for bot, filtra pra puxar as campaigns rodando do agente atual
-    if (req.agentId && req.agentId !== "bot") {
+    if (req.agentId) {
       query.agentId = req.agentId;
     }
     const activeCampaigns = await Campaign.find(query).select("_id");
@@ -1618,6 +1617,7 @@ exports.getNextJob = async (req, res) => {
       {
         status: "pending",
         attemptCount: -1,
+        campaign: { $in: eligibleCampaignIds },
       },
       { status: "processing" },
       { sort: { _id: 1 }, new: true },
