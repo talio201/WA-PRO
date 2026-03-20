@@ -84,7 +84,7 @@ export default function Login() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
-              className="auth-input w-full rounded-lg bg-white/10 border border-white/20 text-white px-4 py-2.5 outline-none focus:border-emerald-500 transition placeholder-slate-500"
+              className="auth-input w-full rounded-lg bg-white border border-slate-300 text-slate-900 px-4 py-2.5 outline-none focus:border-emerald-500 transition placeholder-slate-500"
               placeholder="seu@email.com"
             />
           </div>
@@ -95,7 +95,7 @@ export default function Login() {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
-              className="auth-input w-full rounded-lg bg-white/10 border border-white/20 text-white px-4 py-2.5 outline-none focus:border-emerald-500 transition placeholder-slate-500"
+              className="auth-input w-full rounded-lg bg-white border border-slate-300 text-slate-900 px-4 py-2.5 outline-none focus:border-emerald-500 transition placeholder-slate-500"
               placeholder="••••••••"
             />
           </div>
@@ -106,7 +106,7 @@ export default function Login() {
                 <input
                   value={companyName}
                   onChange={(e) => setCompanyName(e.target.value)}
-                  className="auth-input w-full rounded-lg bg-white/10 border border-white/20 text-white px-4 py-2.5 outline-none focus:border-emerald-500 transition placeholder-slate-500"
+                  className="auth-input w-full rounded-lg bg-white border border-slate-300 text-slate-900 px-4 py-2.5 outline-none focus:border-emerald-500 transition placeholder-slate-500"
                   placeholder="Nome da empresa ou responsável"
                 />
               </div>
@@ -115,7 +115,7 @@ export default function Login() {
                 <input
                   value={documentId}
                   onChange={(e) => setDocumentId(e.target.value)}
-                  className="auth-input w-full rounded-lg bg-white/10 border border-white/20 text-white px-4 py-2.5 outline-none focus:border-emerald-500 transition placeholder-slate-500"
+                  className="auth-input w-full rounded-lg bg-white border border-slate-300 text-slate-900 px-4 py-2.5 outline-none focus:border-emerald-500 transition placeholder-slate-500"
                   placeholder="Somente números"
                 />
               </div>
@@ -128,7 +128,7 @@ export default function Login() {
                     max={1000}
                     value={seats}
                     onChange={(e) => setSeats(Number(e.target.value) || 1)}
-                    className="auth-input w-full rounded-lg bg-white/10 border border-white/20 text-white px-4 py-2.5 outline-none focus:border-emerald-500 transition"
+                    className="auth-input w-full rounded-lg bg-white border border-slate-300 text-slate-900 px-4 py-2.5 outline-none focus:border-emerald-500 transition"
                   />
                 </div>
                 <div>
@@ -136,7 +136,7 @@ export default function Login() {
                   <select
                     value={desiredPlan}
                     onChange={(e) => setDesiredPlan(e.target.value)}
-                    className="auth-input w-full rounded-lg bg-white/10 border border-white/20 text-white px-4 py-2.5 outline-none focus:border-emerald-500 transition"
+                    className="auth-input w-full rounded-lg bg-white border border-slate-300 text-slate-900 px-4 py-2.5 outline-none focus:border-emerald-500 transition"
                   >
                     <option value="demo">DEMO (7 dias)</option>
                     <option value="30d">Plano Teste 30 dias</option>

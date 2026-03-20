@@ -24,8 +24,8 @@ html, body, #root {
 .auth-input:-webkit-autofill:hover,
 .auth-input:-webkit-autofill:focus,
 .auth-input:-webkit-autofill:active {
-  -webkit-text-fill-color: #ffffff;
-  caret-color: #ffffff;
-  -webkit-box-shadow: 0 0 0px 1000px rgba(255, 255, 255, 0.1) inset;
+  -webkit-text-fill-color: #0f172a;
+  caret-color: #0f172a;
+  -webkit-box-shadow: 0 0 0px 1000px #ffffff inset;
   transition: background-color 5000s ease-in-out 0s;
 }
