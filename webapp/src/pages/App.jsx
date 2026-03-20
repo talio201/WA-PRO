@@ -79,7 +79,17 @@ export default function App() {
   const renderContent = () => {
     switch (activeTab) {
       case 'dashboard': return <Campaigns />;
-      case 'inbox': return <Inbox />;
+      case 'inbox': 
+        return (
+          <div className="flex items-center justify-center h-full bg-white/50 rounded-2xl border border-slate-200 shadow-sm p-8">
+            <div className="text-center">
+              <span className="text-5xl block mb-4">🚧</span>
+              <h3 className="text-xl font-bold text-slate-700 mb-2">Módulo de Atendimento Web</h3>
+              <p className="text-slate-500">Recurso desativado p/ manutenção (Futura implementação apenas).</p>
+            </div>
+          </div>
+        );
+        // return <Inbox />; 
       case 'new-campaign': return <NewCampaign onCancel={() => navigateTo('dashboard')} />;
       case 'contacts': return <Contacts />;
       case 'settings': return <Settings />;
