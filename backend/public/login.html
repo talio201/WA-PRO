@@ -223,7 +223,7 @@
                 if (!supabaseUrl || !supabaseAnonKey) {
                     throw new Error('Supabase não configurado no servidor.');
                 }
-                supabaseClient = supabase.createClient(supabaseUrl, supabaseAnonKey);
+                supabaseClient = supabase.createClient(supabaseUrl, supabaseAnonKey, { auth: { storageKey: 'emidia-admin-auth-token' }});
             } catch (error) {
                 errorMsg.innerText = 'Configuração de autenticação indisponível. Contate o administrador.';
                 errorMsg.style.display = 'block';

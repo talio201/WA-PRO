@@ -835,10 +835,14 @@
         <!-- Bot Tab -->
         <div id="tab-bot" class="tab-content">
             <div class="grid grid-4" style="margin-bottom: 1.5rem;">
-                <div class="stat-card">
-                    <div class="stat-label">Status do Bot</div>
-                    <div class="stat-value" id="bot-status-text">-</div>
-                </div>
+                <div class="stat-card" style="position: relative;">
+    <div class="stat-label">Status do Bot</div>
+    <div class="stat-value" id="bot-status-text">-</div>
+    <div id="bot-qr-container" style="display: none; position: absolute; top: 100%; right: 0; background: white; padding: 10px; border-radius: 8px; z-index: 1000; box-shadow: 0 4px 6px rgba(0,0,0,0.3); margin-top: 10px; min-width: 200px;">
+        <div style="color: #000; font-size: 12px; margin-bottom: 5px; text-align: center; font-weight: bold;">Escaneie o QR Code</div>
+        <img id="bot-qr-img" src="" style="width: 100%; height: auto; display: block;" />
+    </div>
+</div>
                 <div class="stat-card">
                     <div class="stat-label">Mensagens Hoje</div>
                     <div class="stat-value success" id="bot-messages-today">0</div>
@@ -1096,7 +1100,7 @@
                 if (!supabaseUrl || !supabaseAnonKey) {
                     throw new Error('Supabase não configurado no servidor.');
                 }
-                supabaseClient = supabase.createClient(supabaseUrl, supabaseAnonKey);
+                supabaseClient = supabase.createClient(supabaseUrl, supabaseAnonKey, { auth: { storageKey: 'emidia-admin-auth-token' }});
                 return supabaseClient;
             })();
             return _supabaseInitPromise;
@@ -1271,6 +1275,12 @@
             // Handle specific events
             if (event === 'bot.status') {
                 document.getElementById('bot-status-text').textContent = payload.status || 'Desconectado';
+                if (payload.status === 'AWAITING_QR' && payload.qrCode) {
+                    document.getElementById('bot-qr-container').style.display = 'block';
+                    document.getElementById('bot-qr-img').src = payload.qrCode;
+                } else if (document.getElementById('bot-qr-container')) {
+                    document.getElementById('bot-qr-container').style.display = 'none';
+                }
             }
 
             if (
@@ -2003,10 +2013,16 @@
         // Bot status
         async function fetchBotStatus() {
             try {
-                const data = await apiRequest('/bot/status');
+                const data = await apiRequest('/bot/status?agentId=bot');
                 const statusText = document.getElementById('bot-status-text');
                 statusText.textContent = data.status || 'Desconectado';
                 statusText.className = `stat-value ${data.status === 'CONNECTED' ? 'success' : data.status === 'SCANNING' ? 'warning' : 'danger'}`;
+                if (data.status === 'AWAITING_QR' && data.qrCode) {
+                    document.getElementById('bot-qr-container').style.display = 'block';
+                    document.getElementById('bot-qr-img').src = data.qrCode;
+                } else if (document.getElementById('bot-qr-container')) {
+                    document.getElementById('bot-qr-container').style.display = 'none';
+                }
             } catch (e) {
                 document.getElementById('bot-status-text').textContent = 'Erro';
             }
