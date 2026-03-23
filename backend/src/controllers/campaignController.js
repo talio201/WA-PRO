@@ -426,6 +426,86 @@ exports.dispatchNextCampaignContact = async (req, res) => {
   }
 };
 
+exports.retryCampaignFailures = async (req, res) => {
+  try {
+    const campaigns = await Campaign.find({ _id: req.params.id, agentId: req.agentId });
+    const campaign = campaigns && campaigns.length > 0 ? campaigns[0] : null;
+    if (!campaign) {
+      return res.status(404).json({ msg: "Campaign not found or unauthorized" });
+    }
+
+    const failedMessages = await Message.find({
+      campaign: campaign._id,
+      status: "failed",
+    });
+    const failedList = Array.isArray(failedMessages) ? failedMessages : [];
+    if (failedList.length === 0) {
+      return res.json({ success: true, campaignId: campaign._id, retriedCount: 0 });
+    }
+
+    const now = new Date();
+    const requestedBy = req.agentId || "unknown";
+    const bulkOps = failedList.map((item) => ({
+      updateOne: {
+        filter: { _id: item._id, status: "failed" },
+        update: {
+          $set: {
+            status: "pending",
+            error: null,
+            lastError: null,
+            sentAt: null,
+            updatedAt: now,
+          },
+          $push: {
+            audit: {
+              at: now,
+              action: "retried_bulk",
+              details: "Message moved back to queue by bulk retry action.",
+              meta: { requestedBy },
+            },
+          },
+        },
+      },
+    }));
+
+    const bulkResult = await Message.bulkWrite(bulkOps, { ordered: false });
+    const retriedCount = Number(
+      bulkResult?.modifiedCount
+      ?? bulkResult?.nModified
+      ?? 0,
+    );
+
+    if (!campaign.stats || typeof campaign.stats !== "object") {
+      campaign.stats = { total: 0, sent: 0, failed: 0 };
+    }
+    campaign.stats.failed = Math.max(0, Number(campaign.stats.failed || 0) - retriedCount);
+    campaign.updatedAt = now;
+    await campaign.save();
+
+    emitRealtimeEvent("messages.retried.bulk", {
+      campaignId: campaign._id,
+      retriedCount,
+      requestedBy,
+      updatedAt: now,
+    });
+    emitRealtimeEvent("campaign.stats.updated", {
+      campaignId: campaign._id,
+      stats: campaign.stats,
+      updatedAt: campaign.updatedAt,
+    });
+
+    return res.json({
+      success: true,
+      campaignId: campaign._id,
+      retriedCount,
+    });
+  } catch (err) {
+    console.error(err.message);
+    const errorResponse = buildServerErrorResponse(err);
+    return res.status(errorResponse.statusCode).json(errorResponse.body);
+  }
+};
+
 exports.deleteCampaign = async (req, res) => {
   try {
     const campaigns = await Campaign.find({ _id: req.params.id, agentId: req.agentId });

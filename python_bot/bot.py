@@ -70,139 +70,142 @@ def download_file(url, target_path):
         return False
 
 def send_message(page, phone, message, is_priority=False, media=None):
-    logging.info(f"Tentando iniciar conversa silenciosa com: {phone}")
-    dom_success = False
     try:
-        new_chat_btn = page.locator('div[title="Nova conversa"], span[data-icon="chat"]').first
-        new_chat_btn.click(timeout=5000)
-        page.wait_for_timeout(1000) 
-        page.keyboard.type(phone)
-        page.wait_for_timeout(3000) 
-        page.keyboard.press("Enter")
-        page.wait_for_timeout(1500)
-        chat_box = page.locator('#main div[role="textbox"]').last
-        if not chat_box.is_visible():
-            first_contact = page.locator('div[role="listitem"]').first
-            if first_contact.is_visible():
-                first_contact.click(timeout=2000)
-                page.wait_for_timeout(1500)
+        logging.info(f"Tentando iniciar conversa silenciosa com: {phone}")
+        dom_success = False
+        try:
+            new_chat_btn = page.locator('div[title="Nova conversa"], span[data-icon="chat"]').first
+            new_chat_btn.click(timeout=5000)
+            page.wait_for_timeout(1000)
+            page.keyboard.type(phone)
+            page.wait_for_timeout(3000)
+            page.keyboard.press("Enter")
+            page.wait_for_timeout(1500)
+            chat_box = page.locator('#main div[role="textbox"]').last
+            if not chat_box.is_visible():
+                first_contact = page.locator('div[role="listitem"]').first
+                if first_contact.is_visible():
+                    first_contact.click(timeout=2000)
+                    page.wait_for_timeout(1500)
+                else:
+                    page.keyboard.press("Escape")
+                    raise Exception("Sem resultados.")
+            if chat_box.is_visible():
+                dom_success = True
+                logging.info("Aberto silenciosamente via DOM com sucesso!")
             else:
                 page.keyboard.press("Escape")
-                raise Exception("Sem resultados.")
-        if chat_box.is_visible():
-            dom_success = True
-            logging.info("Aberto silenciosamente via DOM com sucesso!")
-        else:
-            page.keyboard.press("Escape")
-            raise Exception("Caixa de chat indetectável.")
-    except Exception as e:
-        logging.warning(f"Busca silenciosa DOM falhou. Recorrendo a URL e recarregamento...")
+                raise Exception("Caixa de chat indetectável.")
+        except Exception:
+            logging.warning("Busca silenciosa DOM falhou. Recorrendo a URL e recarregamento...")
 
-    if not dom_success:
-        chat_url = f"{WHATSAPP_URL}/send/?phone={phone}"
-        page.goto(chat_url)
-        try:
-            page.wait_for_selector('#main', timeout=MAX_WAIT_TIME)
-            if check_invalid_number_modal(page):
-                return False, "Número inválido ou sem WhatsApp."
-        except PlaywrightTimeoutError:
-            if check_invalid_number_modal(page):
-                return False, "Número inválido ou sem WhatsApp."
-            logging.error("Tempo esgotado aguardando o chat carregar.")
-            return False, "Timeout ao abrir o chat via URL."
-
-    logging.info("Chat aberto. Preparando envio...")
-
-    # 1. Enviar Texto Primeiro (Mensagem Independente)
-    if message:
-        try:
-            chat_box = page.locator('#main div[role="textbox"]').last
-            chat_box.click(timeout=3000)
-            if not is_priority:
-                time.sleep(random.uniform(0.5, 1.2))
-            type_like_human(page, message, is_priority)
-            page.wait_for_timeout(400)
-            page.keyboard.press("Enter")
-            logging.info("Texto enviado com sucesso.")
-            page.wait_for_timeout(1500)
-        except Exception as e:
-            logging.error(f"Erro ao enviar texto: {e}")
-
-    # 2. Enviar Mídia via Simulação de 'Ctrl+V' (Paste) Universal
-    if media and media.get('fileUrl'):
-        file_url = media['fileUrl']
-        file_name = media.get('fileName', 'arquivo.bin')
-        mimetype = media.get('mimetype', 'application/octet-stream')
-        
-        temp_dir = os.path.join(os.getcwd(), 'tmp_media')
-        os.makedirs(temp_dir, exist_ok=True)
-        # Preservar o nome do arquivo se possível para o SO baixar corretamente
-        ext = os.path.splitext(file_name)[1]
-        safe_name = f"paste_{int(time.time())}{ext}"
-        temp_path = os.path.join(temp_dir, safe_name)
-
-        if download_file(file_url, temp_path):
+        if not dom_success:
+            chat_url = f"{WHATSAPP_URL}/send/?phone={phone}"
+            page.goto(chat_url, timeout=MAX_WAIT_TIME)
             try:
-                logging.info(f"Simulando Ctrl+V para arquivo: {file_name} ({mimetype})")
-                import base64
-                with open(temp_path, "rb") as f:
-                    base64_data = base64.b64encode(f.read()).decode('utf-8')
+                page.wait_for_selector('#main', timeout=MAX_WAIT_TIME)
+                if check_invalid_number_modal(page):
+                    return False, "Número inválido ou sem WhatsApp."
+            except PlaywrightTimeoutError:
+                if check_invalid_number_modal(page):
+                    return False, "Número inválido ou sem WhatsApp."
+                logging.error("Tempo esgotado aguardando o chat carregar.")
+                return False, "Timeout ao abrir o chat via URL."
 
-                # Script JS Universal para injetar QUALQUER arquivo no Clipboard e disparar o Paste
-                paste_script = """
-                async (params) => {
-                    const { base64Data, mimeType, fileName } = params;
-                    const res = await fetch(`data:${mimeType};base64,${base64Data}`);
-                    const blob = await res.blob();
-                    
-                    // Criamos o arquivo com o nome original para o WhatsApp reconhecer
-                    const file = new File([blob], fileName, { type: mimeType });
-                    
-                    const dataTransfer = new DataTransfer();
-                    dataTransfer.items.add(file);
-                    
-                    const chatBox = document.querySelector('#main div[role="textbox"]');
-                    if (chatBox) {
-                        chatBox.focus();
-                        const pasteEvent = new ClipboardEvent('paste', {
-                            clipboardData: dataTransfer,
-                            bubbles: true,
-                            cancelable: true
-                        });
-                        chatBox.dispatchEvent(pasteEvent);
-                        return true;
-                    }
-                    return false;
-                }
-                """
-                
-                success = page.evaluate(paste_script, {
-                    "base64Data": base64_data, 
-                    "mimeType": mimetype,
-                    "fileName": file_name
-                })
-                
-                if success:
-                    logging.info(f"Evento 'Paste' para {file_name} disparado.")
-                    # Aguarda o preview aparecer. Documentos e Vídeos podem demorar mais para carregar.
-                    page.wait_for_timeout(6000)
-                    page.keyboard.press("Enter")
-                    logging.info("Mídia confirmada via Ctrl+V.")
-                else:
-                    logging.error("Falha ao localizar chatbox para o Paste.")
+        logging.info("Chat aberto. Preparando envio...")
 
-                page.wait_for_timeout(2000)
-                if os.path.exists(temp_path):
-                    os.remove(temp_path)
-                
+        # 1. Enviar Texto Primeiro (Mensagem Independente)
+        if message:
+            try:
+                chat_box = page.locator('#main div[role="textbox"]').last
+                chat_box.click(timeout=3000)
+                if not is_priority:
+                    time.sleep(random.uniform(0.5, 1.2))
+                type_like_human(page, message, is_priority)
+                page.wait_for_timeout(400)
+                page.keyboard.press("Enter")
+                logging.info("Texto enviado com sucesso.")
+                page.wait_for_timeout(1500)
             except Exception as e:
-                logging.error(f"Erro no Paste universal: {e}")
-                if os.path.exists(temp_path):
-                    os.remove(temp_path)
-        else:
-            logging.warning("Download falhou.")
+                logging.error(f"Erro ao enviar texto: {e}")
 
-    return True, "Processo concluido."
+        # 2. Enviar Mídia via Simulação de 'Ctrl+V' (Paste) Universal
+        if media and media.get('fileUrl'):
+            file_url = media['fileUrl']
+            file_name = media.get('fileName', 'arquivo.bin')
+            mimetype = media.get('mimetype', 'application/octet-stream')
+
+            temp_dir = os.path.join(os.getcwd(), 'tmp_media')
+            os.makedirs(temp_dir, exist_ok=True)
+            ext = os.path.splitext(file_name)[1]
+            safe_name = f"paste_{int(time.time())}{ext}"
+            temp_path = os.path.join(temp_dir, safe_name)
+
+            if download_file(file_url, temp_path):
+                try:
+                    logging.info(f"Simulando Ctrl+V para arquivo: {file_name} ({mimetype})")
+                    import base64
+                    with open(temp_path, "rb") as f:
+                        base64_data = base64.b64encode(f.read()).decode('utf-8')
+
+                    paste_script = """
+                    async (params) => {
+                        const { base64Data, mimeType, fileName } = params;
+                        const res = await fetch(`data:${mimeType};base64,${base64Data}`);
+                        const blob = await res.blob();
+
+                        const file = new File([blob], fileName, { type: mimeType });
+
+                        const dataTransfer = new DataTransfer();
+                        dataTransfer.items.add(file);
+
+                        const chatBox = document.querySelector('#main div[role="textbox"]');
+                        if (chatBox) {
+                            chatBox.focus();
+                            const pasteEvent = new ClipboardEvent('paste', {
+                                clipboardData: dataTransfer,
+                                bubbles: true,
+                                cancelable: true
+                            });
+                            chatBox.dispatchEvent(pasteEvent);
+                            return true;
+                        }
+                        return false;
+                    }
+                    """
+
+                    success = page.evaluate(paste_script, {
+                        "base64Data": base64_data,
+                        "mimeType": mimetype,
+                        "fileName": file_name
+                    })
+
+                    if success:
+                        logging.info(f"Evento 'Paste' para {file_name} disparado.")
+                        page.wait_for_timeout(6000)
+                        page.keyboard.press("Enter")
+                        logging.info("Mídia confirmada via Ctrl+V.")
+                    else:
+                        logging.error("Falha ao localizar chatbox para o Paste.")
+
+                    page.wait_for_timeout(2000)
+                    if os.path.exists(temp_path):
+                        os.remove(temp_path)
+
+                except Exception as e:
+                    logging.error(f"Erro no Paste universal: {e}")
+                    if os.path.exists(temp_path):
+                        os.remove(temp_path)
+            else:
+                logging.warning("Download falhou.")
+
+        return True, "Processo concluido."
+    except PlaywrightTimeoutError as e:
+        logging.error(f"Timeout Playwright no envio para {phone}: {e}")
+        return False, "Timeout ao manipular o WhatsApp Web durante o envio."
+    except Exception as e:
+        logging.error(f"Falha inesperada ao enviar para {phone}: {e}")
+        return False, f"Falha inesperada no envio: {str(e)}"
 def update_job_status(job_id, status, error=None):
     data = {"status": status}
     if error:
@@ -445,6 +448,10 @@ def main():
         )
         pages = browser.pages
         page = pages[0] if pages else browser.new_page()
+        browser.set_default_timeout(MAX_WAIT_TIME)
+        browser.set_default_navigation_timeout(MAX_WAIT_TIME)
+        page.set_default_timeout(MAX_WAIT_TIME)
+        page.set_default_navigation_timeout(MAX_WAIT_TIME)
         for extra_page in browser.pages[1:]:
             try:
                 extra_page.close()

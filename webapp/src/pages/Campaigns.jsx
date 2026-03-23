@@ -21,6 +21,7 @@ import {
     getCampaigns,
     getLeadAnalytics,
     getMessages,
+    retryCampaignFailures,
     retryMessage,
     updateCampaign,
     updateMessage,
@@ -105,6 +106,7 @@ const Campaigns = () => {
     const [loadingFailures, setLoadingFailures] = useState(false);
     const [savingMessageId, setSavingMessageId] = useState(null);
     const [retryingMessageId, setRetryingMessageId] = useState(null);
+    const [retryingAllFailures, setRetryingAllFailures] = useState(false);
     const [messageEdits, setMessageEdits] = useState({});
     const [leadAnalytics, setLeadAnalytics] = useState(null);
     const syncInFlightRef = useRef(false);
@@ -396,6 +398,7 @@ const Campaigns = () => {
         setMessageEdits({});
         setSavingMessageId(null);
         setRetryingMessageId(null);
+        setRetryingAllFailures(false);
     };
     const handleEditChange = (messageId, field, value) => {
         setMessageEdits((prev) => ({
@@ -437,6 +440,25 @@ const Campaigns = () => {
             alert('Nao foi possivel reenfileirar a mensagem.');
         } finally {
             setRetryingMessageId(null);
+        }
+    };
+    const handleRetryAllFailures = async () => {
+        if (!selectedCampaign?._id || failures.length === 0) return;
+        const confirmed = window.confirm(`Reenfileirar todas as ${failures.length} falhas desta campanha?`);
+        if (!confirmed) return;
+        try {
+            setRetryingAllFailures(true);
+            const result = await retryCampaignFailures(selectedCampaign._id);
+            const retriedCount = Number(result?.retriedCount || 0);
+            setFailures([]);
+            setMessageEdits({});
+            await loadDashboardData({ showSpinner: false });
+            alert(`${retriedCount} mensagem(ns) reenfileirada(s) com sucesso.`);
+        } catch (error) {
+            console.error('Bulk retry message error:', error);
+            alert('Nao foi possivel reenfileirar todas as falhas.');
+        } finally {
+            setRetryingAllFailures(false);
         }
     };
     if (loading) {
@@ -844,14 +866,25 @@ const Campaigns = () => {
                                 <h3 className="text-lg font-bold text-gray-900">Falhas da Campanha</h3>
                                 <p className="text-sm text-gray-500">{selectedCampaign.name}</p>
                             </div>
-                            <button
-                                type="button"
-                                onClick={closeFailuresModal}
-                                className={neutralButtonClass}
-                            >
-                                <X size={14} />
-                                Fechar
-                            </button>
+                            <div className="flex items-center gap-2">
+                                <button
+                                    type="button"
+                                    onClick={handleRetryAllFailures}
+                                    disabled={loadingFailures || failures.length === 0 || retryingAllFailures}
+                                    className={`inline-flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-semibold text-white transition ${loadingFailures || failures.length === 0 || retryingAllFailures ? 'cursor-not-allowed bg-slate-300' : 'bg-emerald-600 hover:bg-emerald-700'}`}
+                                >
+                                    <RefreshCw size={14} className={retryingAllFailures ? 'animate-spin' : ''} />
+                                    {retryingAllFailures ? 'Reenfileirando...' : 'Reenfileirar todas'}
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={closeFailuresModal}
+                                    className={neutralButtonClass}
+                                >
+                                    <X size={14} />
+                                    Fechar
+                                </button>
+                            </div>
                         </div>
                         <div className="overflow-y-auto p-6">
                             {loadingFailures ? (
