@@ -3,6 +3,7 @@ const Message = require("../models/Message");
 const { normalizePhone } = require("../utils/phone");
 const { buildServerErrorResponse } = require("../utils/httpError");
 const { emitRealtimeEvent } = require("../realtime/realtime");
+const { enqueueBotCommand } = require("../config/botControlStore");
 const DEFAULT_MIN_DELAY_SECONDS = 0;
 const DEFAULT_MAX_DELAY_SECONDS = 120;
 const MAX_ALLOWED_DELAY_SECONDS = 3600;
@@ -271,6 +272,160 @@ exports.getCampaignFailures = async (req, res) => {
     res.status(errorResponse.statusCode).json(errorResponse.body);
   }
 };
+
+exports.updateCampaign = async (req, res) => {
+  try {
+    const campaigns = await Campaign.find({ _id: req.params.id, agentId: req.agentId });
+    const campaign = campaigns && campaigns.length > 0 ? campaigns[0] : null;
+    if (!campaign) {
+      return res.status(404).json({ msg: "Campaign not found or unauthorized" });
+    }
+
+    const hasName = Object.prototype.hasOwnProperty.call(req.body || {}, "name");
+    const hasMessage = Object.prototype.hasOwnProperty.call(req.body || {}, "messageTemplate");
+    const hasAntiBan = Object.prototype.hasOwnProperty.call(req.body || {}, "antiBan");
+    const hasMedia = Object.prototype.hasOwnProperty.call(req.body || {}, "media");
+
+    if (hasName) {
+      const nextName = String(req.body.name || "").trim();
+      if (!nextName) {
+        return res.status(400).json({ msg: "Campaign name is required" });
+      }
+      campaign.name = nextName;
+    }
+
+    let nextTemplate = String(campaign.messageTemplate || "");
+    if (hasMessage) {
+      nextTemplate = String(req.body.messageTemplate || "").trim();
+      campaign.messageTemplate = nextTemplate;
+    }
+
+    if (hasAntiBan) {
+      const existing = campaign.antiBan || {};
+      const incoming = req.body.antiBan || {};
+      campaign.antiBan = sanitizeAntiBanSettings({
+        ...existing,
+        ...incoming,
+        deliveryWindow: incoming.deliveryWindow || existing.deliveryWindow || {},
+        resendPolicy: incoming.resendPolicy || existing.resendPolicy || {},
+      });
+    }
+
+    if (hasMedia) {
+      campaign.media = req.body.media || null;
+    }
+
+    campaign.updatedAt = new Date();
+    const updatedCampaign = await Campaign.findByIdAndUpdate(campaign._id, campaign);
+
+    if (hasMessage) {
+      const pendingMessages = await Message.find({ campaign: campaign._id, status: "pending" });
+      const toUpdate = Array.isArray(pendingMessages) ? pendingMessages : [];
+      for (const item of toUpdate) {
+        const messageDoc = await Message.findById(item._id);
+        if (!messageDoc || messageDoc.status !== "pending") continue;
+        messageDoc.processedMessage = nextTemplate.replace(
+          /{name}/g,
+          String(messageDoc.name || ""),
+        );
+        messageDoc.updatedAt = new Date();
+        messageDoc.audit = Array.isArray(messageDoc.audit) ? messageDoc.audit : [];
+        messageDoc.audit.push({
+          at: new Date(),
+          action: "campaign_updated",
+          details: "Message template refreshed after campaign update.",
+        });
+        await messageDoc.save();
+      }
+    }
+
+    emitRealtimeEvent("campaign.updated", {
+      campaignId: campaign._id,
+      name: updatedCampaign?.name || campaign.name,
+      updatedAt: new Date().toISOString(),
+    });
+
+    return res.json(updatedCampaign || campaign);
+  } catch (err) {
+    console.error(err.message);
+    const errorResponse = buildServerErrorResponse(err);
+    return res.status(errorResponse.statusCode).json(errorResponse.body);
+  }
+};
+
+exports.dispatchNextCampaignContact = async (req, res) => {
+  try {
+    const campaigns = await Campaign.find({ _id: req.params.id, agentId: req.agentId });
+    const campaign = campaigns && campaigns.length > 0 ? campaigns[0] : null;
+    if (!campaign) {
+      return res.status(404).json({ msg: "Campaign not found or unauthorized" });
+    }
+
+    const pendingMessages = await Message.find({
+      campaign: campaign._id,
+      status: "pending",
+    });
+    const ordered = (Array.isArray(pendingMessages) ? pendingMessages : []).sort((a, b) => {
+      const aDate = new Date(a.createdAt || a.updatedAt || 0).getTime();
+      const bDate = new Date(b.createdAt || b.updatedAt || 0).getTime();
+      return aDate - bDate;
+    });
+
+    const nextMessage = ordered[0] || null;
+    if (!nextMessage) {
+      return res.status(400).json({ msg: "No pending contacts in queue." });
+    }
+
+    const messageDoc = await Message.findById(nextMessage._id);
+    if (!messageDoc || messageDoc.status !== "pending") {
+      return res.status(409).json({ msg: "Pending message no longer available." });
+    }
+
+    messageDoc.attemptCount = -1;
+    messageDoc.updatedAt = new Date();
+    messageDoc.audit = Array.isArray(messageDoc.audit) ? messageDoc.audit : [];
+    messageDoc.audit.push({
+      at: new Date(),
+      action: "expedite_next",
+      details: "Message promoted to immediate dispatch by user action.",
+      meta: {
+        requestedBy: req.agentId || "unknown",
+      },
+    });
+    await messageDoc.save();
+
+    const botCommand = enqueueBotCommand(req.agentId, {
+      type: "skip_delay_once",
+      payload: {
+        reason: "dispatch_next_contact_now",
+        campaignId: String(campaign._id || ""),
+        messageId: String(messageDoc._id || ""),
+      },
+      requestedBy: req.agentId || "system",
+    });
+
+    emitRealtimeEvent("messages.queue.expedited", {
+      messageId: messageDoc._id,
+      campaignId: campaign._id,
+      phone: messageDoc.phone || "",
+      requestedBy: req.agentId || "unknown",
+      commandId: botCommand?.id || null,
+      updatedAt: messageDoc.updatedAt,
+    });
+
+    return res.json({
+      success: true,
+      campaignId: campaign._id,
+      messageId: messageDoc._id,
+      commandId: botCommand?.id || null,
+    });
+  } catch (err) {
+    console.error(err.message);
+    const errorResponse = buildServerErrorResponse(err);
+    return res.status(errorResponse.statusCode).json(errorResponse.body);
+  }
+};
+
 exports.deleteCampaign = async (req, res) => {
   try {
     const campaigns = await Campaign.find({ _id: req.params.id, agentId: req.agentId });

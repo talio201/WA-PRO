@@ -19,7 +19,7 @@ API_HEADERS = {
     "x-agent-id": BOT_AGENT_ID
 }
 WHATSAPP_URL = "https://web.whatsapp.com"
-MAX_WAIT_TIME = 60000
+MAX_WAIT_TIME = 120000  # 120 segundos para aguardar página carregar
 
 if not API_SECRET_KEY:
     logging.critical("API_SECRET_KEY/BOT_API_KEY não definida. O bot não conseguirá autenticar na API.")
@@ -230,10 +230,15 @@ def fetch_next_command():
 
 def execute_control_command(command, browser, user_data_dir):
     if not isinstance(command, dict):
-        return False
+        return None
     cmd_type = str(command.get("type") or "").strip().lower()
+    if cmd_type == "skip_delay_once":
+        reason = str((command.get("payload") or {}).get("reason") or "manual_skip_delay")
+        logging.info(f"Comando recebido: pular espera anti-ban uma vez ({reason}).")
+        return "skip_delay_once"
+
     if cmd_type != "disconnect_whatsapp":
-        return False
+        return None
 
     reason = str((command.get("payload") or {}).get("reason") or "manual_disconnect")
     logging.warning(f"Comando recebido: desconectar WhatsApp ({reason}).")
@@ -260,6 +265,53 @@ def execute_control_command(command, browser, user_data_dir):
 
     logging.critical("Sessão removida por comando administrativo. Encerrando processo para reiniciar limpo.")
     raise SystemExit(0)
+
+
+def get_campaign_delay_seconds(job):
+    campaign_payload = job.get("campaign") if isinstance(job, dict) else None
+    anti_ban = {}
+    if isinstance(campaign_payload, dict):
+        anti_ban = campaign_payload.get("antiBan") or {}
+
+    min_delay = anti_ban.get("minDelaySeconds", 0)
+    max_delay = anti_ban.get("maxDelaySeconds", 120)
+
+    try:
+        min_delay = int(float(min_delay))
+    except Exception:
+        min_delay = 0
+    try:
+        max_delay = int(float(max_delay))
+    except Exception:
+        max_delay = 120
+
+    min_delay = max(0, min(min_delay, 3600))
+    max_delay = max(0, min(max_delay, 3600))
+    if max_delay < min_delay:
+        min_delay, max_delay = max_delay, min_delay
+
+    if max_delay == min_delay:
+        return min_delay
+
+    preferred_mode = min_delay + int((max_delay - min_delay) * 0.25)
+    delay_seconds = int(round(random.triangular(min_delay, max_delay, preferred_mode)))
+    return max(0, delay_seconds)
+
+
+def wait_with_command_poll(seconds, browser, user_data_dir):
+    safe_seconds = max(0, int(seconds or 0))
+    if safe_seconds <= 0:
+        return False
+
+    for _ in range(safe_seconds):
+        time.sleep(1)
+        command = fetch_next_command()
+        if not command:
+            continue
+        cmd_result = execute_control_command(command, browser, user_data_dir)
+        if cmd_result == "skip_delay_once":
+            return True
+    return False
 def check_inbound_messages(page):
     try:
         inbound_elements = page.query_selector_all('div.message-in')[-5:]
@@ -435,8 +487,10 @@ def main():
         last_control_poll = 0
         HEARTBEAT_INTERVAL = 30  # seconds
         CONTROL_POLL_INTERVAL = 5
+        skip_delay_once = False
         while True:
             try:
+                job_id = None
                 # Periodic heartbeat: re-post LOGGED_IN so backend restart doesn't show DISCONNECTED
                 now_ts = time.time()
                 if now_ts - last_heartbeat >= HEARTBEAT_INTERVAL:
@@ -450,7 +504,9 @@ def main():
                     command = fetch_next_command()
                     last_control_poll = now_ts
                     if command:
-                        execute_control_command(command, browser, user_data_dir)
+                        command_result = execute_control_command(command, browser, user_data_dir)
+                        if command_result == "skip_delay_once":
+                            skip_delay_once = True
 
                 response = requests.get(f"{API_BASE_URL}/messages/next", headers=API_HEADERS)
                 if response.status_code != 200:
@@ -496,9 +552,18 @@ def main():
                 if success:
                     update_job_status(job_id, "sent")
                     if not is_priority:
-                        tempo_espera = random.randint(15, 45)
-                        logging.info(f"Aguardando {tempo_espera}s de respiro antes da próxima mensagem da Campanha...")
-                        time.sleep(tempo_espera)
+                        if skip_delay_once:
+                            logging.info("Envio imediato solicitado. Pulando espera anti-ban desta vez.")
+                            skip_delay_once = False
+                        else:
+                            tempo_espera = get_campaign_delay_seconds(job)
+                            if tempo_espera > 0:
+                                logging.info(f"Aguardando {tempo_espera}s de respiro (anti-ban dinâmico) antes da próxima mensagem...")
+                                interrupted = wait_with_command_poll(tempo_espera, browser, user_data_dir)
+                                if interrupted:
+                                    logging.info("Espera anti-ban interrompida por comando de disparo imediato.")
+                            else:
+                                logging.info("Sem espera anti-ban para esta campanha (0s).")
                     else:
                         logging.info("Atendimento despachado instantaneamente. Indo checar o próximo da fila...")
                 else:
@@ -510,7 +575,14 @@ def main():
                         logging.critical(f"Pausando a fila por alguns segundos devido a possível erro de conexão ou instabilidade ({error_reason}).")
                         time.sleep(30)
             except Exception as e:
-                logging.error(f"Erro inesperado no loop principal: {str(e)}")
+                error_msg = f"Erro inesperado no loop principal: {str(e)}"
+                logging.error(error_msg)
+                # Reportar falha se há job_id em processamento
+                try:
+                    if 'job_id' in locals() and job_id:
+                        update_job_status(job_id, "failed", error_msg)
+                except Exception as update_err:
+                    logging.error(f"Falha ao reportar erro para job {job_id}: {update_err}")
                 time.sleep(10)
 if __name__ == "__main__":
     main()

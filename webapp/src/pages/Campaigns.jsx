@@ -5,6 +5,7 @@ import {
     CheckCircle2,
     Clock3,
     Download,
+    Pencil,
     RefreshCw,
     Search,
     SlidersHorizontal,
@@ -15,11 +16,13 @@ import {
 import { BarChart, Bar, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import {
     deleteCampaign,
+    dispatchCampaignNext,
     getCampaignFailures,
     getCampaigns,
     getLeadAnalytics,
     getMessages,
     retryMessage,
+    updateCampaign,
     updateMessage,
 } from '../utils/api.js';
 import { connectRealtime } from '../utils/realtime.js';
@@ -88,6 +91,14 @@ const Campaigns = () => {
     const [sortBy, setSortBy] = useState('recent');
     const [deletingId, setDeletingId] = useState(null);
     const [dispatchingCampaignId, setDispatchingCampaignId] = useState(null);
+    const [editingCampaign, setEditingCampaign] = useState(null);
+    const [savingCampaignEdit, setSavingCampaignEdit] = useState(false);
+    const [campaignEditForm, setCampaignEditForm] = useState({
+        name: '',
+        messageTemplate: '',
+        minDelaySeconds: 0,
+        maxDelaySeconds: 120,
+    });
     const [glassMode, setGlassMode] = useState(getStoredGlassMode);
     const [selectedCampaign, setSelectedCampaign] = useState(null);
     const [failures, setFailures] = useState([]);
@@ -295,8 +306,63 @@ const Campaigns = () => {
     const handleDispatchCampaign = useCallback(async (campaign) => {
         if (!campaign?._id) return;
         if (Number(campaign?.pending || 0) <= 0) return;
-        alert('Disparo via Servidor SaaS: O Worker Python processará a fila automaticamente.');
+        try {
+            setDispatchingCampaignId(campaign._id);
+            await dispatchCampaignNext(campaign._id);
+            await loadDashboardData({ showSpinner: false });
+        } catch (error) {
+            console.error('Dispatch next contact error:', error);
+            alert('Nao foi possivel disparar o proximo contato da fila.');
+        } finally {
+            setDispatchingCampaignId(null);
+        }
     }, []);
+    const openCampaignEditModal = useCallback((campaign) => {
+        if (!campaign?._id) return;
+        setEditingCampaign(campaign);
+        setCampaignEditForm({
+            name: String(campaign.name || ''),
+            messageTemplate: String(campaign.messageTemplate || ''),
+            minDelaySeconds: Number(campaign?.antiBan?.minDelaySeconds || 0),
+            maxDelaySeconds: Number(campaign?.antiBan?.maxDelaySeconds || 120),
+        });
+    }, []);
+    const closeCampaignEditModal = useCallback(() => {
+        setEditingCampaign(null);
+        setSavingCampaignEdit(false);
+    }, []);
+    const saveCampaignEdit = useCallback(async () => {
+        if (!editingCampaign?._id) return;
+        const minDelaySeconds = Number(campaignEditForm.minDelaySeconds);
+        const maxDelaySeconds = Number(campaignEditForm.maxDelaySeconds);
+        if (!campaignEditForm.name.trim()) {
+            alert('Informe o nome da campanha.');
+            return;
+        }
+        if (!Number.isFinite(minDelaySeconds) || !Number.isFinite(maxDelaySeconds) || minDelaySeconds < 0 || maxDelaySeconds < 0 || minDelaySeconds > maxDelaySeconds) {
+            alert('Revise os valores de anti-ban.');
+            return;
+        }
+        try {
+            setSavingCampaignEdit(true);
+            await updateCampaign(editingCampaign._id, {
+                name: campaignEditForm.name.trim(),
+                messageTemplate: campaignEditForm.messageTemplate,
+                antiBan: {
+                    ...(editingCampaign?.antiBan || {}),
+                    minDelaySeconds,
+                    maxDelaySeconds,
+                },
+            });
+            await loadDashboardData({ showSpinner: false });
+            closeCampaignEditModal();
+        } catch (error) {
+            console.error('Update campaign error:', error);
+            alert('Nao foi possivel salvar a campanha.');
+        } finally {
+            setSavingCampaignEdit(false);
+        }
+    }, [editingCampaign, campaignEditForm, loadDashboardData, closeCampaignEditModal]);
     const buildEditState = (items) => {
         const result = {};
         items.forEach((item) => {
@@ -708,7 +774,15 @@ const Campaigns = () => {
                                                         }`}
                                                     >
                                                         <CheckCircle2 size={13} />
-                                                        {dispatchingCampaignId === campaign._id ? 'Disparando...' : 'Disparar agora'}
+                                                        {dispatchingCampaignId === campaign._id ? 'Disparando...' : 'Proximo imediato'}
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => openCampaignEditModal(campaign)}
+                                                        className="inline-flex items-center gap-1.5 rounded-lg bg-sky-100 px-3 py-1.5 text-xs font-semibold text-sky-800 transition hover:bg-sky-200"
+                                                    >
+                                                        <Pencil size={13} />
+                                                        Editar
                                                     </button>
                                                     <button
                                                         type="button"
@@ -844,6 +918,70 @@ const Campaigns = () => {
                                     })}
                                 </div>
                             )}
+                        </div>
+                    </div>
+                </div>
+            )}
+            {editingCampaign && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm">
+                    <div className={`w-full max-w-3xl overflow-hidden shadow-2xl ${glassMode ? 'rounded-3xl border border-white/60 bg-white/80 backdrop-blur-2xl' : 'rounded-xl bg-white'}`}>
+                        <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4">
+                            <div>
+                                <h3 className="text-lg font-bold text-slate-900">Editar campanha</h3>
+                                <p className="text-sm text-slate-500">{editingCampaign.name}</p>
+                            </div>
+                            <button type="button" onClick={closeCampaignEditModal} className={neutralButtonClass}>
+                                <X size={14} />
+                                Fechar
+                            </button>
+                        </div>
+                        <div className="space-y-4 p-6">
+                            <input
+                                type="text"
+                                value={campaignEditForm.name}
+                                onChange={(e) => setCampaignEditForm((prev) => ({ ...prev, name: e.target.value }))}
+                                placeholder="Nome da campanha"
+                                className={inputClass}
+                            />
+                            <textarea
+                                rows="4"
+                                value={campaignEditForm.messageTemplate}
+                                onChange={(e) => setCampaignEditForm((prev) => ({ ...prev, messageTemplate: e.target.value }))}
+                                placeholder="Mensagem base"
+                                className={`${inputClass} resize-y`}
+                            />
+                            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                                <input
+                                    type="number"
+                                    min="0"
+                                    value={campaignEditForm.minDelaySeconds}
+                                    onChange={(e) => setCampaignEditForm((prev) => ({ ...prev, minDelaySeconds: e.target.value }))}
+                                    className={inputClass}
+                                    placeholder="Min delay (s)"
+                                />
+                                <input
+                                    type="number"
+                                    min="0"
+                                    value={campaignEditForm.maxDelaySeconds}
+                                    onChange={(e) => setCampaignEditForm((prev) => ({ ...prev, maxDelaySeconds: e.target.value }))}
+                                    className={inputClass}
+                                    placeholder="Max delay (s)"
+                                />
+                            </div>
+                            <div className="flex justify-end gap-2 pt-2">
+                                <button type="button" onClick={closeCampaignEditModal} className={neutralButtonClass}>
+                                    Cancelar
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={saveCampaignEdit}
+                                    disabled={savingCampaignEdit}
+                                    className={`inline-flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-semibold text-white ${savingCampaignEdit ? 'cursor-not-allowed bg-emerald-300' : 'bg-emerald-600 hover:bg-emerald-700'}`}
+                                >
+                                    <CheckCircle2 size={14} />
+                                    {savingCampaignEdit ? 'Salvando...' : 'Salvar campanha'}
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>
