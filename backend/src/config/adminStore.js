@@ -41,7 +41,7 @@ function readStore() {
   try {
     const raw = fs.readFileSync(STORE_PATH, 'utf8');
     const parsed = JSON.parse(raw || '{}');
-    return {
+    const store = {
       appConfig: {
         ...DEFAULT_STORE.appConfig,
         ...(parsed.appConfig || {}),
@@ -60,9 +60,47 @@ function readStore() {
         ? parsed.adminUsers.map((item) => String(item || '').trim().toLowerCase()).filter(Boolean)
         : [...DEFAULT_ADMIN_USERS],
     };
+    const sanitized = sanitizeStore(store);
+    if (sanitized.changed) {
+      writeStore(sanitized.store);
+    }
+    return sanitized.store;
   } catch (error) {
     return JSON.parse(JSON.stringify(DEFAULT_STORE));
   }
+}
+
+function sanitizeStore(store = {}) {
+  let changed = false;
+  const nextStore = {
+    ...store,
+    saasUsers: Array.isArray(store.saasUsers) ? store.saasUsers.slice() : [],
+  };
+
+  nextStore.saasUsers = nextStore.saasUsers.map((item) => {
+    const safeItem = item && typeof item === 'object' ? { ...item } : {};
+    const status = normalizeSaasUserStatus(safeItem.status);
+    const metadata = safeItem.metadata && typeof safeItem.metadata === 'object'
+      ? { ...safeItem.metadata }
+      : {};
+
+    if (status === 'pending' && !metadata.requestedAt) {
+      metadata.requestedAt = safeItem.createdAt || safeItem.updatedAt || new Date().toISOString();
+      changed = true;
+    }
+
+    if (safeItem.metadata !== metadata) {
+      changed = true;
+    }
+
+    return {
+      ...safeItem,
+      status,
+      metadata,
+    };
+  });
+
+  return { store: nextStore, changed };
 }
 
 function listAdminUsers() {

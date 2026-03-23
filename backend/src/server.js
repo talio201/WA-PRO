@@ -162,8 +162,12 @@ app.get('/api/account/status', (req, res) => {
 });
 
 function requireActiveSaasAccount(req, res, next) {
-  if (!req.user) return next();
+  // Allow admin and API keys (bot authentication)
   if (req.agentId === 'admin') return next();
+  if (req.permissions?.allowCampaigns === true) return next(); // API key authenticated
+  
+  // For Supabase users only
+  if (!req.user) return next();
   const lastSignInAt = req.user?.last_sign_in_at ? new Date(req.user.last_sign_in_at).getTime() : 0;
   if (Number.isFinite(lastSignInAt) && lastSignInAt > 0) {
     const elapsedMs = Date.now() - lastSignInAt;

@@ -285,8 +285,9 @@ def get_campaign_delay_seconds(job):
     except Exception:
         max_delay = 120
 
-    min_delay = max(0, min(min_delay, 3600))
-    max_delay = max(0, min(max_delay, 3600))
+    # Regra operacional: não exceder 120s de espera entre disparos
+    min_delay = max(0, min(min_delay, 120))
+    max_delay = max(0, min(max_delay, 120))
     if max_delay < min_delay:
         min_delay, max_delay = max_delay, min_delay
 
@@ -548,6 +549,7 @@ def main():
                     update_job_status(job_id, "sent" if success else "failed", error_reason if not success else None)
                     continue
 
+                dispatch_started_at = time.time()
                 success, error_reason = send_message(page, phone, message_text, is_priority, media)
                 if success:
                     update_job_status(job_id, "sent")
@@ -556,14 +558,19 @@ def main():
                             logging.info("Envio imediato solicitado. Pulando espera anti-ban desta vez.")
                             skip_delay_once = False
                         else:
-                            tempo_espera = get_campaign_delay_seconds(job)
+                            tempo_sorteado = get_campaign_delay_seconds(job)
+                            tempo_processamento = max(0, int(round(time.time() - dispatch_started_at)))
+                            tempo_espera = max(0, tempo_sorteado - tempo_processamento)
+                            if tempo_sorteado > 0:
+                                logging.info(
+                                    f"Anti-ban sorteado: {tempo_sorteado}s | processamento: {tempo_processamento}s | espera restante: {tempo_espera}s"
+                                )
                             if tempo_espera > 0:
-                                logging.info(f"Aguardando {tempo_espera}s de respiro (anti-ban dinâmico) antes da próxima mensagem...")
                                 interrupted = wait_with_command_poll(tempo_espera, browser, user_data_dir)
                                 if interrupted:
                                     logging.info("Espera anti-ban interrompida por comando de disparo imediato.")
                             else:
-                                logging.info("Sem espera anti-ban para esta campanha (0s).")
+                                logging.info("Sem espera adicional: próxima mensagem pode disparar imediatamente.")
                     else:
                         logging.info("Atendimento despachado instantaneamente. Indo checar o próximo da fila...")
                 else:
