@@ -496,8 +496,17 @@ def main():
         HEARTBEAT_INTERVAL = 30  # seconds
         CONTROL_POLL_INTERVAL = 5
         skip_delay_once = False
+        messages_sent_counter = 0
+
         while True:
             try:
+                # Se atingiu o limite, recarrega para liberar o DOM (Gargalo de RAM)
+                if messages_sent_counter >= 15:
+                    logging.info("Limite de envios sequenciais alcançado (15). Recarregando WApp para liberar memória (DOM)...")
+                    page.reload(timeout=120000)
+                    page.wait_for_selector('div#pane-side', timeout=120000)
+                    messages_sent_counter = 0
+
                 job_id = None
                 # Periodic heartbeat: re-post LOGGED_IN so backend restart doesn't show DISCONNECTED
                 now_ts = time.time()
@@ -558,6 +567,8 @@ def main():
 
                 dispatch_started_at = time.time()
                 success, error_reason = send_message(page, phone, message_text, is_priority, media)
+                messages_sent_counter += 1
+                
                 if success:
                     update_job_status(job_id, "sent")
                     if not is_priority:

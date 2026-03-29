@@ -56,5 +56,5 @@ function getBotCommandStats() {
 module.exports = {
   enqueueBotCommand,
   getNextBotCommand,
-  getBotCommandStats,
+  getBotCommandStats
 };

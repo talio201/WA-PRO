@@ -137,7 +137,19 @@ exports.createCampaign = async (req, res) => {
       media,
     });
     await campaign.save();
-    const allMessages = await Message.find({});
+    
+    const targetPhones = contacts.map(c => {
+      const phoneNorm = normalizePhone(c.phone);
+      return phoneNorm.normalized || String(c.phone || "").replace(/\D/g, "");
+    }).filter(Boolean);
+    
+    const allMessages = await Message.find({
+      $or: [
+        { phone: { $in: targetPhones } },
+        { phoneOriginal: { $in: targetPhones } }
+      ]
+    });
+    
     const messagesByPhone = new Map();
     (Array.isArray(allMessages) ? allMessages : []).forEach((item) => {
       const phone = normalizePhone(item.phone || item.phoneOriginal).normalized;
