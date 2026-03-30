@@ -1,7 +1,12 @@
 require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
-const helmet = require('helmet');
+let helmet = null;
+try {
+  helmet = require('helmet');
+} catch (e) {
+  console.warn('[startup] optional dependency "helmet" not installed, continuing without it.');
+}
 const rateLimit = require('express-rate-limit');
 const path = require("path");
 const http = require("http");
