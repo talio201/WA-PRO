@@ -152,7 +152,7 @@ export default function App() {
       </aside>
 
       {/* Main content */}
-      <main className="flex-1 min-h-0 overflow-auto p-3 md:p-4">
+      <main className="flex-1 overflow-x-hidden overflow-y-auto p-0 min-w-0 min-h-0 relative isolate">
         {botState.status === 'AWAITING_QR' && qrImageSource && (
           <section className="mb-3 rounded-2xl border border-amber-300 bg-amber-50 p-3 md:p-4">
             <div className="flex items-start justify-between gap-3">

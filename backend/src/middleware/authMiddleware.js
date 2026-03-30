@@ -51,6 +51,9 @@ const requireAuth = async (req, res, next) => {
 
   if (type === 'bearer') {
     const authResult = await authenticateBearerToken(token, agentId);
+    if (!authResult) {
+       console.log('[AUTH MIDDLEWARE] authenticateBearerToken returned null for token:', token.substring(0, 10) + '...', agentId);
+    }
     if (authResult?.kind === 'api-key') {
       req.agentId = authResult.agentId;
       req.permissions = authResult.permissions || {};
@@ -71,6 +74,7 @@ const requireAuth = async (req, res, next) => {
     if (authResult?.kind === 'supabase-user') {
       req.user = authResult.user;
       req.agentId = authResult.agentId;
+      req.isAdmin = authResult.isAdmin || false;
       req.permissions = authResult.permissions || {};
       req.saasUser = authResult.saasUser || null;
       return next();

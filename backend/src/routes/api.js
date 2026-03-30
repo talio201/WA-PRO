@@ -6,4 +6,5 @@ router.post("/campaigns", campaignController.createCampaign);
 router.get("/campaigns", campaignController.getCampaigns);
 router.get("/messages/next", messageController.getNextJob);
 router.put("/messages/:id/status", messageController.updateStatus);
+router.get("/bot/instances", messageController.getBotInstancesForSupervisor);
 module.exports = router;

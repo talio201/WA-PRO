@@ -4,16 +4,24 @@ import random
 import logging
 import shutil
 import requests
+import argparse
 from dotenv import load_dotenv
 from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeoutError
+
+parser = argparse.ArgumentParser(description="WhatsApp Bot Worker")
+parser.add_argument("--agent-id", type=str, help="Agent ID for this bot instance", default=None)
+parser.add_argument("--api-key", type=str, help="API Key for auth", default=None)
+parser.add_argument("--api-url", type=str, help="Backend API URL", default=None)
+args, _ = parser.parse_known_args()
+
 load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '..', 'backend', '.env'))
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 def normalize_secret(value):
     return str(value or "").strip().strip('"').strip("'")
 
-API_BASE_URL = str(os.getenv("API_BASE_URL", "http://localhost:3000/api") or "").strip().rstrip('/')
-API_SECRET_KEY = normalize_secret(os.getenv("BOT_API_KEY") or os.getenv("API_SECRET_KEY", ""))
-BOT_AGENT_ID = str(os.getenv("BOT_AGENT_ID", "bot") or "bot").strip() or "bot"
+API_BASE_URL = args.api_url or str(os.getenv("API_BASE_URL", "http://localhost:3000/api") or "").strip().rstrip('/')
+API_SECRET_KEY = args.api_key or normalize_secret(os.getenv("BOT_API_KEY") or os.getenv("API_SECRET_KEY", ""))
+BOT_AGENT_ID = args.agent_id or str(os.getenv("BOT_AGENT_ID", "bot") or "bot").strip() or "bot"
 API_HEADERS = { 
     "Authorization": f"Bearer {API_SECRET_KEY}",
     "x-agent-id": BOT_AGENT_ID
@@ -74,13 +82,13 @@ def send_message(page, phone, message, is_priority=False, media=None):
         logging.info(f"Tentando iniciar conversa silenciosa com: {phone}")
         dom_success = False
         try:
-            new_chat_btn = page.locator('div[title="Nova conversa"], span[data-icon="chat"]').first
+            new_chat_btn = page.locator('div[title="Nova conversa"], span[data-icon="chat"], span[data-icon="new-chat-outline"], span[data-icon="plus"]').first
             new_chat_btn.click(timeout=5000)
             page.wait_for_timeout(1000)
             page.keyboard.type(phone)
-            page.wait_for_timeout(3000)
+            page.wait_for_timeout(4000)
             page.keyboard.press("Enter")
-            page.wait_for_timeout(1500)
+            page.wait_for_timeout(2500)
             chat_box = page.locator('#main div[role="textbox"]').last
             if not chat_box.is_visible():
                 first_contact = page.locator('div[role="listitem"]').first
@@ -96,8 +104,8 @@ def send_message(page, phone, message, is_priority=False, media=None):
             else:
                 page.keyboard.press("Escape")
                 raise Exception("Caixa de chat indetectável.")
-        except Exception:
-            logging.warning("Busca silenciosa DOM falhou. Recorrendo a URL e recarregamento...")
+        except Exception as e:
+            logging.warning(f"Busca silenciosa DOM falhou: {e}. Recorrendo a URL e recarregamento...")
 
         if not dom_success:
             chat_url = f"{WHATSAPP_URL}/send/?phone={phone}"
@@ -350,13 +358,13 @@ def scrape_history_for_job(page, phone):
     logging.info(f"Iniciando raspagem de historico para o numero {phone}")
     dom_success = False
     try:
-        new_chat_btn = page.locator('div[title="Nova conversa"], span[data-icon="chat"]').first
+        new_chat_btn = page.locator('div[title="Nova conversa"], span[data-icon="chat"], span[data-icon="new-chat-outline"], span[data-icon="plus"]').first
         new_chat_btn.click(timeout=5000)
         page.wait_for_timeout(1000)
         page.keyboard.type(phone)
-        page.wait_for_timeout(3000)
+        page.wait_for_timeout(4000)
         page.keyboard.press("Enter")
-        page.wait_for_timeout(1500)
+        page.wait_for_timeout(2500)
         chat_box = page.locator('div[role="textbox"]').last
         if not chat_box.is_visible():
             first_contact = page.locator('div[role="listitem"]').first
@@ -369,7 +377,7 @@ def scrape_history_for_job(page, phone):
         if chat_box.is_visible():
             dom_success = True
     except Exception as e:
-        logging.warning("Nao conseguiu abrir o chat pra historico via DOM. Tentando Fallback URL...")
+        logging.warning(f"Nao conseguiu abrir o chat pra historico via DOM: {e}. Tentando Fallback URL...")
     if not dom_success:
         chat_url = f"{WHATSAPP_URL}/send/?phone={phone}"
         page.goto(chat_url)
@@ -444,6 +452,19 @@ def main():
                 "--disable-blink-features=AutomationControlled", # Flag Crucial Anti-Ban: Oculta o navigator.webdriver
                 "--disable-web-security",
                 "--disable-features=IsolateOrigins,site-per-process",
+                "--disable-dev-shm-usage",
+                "--disable-gpu",
+                "--no-sandbox",
+                "--disable-software-rasterizer",
+                "--disable-extensions",
+                # "--disable-background-networking",
+                "--disable-default-apps",
+                "--disable-sync",
+                "--disable-translate",
+                "--mute-audio",
+                "--no-first-run",
+                "--safebrowsing-disable-auto-update",
+                "--js-flags=--max-old-space-size=256"
             ]
         )
         pages = browser.pages

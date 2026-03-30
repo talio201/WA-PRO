@@ -97,6 +97,7 @@ const Campaigns = () => {
     const [campaignEditForm, setCampaignEditForm] = useState({
         name: '',
         messageTemplate: '',
+        messageVariants: [],
         minDelaySeconds: 0,
         maxDelaySeconds: 120,
     });
@@ -325,6 +326,7 @@ const Campaigns = () => {
         setCampaignEditForm({
             name: String(campaign.name || ''),
             messageTemplate: String(campaign.messageTemplate || ''),
+            messageVariants: Array.isArray(campaign.messageVariants) ? [...campaign.messageVariants] : [],
             minDelaySeconds: Number(campaign?.antiBan?.minDelaySeconds || 0),
             maxDelaySeconds: Number(campaign?.antiBan?.maxDelaySeconds || 120),
         });
@@ -350,7 +352,8 @@ const Campaigns = () => {
             await updateCampaign(editingCampaign._id, {
                 name: campaignEditForm.name.trim(),
                 messageTemplate: campaignEditForm.messageTemplate,
-                antiBan: {
+                  messageVariants: campaignEditForm.messageVariants,
+                  antiBan: {
                     ...(editingCampaign?.antiBan || {}),
                     minDelaySeconds,
                     maxDelaySeconds,
@@ -976,13 +979,34 @@ const Campaigns = () => {
                                 placeholder="Nome da campanha"
                                 className={inputClass}
                             />
-                            <textarea
-                                rows="4"
-                                value={campaignEditForm.messageTemplate}
-                                onChange={(e) => setCampaignEditForm((prev) => ({ ...prev, messageTemplate: e.target.value }))}
-                                placeholder="Mensagem base"
-                                className={`${inputClass} resize-y`}
-                            />
+                            {editingCampaign?.turboMode || (campaignEditForm.messageVariants && campaignEditForm.messageVariants.length > 0) ? (
+                                  <div className="space-y-3">
+                                      <p className="text-sm font-semibold text-emerald-300">Variações de Mensagens (Modo Turbo)</p>
+                                      {campaignEditForm.messageVariants.map((variant, index) => (
+                                          <div key={index} className="flex flex-col gap-1">
+                                              <label className="text-xs text-slate-400">Variação {index + 1}</label>
+                                              <textarea
+                                                  rows="3"
+                                                  value={variant}
+                                                  onChange={(e) => {
+                                                      const newVariants = [...campaignEditForm.messageVariants];
+                                                      newVariants[index] = e.target.value;
+                                                      setCampaignEditForm(prev => ({ ...prev, messageVariants: newVariants }));
+                                                  }}
+                                                  className={`${inputClass} resize-y bg-slate-900 border-slate-700/50 text-white p-3 rounded-xl w-full focus:outline-none focus:border-emerald-500/50`}
+                                              />
+                                          </div>
+                                      ))}
+                                  </div>
+                              ) : (
+                                  <textarea
+                                      rows="4"
+                                      value={campaignEditForm.messageTemplate}
+                                      onChange={(e) => setCampaignEditForm((prev) => ({ ...prev, messageTemplate: e.target.value }))}
+                                      placeholder="Mensagem base"
+                                      className={`${inputClass} resize-y`}
+                                  />
+                              )}
                             <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                                 <input
                                     type="number"

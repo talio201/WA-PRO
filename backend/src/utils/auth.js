@@ -85,6 +85,8 @@ function userHasAdminFlag(user = {}) {
   );
 }
 
+const supabaseTokenCache = new Map();
+
 async function authenticateBearerToken(token, agentId = '') {
   const safeToken = String(token || '').trim();
   if (!safeToken) return null;
@@ -161,15 +163,28 @@ async function authenticateBearerToken(token, agentId = '') {
   const supabase = getSupabaseClient();
   if (supabase) {
     try {
-      const { data: { user } = {}, error } = await supabase.auth.getUser(safeToken);
-      if (error) {
-        console.error('[AUTH] Supabase error:', error?.message || error);
-        return null;
+      let user = null;
+      let cached = supabaseTokenCache.get(safeToken);
+      if (cached && cached.exp > Date.now()) {
+        user = cached.user;
+      } else {
+        const { data: userData = {}, error } = await supabase.auth.getUser(safeToken);
+        if (error) {
+          console.error('[AUTH] Supabase error:', error?.message || error, 'Token:', safeToken.substring(0, 10));
+          
+          if (String(error?.message).toLowerCase().includes('rate limit')) {
+              console.error("[AUTH] Supabase Rate Limit Hit! Implementing fallback...");
+          }
+          return null;
+        }
+        if (!userData || !userData.user) {
+          console.error('[AUTH] No user returned from Supabase', 'Token:', safeToken.substring(0, 10));
+          return null;
+        }
+        user = userData.user;
+        supabaseTokenCache.set(safeToken, { user, exp: Date.now() + 1000 * 60 * 5 }); // cache 5 min
       }
-      if (!user) {
-        console.error('[AUTH] No user returned from Supabase');
-        return null;
-      }
+
       const email = String(user.email || '').trim().toLowerCase();
       const adminBypass = userHasAdminFlag(user) || (email && isAdminEmail(email));
       let saasUser = null;
@@ -208,14 +223,19 @@ async function authenticateBearerToken(token, agentId = '') {
         });
       }
 
-      const resolvedAgentId = adminBypass
-        ? 'admin'
-        : String(
-            saasUser?.agentId
-              || saasUser?.clientId
-              || user?.user_metadata?.agentId
-              || `user_${String(user.id || '').slice(0, 12)}`,
-          ).trim();
+      const derivedUserId = `user_${String(user.id || '').slice(0, 12)}`;
+      let resolvedAgentId = String(
+        saasUser?.agentId
+        || saasUser?.clientId
+        || user?.user_metadata?.agentId
+        || derivedUserId
+      ).trim();
+
+      // Ensure that if the admin user exists as a SaaS user, they keep their actual bot agentId.
+      // We only fall back to 'admin' if they somehow have no agentId and bypass is true.
+      if (!resolvedAgentId && adminBypass) {
+        resolvedAgentId = 'admin';
+      }
       const activeAccess = adminBypass || (saasUser?.status === 'active' || saasUser?.status === 'pending');
       const isDemo = String(saasUser?.planTerm || '').trim().toLowerCase() === 'demo';
 
@@ -224,6 +244,7 @@ async function authenticateBearerToken(token, agentId = '') {
         user,
         agentId: resolvedAgentId || 'admin',
         saasUser,
+        isAdmin: adminBypass,
         permissions: {
           allowGemini: activeAccess && !isDemo,
           allowRealtime: activeAccess,

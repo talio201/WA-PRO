@@ -75,7 +75,7 @@ app.use("/api/messages", sendFlowLogger);
 const botStates = new Map(); // agentId -> { status, qrCode }
 
 app.post("/api/bot/status", requireAuth, (req, res) => {
-  if (req.user && req.agentId !== 'admin') {
+  if (req.user && !req.isAdmin) {
     const status = String(req.saasUser?.status || 'pending').trim().toLowerCase();
     if (status !== 'active') {
       return res.status(403).json({ msg: 'Conta aguardando aprovação para ativar WhatsApp.' });
@@ -85,22 +85,22 @@ app.post("/api/bot/status", requireAuth, (req, res) => {
     }
   }
   const { status, qrCodeBase64, agentId } = req.body;
-  const targetId = (req.user && req.agentId !== 'admin')
+  const targetId = (req.user && !req.isAdmin)
     ? req.agentId
     : (agentId || req.agentId || "system");
   
-  const currentState = botStates.get(targetId) || { status: 'DISCONNECTED', qrCode: null };
+  const oldStatus = botStates.get(targetId)?.status; const currentState = botStates.get(targetId) || { status: 'DISCONNECTED', qrCode: null };
   if (status) currentState.status = status;
   if (qrCodeBase64 !== undefined) currentState.qrCode = qrCodeBase64;
   
   botStates.set(targetId, currentState);
   
-  emitRealtimeEvent("bot.status", { ...currentState, agentId: targetId });
+  if (oldStatus !== currentState.status) { emitRealtimeEvent("bot.status", { status: currentState.status, agentId: targetId }); }
   res.json({ success: true, botState: currentState });
 });
 
 app.get("/api/bot/status", requireAuth, (req, res) => {
-  if (req.user && req.agentId !== 'admin') {
+  if (req.user && !req.isAdmin) {
     const status = String(req.saasUser?.status || 'pending').trim().toLowerCase();
     if (status !== 'active') {
       return res.status(403).json({
@@ -115,10 +115,11 @@ app.get("/api/bot/status", requireAuth, (req, res) => {
       });
     }
   }
-  const targetAgentId = (req.user && req.agentId !== 'admin')
+  const targetAgentId = (req.user && !req.isAdmin)
     ? req.agentId
     : (req.headers["x-agent-id"] || req.query.agentId || req.agentId || "system");
   const state = botStates.get(targetAgentId) || { status: 'DISCONNECTED', qrCode: null };
+  
   res.json(state);
 });
 
@@ -131,6 +132,8 @@ app.get('/api/bot/commands/next', requireAuth, (req, res) => {
   return res.json({ success: true, command: command || null });
 });
 
+app.get('/api/bot/instances', requireAuth, require('./controllers/messageController').getBotInstancesForSupervisor);
+
 app.use("/api/public", require("./routes/publicRoutes"));
 
 // Protected API routes
@@ -138,13 +141,15 @@ app.use("/api", requireAuth);
 
 app.get('/api/account/status', (req, res) => {
   const saasUser = req.saasUser || null;
-  const isAdmin = req.user && req.agentId === 'admin';
+  const isAdmin = req.user && req.isAdmin === true;
   const now = Date.now();
   const expiresAt = saasUser?.expiresAt || null;
   const expired = Boolean(expiresAt && new Date(expiresAt).getTime() <= now);
   const status = isAdmin
     ? 'active'
     : String(saasUser?.status || 'pending').trim().toLowerCase();
+
+  console.log('[DEBUG] /api/account/status accessed by', req.user?.email, 'agent:', req.agentId, 'status:', status, 'isAdmin:', isAdmin);
 
   return res.json({
     success: true,
@@ -163,7 +168,7 @@ app.get('/api/account/status', (req, res) => {
 
 function requireActiveSaasAccount(req, res, next) {
   // Allow admin and API keys (bot authentication)
-  if (req.agentId === 'admin') return next();
+  if (req.isAdmin === true) return next();
   if (req.permissions?.allowCampaigns === true) return next(); // API key authenticated
   
   // For Supabase users only
@@ -197,7 +202,7 @@ function requireActiveSaasAccount(req, res, next) {
 
 async function enforceDemoOutboundPolicy(req, res, next) {
   try {
-    if (!req.user || req.agentId === 'admin') return next();
+    if (!req.user || req.isAdmin === true) return next();
     const planTerm = String(req.saasUser?.planTerm || '').trim().toLowerCase();
     if (planTerm !== 'demo') return next();
 
@@ -245,7 +250,7 @@ app.get('/api/admin/access/me', adminController.getMyAdminAccess);
 app.use("/api/admin", requireAdminAccess, require("./routes/adminRoutes"));
 app.use('/api/campaigns', requireActiveSaasAccount, (req, res, next) => {
   const planTerm = String(req.saasUser?.planTerm || '').trim().toLowerCase();
-  if (req.user && req.agentId !== 'admin' && planTerm === 'demo' && req.method !== 'GET') {
+  if (req.user && !req.isAdmin && planTerm === 'demo' && req.method !== 'GET') {
     return res.status(403).json({
       msg: 'Plano DEMO não permite disparos de campanha. Use envio manual de teste.',
       code: 'demo_campaigns_blocked',
@@ -317,3 +322,4 @@ server.listen(PORT, () => {
     ).toLowerCase(),
   });
 });
+

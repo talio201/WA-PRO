@@ -295,6 +295,7 @@ exports.updateCampaign = async (req, res) => {
 
     const hasName = Object.prototype.hasOwnProperty.call(req.body || {}, "name");
     const hasMessage = Object.prototype.hasOwnProperty.call(req.body || {}, "messageTemplate");
+    const hasVariants = Object.prototype.hasOwnProperty.call(req.body || {}, "messageVariants");
     const hasAntiBan = Object.prototype.hasOwnProperty.call(req.body || {}, "antiBan");
     const hasMedia = Object.prototype.hasOwnProperty.call(req.body || {}, "media");
 
@@ -310,6 +311,15 @@ exports.updateCampaign = async (req, res) => {
     if (hasMessage) {
       nextTemplate = String(req.body.messageTemplate || "").trim();
       campaign.messageTemplate = nextTemplate;
+    }
+
+    let nextVariants = campaign.messageVariants || [];
+    if (hasVariants) {
+       nextVariants = sanitizeMessageVariants(req.body.messageVariants, nextTemplate);
+       campaign.messageVariants = nextVariants;
+       if (nextVariants.length > 1) {
+           campaign.turboMode = true;
+       }
     }
 
     if (hasAntiBan) {
@@ -330,13 +340,19 @@ exports.updateCampaign = async (req, res) => {
     campaign.updatedAt = new Date();
     const updatedCampaign = await Campaign.findByIdAndUpdate(campaign._id, campaign);
 
-    if (hasMessage) {
+    if (hasMessage || hasVariants) {
       const pendingMessages = await Message.find({ campaign: campaign._id, status: "pending" });
       const toUpdate = Array.isArray(pendingMessages) ? pendingMessages : [];
+      let i = 0;
       for (const item of toUpdate) {
         const messageDoc = await Message.findById(item._id);
         if (!messageDoc || messageDoc.status !== "pending") continue;
-        messageDoc.processedMessage = nextTemplate.replace(
+        let templateToUse = nextTemplate;
+        if (campaign.turboMode && nextVariants.length > 0) {
+            templateToUse = nextVariants[i % nextVariants.length];
+        }
+        i++;
+        messageDoc.processedMessage = String(templateToUse || "").replace(
           /{name}/g,
           String(messageDoc.name || ""),
         );
@@ -345,7 +361,7 @@ exports.updateCampaign = async (req, res) => {
         messageDoc.audit.push({
           at: new Date(),
           action: "campaign_updated",
-          details: "Message template refreshed after campaign update.",
+          details: "Message template/variants refreshed after campaign update.",
         });
         await messageDoc.save();
       }

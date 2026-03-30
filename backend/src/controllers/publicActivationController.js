@@ -8,6 +8,7 @@ const {
   canStartDemoForIp,
 } = require('../config/adminStore');
 const { emitRealtimeEvent } = require('../realtime/realtime');
+const crypto = require('crypto');
 const {
   issueInstallationSessionToken,
   getInstallationPublicStatus,
@@ -129,7 +130,12 @@ exports.getPublicRuntimeConfig = async (req, res) => {
 exports.requestSaasSignupApproval = async (req, res) => {
   try {
     const email = safeString(req.body?.email).toLowerCase();
-    const requestedAgentId = safeString(req.body?.agentId) || `user_${Date.now().toString(36)}`;
+    
+    // Alinhamento rigoroso 1:1 - ID Gerado pelo Backend que não pode ser alterado pelo front/user
+    const baseHash = crypto.randomBytes(4).toString('hex');
+    const timeHash = Date.now().toString(36).slice(-4);
+    const requestedAgentId = `bot_${baseHash}_${timeHash}`;
+
     const desiredPlan = safeString(req.body?.desiredPlan || 'demo').toLowerCase();
     const documentId = safeString(req.body?.documentId || req.body?.cpfCnpj || '').replace(/\D/g, '');
     const companyName = safeString(req.body?.companyName || req.body?.fullName || '');

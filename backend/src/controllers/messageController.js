@@ -1,4 +1,4 @@
-const Message = require("../models/Message");
+﻿const Message = require("../models/Message");
 const Campaign = require("../models/Campaign");
 const ConversationAssignment = require("../models/ConversationAssignment");
 const SupportProtocol = require("../models/SupportProtocol");
@@ -357,14 +357,14 @@ exports.getMessages = async (req, res) => {
       : 200;
     
     let query = {};
-    if (req.agentId && req.agentId !== 'bot' && req.agentId !== 'system' && req.agentId !== 'admin') {
+    if (req.agentId && req.agentId !== 'bot' && req.agentId !== 'system' && !req.isAdmin) {
       const safeAgentId = String(req.agentId);
       const agentCampaigns = await Campaign.find({ agentId: safeAgentId }).select('_id');
       const agentCampaignIds = agentCampaigns.map(c => c._id);
       query.campaign = { $in: agentCampaignIds };
     }
 
-    // Listando todas e filtrando após, se for DB Local JSON (otimizavel se for SQL real)
+    // Listando todas e filtrando apÃ³s, se for DB Local JSON (otimizavel se for SQL real)
     let filtered = await Message.find(query).limit(safeLimit * 5);
     filtered = Array.isArray(filtered) ? filtered : [];
     
@@ -408,7 +408,7 @@ exports.getConversations = async (req, res) => {
     const { search = "", onlyWithReplies, onlyAssigned, limit } = req.query;
     
     let query = {};
-    if (req.agentId && req.agentId !== 'bot' && req.agentId !== 'system' && req.agentId !== 'admin') {
+    if (req.agentId && req.agentId !== 'bot' && req.agentId !== 'system' && !req.isAdmin) {
       const safeAgentId = String(req.agentId);
       const agentCampaigns = await Campaign.find({ agentId: safeAgentId }).select('_id');
       const agentCampaignIds = agentCampaigns.map(c => c._id);
@@ -492,7 +492,7 @@ exports.getConversations = async (req, res) => {
     });
     const onlyReplies = parseBooleanFlag(onlyWithReplies);
     const assignedOnly = parseBooleanFlag(onlyAssigned);
-    const query = String(search || "")
+    const searchQuery = String(search || "")
       .trim()
       .toLowerCase();
     const parsedLimit = Number(limit);
@@ -522,17 +522,17 @@ exports.getConversations = async (req, res) => {
       .filter((conversation) => {
         if (onlyReplies && !conversation.hasResponse) return false;
         if (assignedOnly && !conversation.assignment) return false;
-        if (!query) return true;
+        if (!searchQuery) return true;
         return (
           String(conversation.phone || "")
             .toLowerCase()
-            .includes(query) ||
+            .includes(searchQuery) ||
           String(conversation.name || "")
             .toLowerCase()
-            .includes(query) ||
+            .includes(searchQuery) ||
           String(conversation.assignment?.assignedTo || "")
             .toLowerCase()
-            .includes(query)
+            .includes(searchQuery)
         );
       })
       .sort(
@@ -555,7 +555,7 @@ exports.getHelpdeskQueues = async (req, res) => {
       .toLowerCase();
 
     let queryMsg = {};
-    if (req.agentId && req.agentId !== 'bot' && req.agentId !== 'system' && req.agentId !== 'admin') {
+    if (req.agentId && req.agentId !== 'bot' && req.agentId !== 'system' && !req.isAdmin) {
       const safeAgentId = String(req.agentId);
       const agentCampaigns = await Campaign.find({ agentId: safeAgentId }).select('_id');
       const agentCampaignIds = agentCampaigns.map(c => c._id);
@@ -1926,4 +1926,45 @@ exports.retryMessage = async (req, res) => {
     const errorResponse = buildServerErrorResponse(err);
     res.status(errorResponse.statusCode).json(errorResponse.body);
   }
+};
+
+exports.getBotInstancesForSupervisor = async (req, res) => {
+  // Somente a Chave Mestra base (cujo auth resulta em agentId = 'bot') tem poder pra isso
+  if (req.agentId !== "bot") {
+    return res.status(403).json({ msg: "Acesso Negado. Credencial nÃ£o Ã© raiz." });
+  }
+  try {
+    const { readStore } = require('../config/adminStore');
+    const store = typeof readStore === 'function' ? readStore() : { clients: [], saasUsers: [] };
+    
+    // Bots for old clients array
+    const clients = (store.clients || [])
+      .filter(c => c.active) // somente ativos
+      .map(c => ({
+        agentId: c.clientId,
+        apiKey: c.apiKey, // envia raw api key
+        name: c.name
+      }));
+
+    // Bots for new SaaS users
+    const validApiKey = String(process.env.API_SECRET_KEY || '').trim();
+    const saasBots = (store.saasUsers || [])
+      .filter(u => u.status === 'active' && u.agentId)
+      .map(u => ({
+        agentId: u.agentId,
+        apiKey: validApiKey, // uses the master backend key to authenticate as bot
+        name: `SaaS User - ${u.email}`
+      }));
+
+      const adminInstance = {
+        agentId: 'admin',
+        apiKey: validApiKey,
+        name: 'System Admin Bot'
+      };
+
+      return res.json({ instances: [...clients, ...saasBots, adminInstance] });
+    } catch (err) {
+      console.error(err.message);
+      res.status(500).json({ msg: "Erro interno", error: err.message });
+    }
 };

@@ -25,7 +25,11 @@ function Root() {
           },
         });
         const payload = await response.json().catch(() => ({}));
-        const status = String(payload?.account?.status || 'pending').toLowerCase();
+        console.log('[DEBUG] /api/account/status response:', response.status, 'payload:', payload);          if (response.status === 401) {
+            setAccount({ loading: false, status: 'expired', message: 'Sessão expirada. Refaça o login.' });
+            if (supabase) await supabase.auth.signOut();
+            return;
+          }        const status = String(payload?.account?.status || 'pending').toLowerCase();
         if (!cancelled) {
           setAccount({
             loading: false,

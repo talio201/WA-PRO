@@ -476,13 +476,22 @@ const NewCampaign = ({ onCancel }) => {
                 <div className="grid gap-2 md:grid-cols-2">
                   {messageVariants.map((variant, index) => (
                     <div
-                      key={`${index}-${variant.slice(0, 10)}`}
+                      key={`${index}`}
                       className="new-campaign-variant rounded-xl border border-emerald-100 bg-emerald-50 px-3 py-2"
                     >
                       <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">
                         Versão {index + 1}
                       </p>
-                      <p className="mt-1 text-sm text-slate-700">{variant}</p>
+                      <textarea 
+                        className="mt-1 text-sm text-slate-700 w-full bg-white border border-emerald-200 rounded p-2 focus:outline-none focus:ring-1 focus:ring-emerald-500 resize-y" 
+                        rows="3"
+                        value={variant}
+                        onChange={(e) => {
+                          const newVariants = [...messageVariants];
+                          newVariants[index] = e.target.value;
+                          setMessageVariants(newVariants);
+                        }}
+                      />
                     </div>
                   ))}
                 </div>

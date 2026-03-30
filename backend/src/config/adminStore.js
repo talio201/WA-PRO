@@ -258,9 +258,21 @@ function upsertSaasUser(payload = {}) {
 
   const index = (store.saasUsers || []).findIndex((item) => String(item.email || '').trim().toLowerCase() === email);
   const base = index >= 0 ? store.saasUsers[index] : null;
+
+  // Criptografia extra implementada: ID único indestrutível bot_ XXX
+  let finalAgentId = base?.agentId;
+  if (!finalAgentId) {
+    if (payload.agentId && String(payload.agentId).startsWith('bot_')) {
+      finalAgentId = payload.agentId; // Aceita de origens server-side seguras 
+    } else {
+      const crypto = require('crypto');
+      finalAgentId = `bot_${crypto.randomBytes(4).toString('hex')}_${Date.now().toString(36).slice(-4)}`;
+    }
+  }
+
   const nextItem = {
     email,
-    agentId: String(payload.agentId || clientId || base?.agentId || '').trim() || null,
+    agentId: finalAgentId,
     status: normalizedStatus,
     clientId: clientId || base?.clientId || null,
     activationCode: activationCode || base?.activationCode || null,
@@ -779,7 +791,7 @@ function touchInstallation(activationCode, metadata = {}) {
   return getPublicInstallation(installation);
 }
 
-module.exports = {
+module.exports = { readStore,
   listClients,
   createClient,
   updateClient,

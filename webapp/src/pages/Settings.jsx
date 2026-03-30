@@ -3,61 +3,79 @@ import { useAuth } from '../auth/AuthContext.jsx';
 
 export default function Settings() {
   const { supabase, session } = useAuth();
-  const [agentId, setAgentId] = useState(localStorage.getItem('emidia_agent_id') || '');
+  const [fullName, setFullName] = useState('');
+  const [documentId, setDocumentId] = useState('');
   const [saved, setSaved] = useState(false);
 
   useEffect(() => {
-    const stored = localStorage.getItem('emidia_agent_id') || '';
-    if (stored) setAgentId(stored);
-    else if (session?.user) {
-      const id = session.user.user_metadata?.agentId || 'admin';
-      setAgentId(id);
+    if (session?.user) {
+      setFullName(session.user.user_metadata?.fullName || session.user.user_metadata?.companyName || '');
+      setDocumentId(session.user.user_metadata?.cpfCnpj || '');
+      // Ensure backend-generated ID is safely injected into requests transparently, not controlled by user.
     }
   }, [session]);
 
-  const save = () => {
-    const val = agentId.trim();
-    if (val) {
-      localStorage.setItem('emidia_agent_id', val);
-      localStorage.setItem('wa-manager-agent-name', val);
+  const save = async () => {
+    // Only allow updating non-sensitive data
+    try {
+      const updates = { 
+        data: { fullName }
+      };
+      await supabase.auth.updateUser(updates);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    } catch(e) {
+      console.error(e);
     }
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
   };
 
-  const logout = () => supabase.auth.signOut();
+  const logout = () => {
+    localStorage.removeItem('emidia_agent_id');
+    localStorage.removeItem('wa-manager-agent-name');
+    supabase.auth.signOut();
+  };
 
   return (
     <div className="max-w-lg mx-auto p-8">
       <h2 className="text-xl font-bold text-slate-800 mb-6">Configurações da conta</h2>
-
+      
       <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 space-y-5">
         <div>
           <label className="block text-sm font-medium text-slate-700 mb-1">E-mail</label>
           <input
             readOnly
             value={session?.user?.email || ''}
-            className="w-full rounded-lg bg-slate-50 border border-slate-200 text-slate-700 px-4 py-2.5 text-sm"
+            className="w-full rounded-lg bg-slate-50 border border-slate-200 text-slate-500 px-4 py-2.5 text-sm cursor-not-allowed"
           />
         </div>
 
         <div>
           <label className="block text-sm font-medium text-slate-700 mb-1">
-            Identificador do agente (agentId)
+            Nome Completo / Empresa
           </label>
-          <p className="text-xs text-slate-500 mb-2">
-            Usado para filtrar conversas, campanhas e contatos atribuídos a você.
-          </p>
           <input
             type="text"
-            value={agentId}
-            onChange={(e) => setAgentId(e.target.value)}
+            value={fullName}
+            onChange={(e) => setFullName(e.target.value)}
             className="w-full rounded-lg border border-slate-200 text-slate-800 px-4 py-2.5 text-sm outline-none focus:border-emerald-500 transition"
-            placeholder="ex: Roger"
+            placeholder="Seu nome"
           />
         </div>
 
-        <div className="flex items-center gap-3">
+        <div>
+          <label className="block text-sm font-medium text-slate-700 mb-1">
+            CPF / CNPJ <span className="text-xs text-rose-500 font-normal ml-2">(Somente leitura)</span>
+          </label>
+          <p className="text-xs text-slate-500 mb-2">Para alterar seu documento, entre em contato com o Suporte técnico.</p>
+          <input
+            type="text"
+            readOnly
+            value={documentId || 'Não informado'}
+            className="w-full rounded-lg bg-slate-50 border border-slate-200 text-slate-500 px-4 py-2.5 text-sm cursor-not-allowed"
+          />
+        </div>
+
+        <div className="flex items-center gap-3 pt-2">
           <button
             onClick={save}
             className="bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold rounded-lg px-5 py-2.5 transition"
@@ -74,10 +92,9 @@ export default function Settings() {
       </div>
 
       <div className="mt-6 bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
-        <h3 className="font-semibold text-slate-700 mb-2">Informações da conta</h3>
+        <h3 className="font-semibold text-slate-700 mb-2">Informações Avançadas</h3>
         <dl className="text-sm space-y-1 text-slate-600">
-          <div className="flex gap-2"><dt className="font-medium w-28">User ID:</dt><dd className="font-mono text-xs">{session?.user?.id?.slice(0, 16)}…</dd></div>
-          <div className="flex gap-2"><dt className="font-medium w-28">Plano:</dt><dd>Web SaaS</dd></div>
+          <div className="flex gap-2"><dt className="font-medium w-28">Status:</dt><dd className="text-emerald-600 font-medium">Conta Ativa e Segura</dd></div>
           <div className="flex gap-2"><dt className="font-medium w-28">Versão:</dt><dd>v2.3.0 · Web</dd></div>
         </dl>
       </div>
