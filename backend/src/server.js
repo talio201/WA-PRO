@@ -1,9 +1,12 @@
 require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
+const helmet = require('helmet');
+const rateLimit = require('express-rate-limit');
 const path = require("path");
 const http = require("http");
 const fs = require("fs");
+const crypto = require('crypto');
 const { spawn } = require("child_process");
 const {
   initRealtimeServer,
@@ -22,14 +25,30 @@ const blockedMaintenancePublicPaths = new Set(['/login.html', '/dashboard.html',
 // Enable trust proxy for Cloudflare/Proxy environments
 app.set("trust proxy", 1);
 
-// CORS whitelist - permit all origins for web access
+// Security headers
+app.use(helmet());
+
+// Rate limiter (basic)
+const apiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: Number(process.env.RATE_LIMIT_MAX || 100),
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+app.use(apiLimiter);
+
+// CORS whitelist: read from env or fall back to localhost
+const allowedOrigins = (process.env.ALLOWED_ORIGINS || 'http://localhost:5176').split(',').map((s) => String(s || '').trim()).filter(Boolean);
 const corsOptions = {
-  origin: true,
+  origin: (origin, callback) => {
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.includes(origin)) return callback(null, true);
+    return callback(new Error(`CORS origin ${origin} not allowed`), false);
+  },
   credentials: true,
   methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
   allowedHeaders: ["Content-Type", "Authorization", "x-agent-id"],
 };
-
 app.use(cors(corsOptions));
 app.use(express.json({ extended: false, limit: "50mb" }));
 app.use(express.urlencoded({ extended: false, limit: "50mb" }));
@@ -61,7 +80,12 @@ app.use((req, res, next) => {
 // 2. Serve static files FIRST
 app.use(express.static(path.join(__dirname, "../public"), {
   maxAge: "1d",
-  etag: false
+  etag: false,
+  setHeaders: (res, filePath) => {
+    if (String(filePath || '').endsWith('index.html')) {
+      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    }
+  }
 }));
 
 app.use("/uploads", express.static(path.join(__dirname, "../uploads"), {
@@ -69,10 +93,39 @@ app.use("/uploads", express.static(path.join(__dirname, "../uploads"), {
 }));
 
 const { sendFlowLogger } = require("./monitorSendFlow");
-app.use("/api/messages", sendFlowLogger);
+// Wrap sendFlowLogger to avoid uncaught exceptions bubbling and to forward errors to the global handler
+app.use("/api/messages", (req, res, next) => {
+  try {
+    const maybePromise = sendFlowLogger(req, res, next);
+    if (maybePromise && typeof maybePromise.then === 'function') {
+      maybePromise.catch(next);
+    }
+  } catch (err) {
+    next(err);
+  }
+});
 
 // Bot status endpoints - multi-tenant
-const botStates = new Map(); // agentId -> { status, qrCode }
+const botStates = new Map(); // agentId -> { status, qrCode, lastSeen }
+// TTL cleanup for botStates to avoid memory leaks
+const BOTSTATE_TTL_MS = Number(process.env.BOTSTATE_TTL_MS || 15 * 60 * 1000);
+const BOTSTATE_CLEANUP_INTERVAL_MS = Number(process.env.BOTSTATE_CLEANUP_INTERVAL_MS || 5 * 60 * 1000);
+setInterval(() => {
+  try {
+    const now = Date.now();
+    for (const [key, state] of botStates.entries()) {
+      if (!state || !state.lastSeen) {
+        // if no lastSeen, keep it but set a baseline
+        continue;
+      }
+      if (now - state.lastSeen > BOTSTATE_TTL_MS) {
+        botStates.delete(key);
+      }
+    }
+  } catch (e) {
+    console.error('[botStates] cleanup error', e);
+  }
+}, BOTSTATE_CLEANUP_INTERVAL_MS);
 
 app.post("/api/bot/status", requireAuth, (req, res) => {
   if (req.user && !req.isAdmin) {
@@ -89,9 +142,11 @@ app.post("/api/bot/status", requireAuth, (req, res) => {
     ? req.agentId
     : (agentId || req.agentId || "system");
   
-  const oldStatus = botStates.get(targetId)?.status; const currentState = botStates.get(targetId) || { status: 'DISCONNECTED', qrCode: null };
+  const oldStatus = botStates.get(targetId)?.status;
+  const currentState = botStates.get(targetId) || { status: 'DISCONNECTED', qrCode: null };
   if (status) currentState.status = status;
   if (qrCodeBase64 !== undefined) currentState.qrCode = qrCodeBase64;
+  currentState.lastSeen = Date.now();
   
   botStates.set(targetId, currentState);
   
@@ -293,8 +348,26 @@ app.get(`${maintenanceBasePath}/dashboard`, (req, res) => {
 });
 
 app.get(`${maintenanceBasePath}/admin`, (req, res) => {
-  res.set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
-  res.sendFile(path.join(__dirname, "../public/admin.html"));
+  // Generate a per-request nonce and set a CSP that allows specific CDNs and this nonce for inline scripts
+  try {
+    const nonce = crypto.randomBytes(16).toString('base64');
+    const scriptSrc = ["'self'", `'nonce-${nonce}'`, 'https://cdn.tailwindcss.com', 'https://cdn.jsdelivr.net', 'https://cdnjs.cloudflare.com'];
+    const styleSrc = ["'self'", 'https://cdnjs.cloudflare.com', 'https://cdn.tailwindcss.com', "'unsafe-inline'"];
+    const connectSrc = ["'self'", 'wss:', 'https:', 'http:'];
+    const csp = `default-src 'self'; script-src ${scriptSrc.join(' ')}; style-src ${styleSrc.join(' ')}; connect-src ${connectSrc.join(' ')}; img-src 'self' data:; font-src 'self' https://cdnjs.cloudflare.com; object-src 'none'; frame-ancestors 'none'`;
+    res.setHeader('Content-Security-Policy', csp);
+    const filePath = path.join(__dirname, "../public/admin.html");
+    fs.readFile(filePath, 'utf8', (err, data) => {
+      if (err) return res.status(500).send('Failed to load admin panel');
+      // Replace placeholder tokens with the generated nonce
+      const out = data.replace(/__CSP_NONCE__/g, nonce);
+      res.set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+      res.send(out);
+    });
+  } catch (e) {
+    console.error('[CSP] admin page render error', e);
+    res.status(500).send('Failed to render admin page');
+  }
 });
 
 // 4. SPA Fallback - Redirect unmatched non-API routes to login.html
@@ -311,15 +384,32 @@ app.use((err, req, res, next) => {
   }
   return next(err);
 });
+// Global error handler (final)
+app.use((err, req, res, next) => {
+  try {
+    console.error('[ERROR]', err && err.stack ? err.stack : err);
+  } catch (e) {
+    // noop
+  }
+  const status = err && err.status && Number(err.status) ? Number(err.status) : 500;
+  const message = (err && err.message) ? err.message : 'Erro interno do servidor.';
+  res.status(status).json({ error: message });
+});
 const PORT = process.env.PORT || 3000;
 const server = http.createServer(app);
-initRealtimeServer(server);
-server.listen(PORT, () => {
-  emitRealtimeEvent("system.server_started", {
-    port: Number(PORT),
-    storageProvider: String(
-      process.env.STORAGE_PROVIDER || process.env.DB_PROVIDER || "local",
-    ).toLowerCase(),
+
+// Export app for testing. Only start the server when this file is run directly.
+if (require.main === module) {
+  initRealtimeServer(server);
+  server.listen(PORT, () => {
+    emitRealtimeEvent("system.server_started", {
+      port: Number(PORT),
+      storageProvider: String(
+        process.env.STORAGE_PROVIDER || process.env.DB_PROVIDER || "local",
+      ).toLowerCase(),
+    });
   });
-});
+}
+
+module.exports = { app, server };
 
