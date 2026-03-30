@@ -111,18 +111,25 @@ exports.heartbeat = async (req, res) => {
 exports.getPublicRuntimeConfig = async (req, res) => {
   try {
     const appConfig = getAppConfig();
+    const supabaseUrl = String(process.env.SUPABASE_URL || '').trim();
+    const supabaseAnonKey = String(process.env.SUPABASE_ANON_KEY || '').trim();
+    if (!supabaseUrl || !supabaseAnonKey) {
+      console.error('[runtime-config] SUPABASE_URL or SUPABASE_ANON_KEY missing:', { supabaseUrl, supabaseAnonKey });
+      return res.status(500).json({ msg: 'SUPABASE_URL or SUPABASE_ANON_KEY missing in backend environment.' });
+    }
     return res.json({
       success: true,
       config: {
         backendApiUrl: appConfig.backendApiUrl,
         backendWsUrl: appConfig.backendWsUrl,
         supabase: {
-          url: String(process.env.SUPABASE_URL || '').trim(),
-          anonKey: String(process.env.SUPABASE_ANON_KEY || '').trim(),
+          url: supabaseUrl,
+          anonKey: supabaseAnonKey,
         },
       },
     });
   } catch (error) {
+    console.error('[runtime-config] Unexpected error:', error);
     return res.status(500).json({ msg: 'Failed to get runtime config.' });
   }
 };

@@ -7,7 +7,7 @@ import {
   getLeadAnalytics,
   updateContactCrm,
 } from "../utils/api.js";
-import { Users, Upload, Plus, Trash2, Search, Activity, Phone, RefreshCw } from "lucide-react";
+import { UserGroupIcon, ArrowUpTrayIcon, PlusIcon, TrashIcon, MagnifyingGlassIcon, ExclamationTriangleIcon, PhoneIcon, ArrowPathIcon } from '@heroicons/react/24/outline';
 
 export default function Contacts() {
   const [contacts, setContacts] = useState([]);
@@ -152,7 +152,7 @@ export default function Contacts() {
 
         <div className="flex flex-col sm:flex-row items-start gap-4 z-10 w-full">
           <div className="bg-gradient-to-br from-emerald-500 to-teal-500 p-3 rounded-2xl shadow-lg shadow-emerald-500/20">
-            <Users className="w-8 h-8 text-white" />
+            <UserGroupIcon className="w-8 h-8 text-white" />
           </div>
           <div className="flex flex-col flex-1 min-w-0">
             <h2 className="text-3xl font-extrabold bg-gradient-to-r from-emerald-400 to-cyan-400 bg-clip-text text-transparent break-words">Minha Agenda</h2>
@@ -176,7 +176,7 @@ export default function Contacts() {
              disabled={importing}
              className="w-full sm:w-auto flex items-center justify-center gap-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white px-6 py-3 rounded-2xl font-semibold transition-all shadow-lg shadow-emerald-900/40 hover:shadow-emerald-900/60 disabled:opacity-50 hover:-translate-y-0.5 active:translate-y-0"
            >
-             <Upload className={`w-5 h-5 ${importing ? "animate-bounce" : ""}`} />
+             <ArrowUpTrayIcon className={`w-5 h-5 ${importing ? "animate-bounce" : ""}`} />
              {importing ? "Lendo Planilha..." : "Importar Excel"}
            </button>
         </div>
@@ -184,7 +184,7 @@ export default function Contacts() {
 
       {error && (
         <div className="bg-red-500/10 border border-red-500/30 text-red-400 px-4 py-3.5 rounded-2xl flex items-center gap-3 backdrop-blur-sm animate-in fade-in slide-in-from-top-4">
-          <Activity className="w-5 h-5 shrink-0" />
+          <ExclamationTriangleIcon className="w-5 h-5 shrink-0" />
           <span className="text-sm">{error}</span>
         </div>
       )}
@@ -219,7 +219,7 @@ export default function Contacts() {
         {/* COLUNA ESQUERDA: NOVO CONTATO MANUAL */}
         <div className="lg:col-span-1 border border-slate-700/50 bg-slate-800/40 p-4 md:p-6 rounded-3xl shadow-lg backdrop-blur-sm flex flex-col h-fit min-w-0 w-full overflow-hidden">
           <h3 className="text-lg font-bold text-white mb-5 flex items-center gap-2">
-            <Plus className="w-5 h-5 text-emerald-400 bg-emerald-400/10 p-1.5 box-content rounded-lg" />
+            <PlusIcon className="w-5 h-5 text-emerald-400 bg-emerald-400/10 p-1.5 box-content rounded-lg" />
             Adicionar Manual
           </h3>
           <form onSubmit={handleAddSubmit} className="flex flex-col gap-4">
@@ -244,7 +244,7 @@ export default function Contacts() {
                   onChange={(e) => setPhoneInput(e.target.value)}
                   className="w-full bg-slate-900/50 border border-slate-700/60 hover:border-slate-600 rounded-xl pl-10 pr-4 py-3 text-white placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500/50 transition-all font-mono tracking-wide"
                 />
-                <Phone className="w-4 h-4 text-slate-500 absolute left-4 top-1/2 -translate-y-1/2" />
+                <PhoneIcon className="w-4 h-4 text-slate-500 absolute left-4 top-1/2 -translate-y-1/2" />
               </div>
             </div>
 
@@ -265,7 +265,7 @@ export default function Contacts() {
             </div>
             
             <div className="relative w-full md:w-64 group">
-              <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 group-focus-within:text-emerald-400 transition-colors" />
+              <MagnifyingGlassIcon className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 group-focus-within:text-emerald-400 transition-colors" />
               <input
                  type="text"
                  placeholder="Buscar por nome ou nÃºmero..."
@@ -279,13 +279,13 @@ export default function Contacts() {
           <div className="p-4 md:p-6 flex-1 overflow-y-auto max-h-[500px] scrollbar-thin scrollbar-thumb-slate-600 scrollbar-track-transparent">
             {loading ? (
               <div className="py-20 flex flex-col items-center justify-center text-slate-400">
-                <RefreshCw className="w-8 h-8 animate-spin text-emerald-500 mb-4 opacity-80" />
+                <ArrowPathIcon className="w-8 h-8 animate-spin text-emerald-500 mb-4 opacity-80" />
                 <p>Sincronizando contatos com o banco seguro...</p>
               </div>
             ) : filteredContacts.length === 0 ? (
               <div className="py-20 flex flex-col items-center justify-center text-slate-500 text-center px-4">
                 <div className="w-16 h-16 bg-slate-800 rounded-full flex items-center justify-center mb-4 border border-slate-700">
-                  <Users className="w-8 h-8 text-slate-600" />
+                  <UserGroupIcon className="w-8 h-8 text-slate-600" />
                 </div>
                 <p className="text-lg text-slate-300 font-medium mb-1">Nenhum contato encontrado</p>
                 <p className="max-w-xs">{search ? "Altere os termos de busca para encontrar." : "Adicione manualmente ou importe uma planilha Excel para comeÃ§ar."}</p>
@@ -330,7 +330,7 @@ export default function Contacts() {
                         className="p-2.5 text-slate-500 hover:text-red-400 hover:bg-red-500/10 rounded-xl transition-all opacity-0 group-hover:opacity-100 shrink-0"
                         title="Apagar permanentemente"
                       >
-                        <Trash2 className="w-4 h-4" />
+                        <TrashIcon className="w-4 h-4" />
                       </button>
                     </div>
                   </li>

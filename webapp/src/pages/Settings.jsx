@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '../auth/AuthContext.jsx';
+import { CheckCircleIcon, ArrowRightOnRectangleIcon } from '@heroicons/react/24/outline';
 
 export default function Settings() {
   const { supabase, session } = useAuth();
@@ -78,14 +79,16 @@ export default function Settings() {
         <div className="flex items-center gap-3 pt-2">
           <button
             onClick={save}
-            className="bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold rounded-lg px-5 py-2.5 transition"
+            className="bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold rounded-lg px-5 py-2.5 transition flex items-center gap-2"
           >
-            {saved ? '✓ Salvo' : 'Salvar'}
+            {saved ? <CheckCircleIcon className="w-5 h-5" /> : null}
+            {saved ? 'Salvo' : 'Salvar'}
           </button>
           <button
             onClick={logout}
-            className="text-sm text-rose-500 hover:text-rose-700 transition"
+            className="text-sm text-rose-500 hover:text-rose-700 transition flex items-center gap-2"
           >
+            <ArrowRightOnRectangleIcon className="w-5 h-5" />
             Sair da conta
           </button>
         </div>

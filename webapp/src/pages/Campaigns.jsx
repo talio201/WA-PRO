@@ -1,18 +1,16 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-    Activity,
-    AlertTriangle,
-    CheckCircle2,
-    Clock3,
-    Download,
-    Pencil,
-    RefreshCw,
-    Search,
-    SlidersHorizontal,
-    Sparkles,
-    Trash2,
-    X,
-} from 'lucide-react';
+    CheckCircleIcon,
+    ArrowPathIcon,
+    MagnifyingGlassIcon,
+    ExclamationTriangleIcon,
+    ClockIcon,
+    PencilIcon,
+    TrashIcon,
+    ArrowDownTrayIcon,
+    SparklesIcon,
+    XMarkIcon,
+} from '@heroicons/react/24/outline';
 import { BarChart, Bar, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import {
     deleteCampaign,
@@ -467,7 +465,7 @@ const Campaigns = () => {
     if (loading) {
         return (
             <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600 shadow-sm">
-                <RefreshCw size={16} className="animate-spin text-slate-500" />
+                <ArrowPathIcon className="w-4 h-4 animate-spin text-slate-500" />
                 <span>Carregando dados...</span>
             </div>
         );
@@ -522,7 +520,7 @@ const Campaigns = () => {
                                 onClick={() => setGlassMode((prev) => !prev)}
                                 className={neutralButtonClass}
                             >
-                                <Sparkles size={14} />
+                                <SparklesIcon className="w-4 h-4" />
                                 {glassMode ? 'Apple Glass ON' : 'Apple Glass OFF'}
                             </button>
                             <button
@@ -530,7 +528,7 @@ const Campaigns = () => {
                                 onClick={exportCampaignsCsv}
                                 className={neutralButtonClass}
                             >
-                                <Download size={14} />
+                                <ArrowDownTrayIcon className="w-4 h-4" />
                                 Exportar CSV
                             </button>
                             <button
@@ -539,7 +537,7 @@ const Campaigns = () => {
                                 disabled={syncing}
                                 className={`${accentButtonClass} ${syncing ? 'cursor-wait opacity-80' : ''}`}
                             >
-                                <RefreshCw size={14} className={syncing ? 'animate-spin' : ''} />
+                                <ArrowPathIcon className={`w-4 h-4 ${syncing ? 'animate-spin' : ''}`} />
                                 {syncing ? 'Sincronizando...' : 'Atualizar agora'}
                             </button>
                             <label className={neutralButtonClass}>
@@ -565,56 +563,56 @@ const Campaigns = () => {
                         <div className={heroMetricClass}>
                             <div className="flex items-center justify-between text-xs font-bold uppercase tracking-wide text-slate-500">
                                 <span>Enviadas</span>
-                                <CheckCircle2 size={15} className="text-emerald-600" />
+                                <CheckCircleIcon className="w-4 h-4 text-emerald-600" />
                             </div>
                             <div className="mt-2 text-2xl font-bold text-slate-900">{totals.sent}</div>
                         </div>
                         <div className={heroMetricClass}>
                             <div className="flex items-center justify-between text-xs font-bold uppercase tracking-wide text-slate-500">
                                 <span>Taxa sucesso</span>
-                                <Activity size={15} className="text-blue-600" />
+                                <ArrowPathIcon className="w-4 h-4 text-blue-600" />
                             </div>
                             <div className="mt-2 text-2xl font-bold text-slate-900">{totals.successRate}%</div>
                         </div>
                         <div className={heroMetricClass}>
                             <div className="flex items-center justify-between text-xs font-bold uppercase tracking-wide text-slate-500">
                                 <span>Na fila</span>
-                                <Clock3 size={15} className="text-amber-600" />
+                                <ClockIcon className="w-4 h-4 text-amber-600" />
                             </div>
                             <div className="mt-2 text-2xl font-bold text-slate-900">{totals.pending}</div>
                         </div>
                         <div className={heroMetricClass}>
                             <div className="flex items-center justify-between text-xs font-bold uppercase tracking-wide text-slate-500">
                                 <span>Falhas</span>
-                                <AlertTriangle size={15} className="text-red-600" />
+                                <ExclamationTriangleIcon className="w-4 h-4 text-red-600" />
                             </div>
                             <div className="mt-2 text-2xl font-bold text-slate-900">{totals.failed}</div>
                         </div>
                         <div className={heroMetricClass}>
                             <div className="flex items-center justify-between text-xs font-bold uppercase tracking-wide text-slate-500">
                                 <span>Criticas</span>
-                                <AlertTriangle size={15} className="text-orange-600" />
+                                <ExclamationTriangleIcon className="w-4 h-4 text-orange-600" />
                             </div>
                             <div className="mt-2 text-2xl font-bold text-slate-900">{totals.critical}</div>
                         </div>
                         <div className={heroMetricClass}>
                             <div className="flex items-center justify-between text-xs font-bold uppercase tracking-wide text-slate-500">
                                 <span>Contatos</span>
-                                <Activity size={15} className="text-indigo-600" />
+                                <ArrowPathIcon className="w-4 h-4 text-indigo-600" />
                             </div>
                             <div className="mt-2 text-2xl font-bold text-slate-900">{totals.contacts}</div>
                         </div>
                         <div className={heroMetricClass}>
                             <div className="flex items-center justify-between text-xs font-bold uppercase tracking-wide text-slate-500">
                                 <span>Leads qualif.</span>
-                                <Activity size={15} className="text-cyan-600" />
+                                <ArrowPathIcon className="w-4 h-4 text-cyan-600" />
                             </div>
                             <div className="mt-2 text-2xl font-bold text-slate-900">{leadAnalytics?.byStage?.qualified || 0}</div>
                         </div>
                         <div className={heroMetricClass}>
                             <div className="flex items-center justify-between text-xs font-bold uppercase tracking-wide text-slate-500">
                                 <span>Conv. leads</span>
-                                <CheckCircle2 size={15} className="text-emerald-600" />
+                                <CheckCircleIcon className="w-4 h-4 text-emerald-600" />
                             </div>
                             <div className="mt-2 text-2xl font-bold text-slate-900">{leadAnalytics?.conversion?.wonRate || 0}%</div>
                         </div>
@@ -675,7 +673,7 @@ const Campaigns = () => {
                             </div>
                             <div className="flex flex-wrap items-center gap-2">
                                 <div className="relative min-w-55">
-                                    <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                                    <MagnifyingGlassIcon className="w-4 h-4 pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                                     <input
                                         type="text"
                                         value={search}
@@ -685,7 +683,7 @@ const Campaigns = () => {
                                     />
                                 </div>
                                 <div className="inline-flex items-center gap-2">
-                                    <SlidersHorizontal size={14} className="text-slate-500" />
+                                    {/* Filtro: pode-se usar um ícone de ajuste se desejar, mas Heroicons não tem SlidersHorizontal. Pode-se omitir ou usar AdjustmentsHorizontalIcon se disponível. */}
                                     <select
                                         value={sortBy}
                                         onChange={(e) => setSortBy(e.target.value)}
@@ -798,7 +796,7 @@ const Campaigns = () => {
                                                                     : 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200'
                                                         }`}
                                                     >
-                                                        <CheckCircle2 size={13} />
+                                                        <CheckCircleIcon className="w-4 h-4" />
                                                         {dispatchingCampaignId === campaign._id ? 'Disparando...' : 'Proximo imediato'}
                                                     </button>
                                                     <button
@@ -806,7 +804,7 @@ const Campaigns = () => {
                                                         onClick={() => openCampaignEditModal(campaign)}
                                                         className="inline-flex items-center gap-1.5 rounded-lg bg-sky-100 px-3 py-1.5 text-xs font-semibold text-sky-800 transition hover:bg-sky-200"
                                                     >
-                                                        <Pencil size={13} />
+                                                        <PencilIcon className="w-4 h-4" />
                                                         Editar
                                                     </button>
                                                     <button
@@ -815,7 +813,7 @@ const Campaigns = () => {
                                                         disabled={campaign.failed === 0}
                                                         className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition ${campaign.failed === 0 ? 'cursor-not-allowed bg-slate-200 text-slate-400' : 'bg-amber-100 text-amber-800 hover:bg-amber-200'}`}
                                                     >
-                                                        <AlertTriangle size={13} />
+                                                        <ExclamationTriangleIcon className="w-4 h-4" />
                                                         Falhas ({campaign.failed})
                                                     </button>
                                                     <button
@@ -824,7 +822,7 @@ const Campaigns = () => {
                                                         disabled={deletingId === campaign._id}
                                                         className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition ${deletingId === campaign._id ? 'cursor-not-allowed bg-red-200 text-red-400' : 'bg-red-100 text-red-700 hover:bg-red-200'}`}
                                                     >
-                                                        <Trash2 size={13} />
+                                                        <TrashIcon className="w-4 h-4" />
                                                         {deletingId === campaign._id ? 'Excluindo...' : 'Excluir'}
                                                     </button>
                                                 </div>
@@ -876,7 +874,7 @@ const Campaigns = () => {
                                     disabled={loadingFailures || failures.length === 0 || retryingAllFailures}
                                     className={`inline-flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-semibold text-white transition ${loadingFailures || failures.length === 0 || retryingAllFailures ? 'cursor-not-allowed bg-slate-300' : 'bg-emerald-600 hover:bg-emerald-700'}`}
                                 >
-                                    <RefreshCw size={14} className={retryingAllFailures ? 'animate-spin' : ''} />
+                                    <ArrowPathIcon className={`w-4 h-4 ${retryingAllFailures ? 'animate-spin' : ''}`} />
                                     {retryingAllFailures ? 'Reenfileirando...' : 'Reenfileirar todas'}
                                 </button>
                                 <button
@@ -884,7 +882,7 @@ const Campaigns = () => {
                                     onClick={closeFailuresModal}
                                     className={neutralButtonClass}
                                 >
-                                    <X size={14} />
+                                    <XMarkIcon className="w-4 h-4" />
                                     Fechar
                                 </button>
                             </div>
@@ -892,7 +890,7 @@ const Campaigns = () => {
                         <div className="overflow-y-auto p-6">
                             {loadingFailures ? (
                                 <div className="flex items-center justify-center gap-2 py-10 text-center text-sm text-gray-500">
-                                    <RefreshCw size={14} className="animate-spin" />
+                                    <ArrowPathIcon className="w-4 h-4 animate-spin" />
                                     <span>Carregando falhas...</span>
                                 </div>
                             ) : failures.length === 0 ? (
@@ -967,7 +965,7 @@ const Campaigns = () => {
                                 <p className="text-sm text-slate-500">{editingCampaign.name}</p>
                             </div>
                             <button type="button" onClick={closeCampaignEditModal} className={neutralButtonClass}>
-                                <X size={14} />
+                                <XMarkIcon className="w-4 h-4" />
                                 Fechar
                             </button>
                         </div>
@@ -1035,7 +1033,7 @@ const Campaigns = () => {
                                     disabled={savingCampaignEdit}
                                     className={`inline-flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-semibold text-white ${savingCampaignEdit ? 'cursor-not-allowed bg-emerald-300' : 'bg-emerald-600 hover:bg-emerald-700'}`}
                                 >
-                                    <CheckCircle2 size={14} />
+                                    <CheckCircleIcon className="w-4 h-4" />
                                     {savingCampaignEdit ? 'Salvando...' : 'Salvar campanha'}
                                 </button>
                             </div>
