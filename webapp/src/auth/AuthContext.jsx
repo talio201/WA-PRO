@@ -48,7 +48,12 @@ export function AuthProvider({ children }) {
       });
       sb.auth.onAuthStateChange((_event, nextSession) => {
         setSession(nextSession);
-        if (nextSession) resolveAndSyncAgentId(nextSession);
+        if (nextSession) {
+          resolveAndSyncAgentId(nextSession);
+        } else {
+          localStorage.removeItem('emidia_agent_id');
+          localStorage.removeItem('wa-manager-agent-name');
+        }
       });
     }).catch(() => setLoading(false));
   }, []);

@@ -31,12 +31,12 @@ const blockedMaintenancePublicPaths = new Set(['/login.html', '/dashboard.html',
 app.set("trust proxy", 1);
 
 // Security headers
-app.use(helmet());
+app.use(helmet({ contentSecurityPolicy: false }));
 
 // Rate limiter (basic)
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: Number(process.env.RATE_LIMIT_MAX || 100),
+  max: Number(process.env.RATE_LIMIT_MAX || 1000), // Increased to 1000 to avoid common 429 when polling
   standardHeaders: true,
   legacyHeaders: false,
 });
@@ -175,9 +175,10 @@ app.get("/api/bot/status", requireAuth, (req, res) => {
       });
     }
   }
-  const targetAgentId = (req.user && !req.isAdmin)
+  const requestedAgentId = req.headers["x-agent-id"] || req.query.agentId;
+  const targetAgentId = (req.user && !req.isAdmin && requestedAgentId !== "bot")
     ? req.agentId
-    : (req.headers["x-agent-id"] || req.query.agentId || req.agentId || "system");
+    : (requestedAgentId || req.agentId || "system");
   const state = botStates.get(targetAgentId) || { status: 'DISCONNECTED', qrCode: null };
   
   res.json(state);
@@ -342,6 +343,20 @@ app.get("/usuarios/*", (req, res) => {
   res.sendFile(path.join(__dirname, "../public/app/index.html"));
 });
 
+// Convenience redirects for common admin paths so older links keep working
+app.get('/admin', (req, res) => {
+  return res.redirect(302, maintenanceBasePath);
+});
+app.get('/admin/', (req, res) => {
+  return res.redirect(302, maintenanceBasePath);
+});
+app.get('/admin/dashboard', (req, res) => {
+  return res.redirect(302, `${maintenanceBasePath}/dashboard`);
+});
+app.get('/painel-interno', (req, res) => {
+  return res.redirect(302, maintenanceBasePath);
+});
+
 app.get(maintenanceBasePath, (req, res) => {
   res.set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
   res.sendFile(path.join(__dirname, "../public/login.html"));
@@ -360,7 +375,7 @@ app.get(`${maintenanceBasePath}/admin`, (req, res) => {
     const styleSrc = ["'self'", 'https://cdnjs.cloudflare.com', 'https://cdn.tailwindcss.com', "'unsafe-inline'"];
     const connectSrc = ["'self'", 'wss:', 'https:', 'http:'];
     const csp = `default-src 'self'; script-src ${scriptSrc.join(' ')}; style-src ${styleSrc.join(' ')}; connect-src ${connectSrc.join(' ')}; img-src 'self' data:; font-src 'self' https://cdnjs.cloudflare.com; object-src 'none'; frame-ancestors 'none'`;
-    res.setHeader('Content-Security-Policy', csp);
+    // res.setHeader('Content-Security-Policy', csp);
     const filePath = path.join(__dirname, "../public/admin.html");
     fs.readFile(filePath, 'utf8', (err, data) => {
       if (err) return res.status(500).send('Failed to load admin panel');

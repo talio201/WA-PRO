@@ -62,14 +62,16 @@ const logSecurityEvent = (type, data) => {
 
 // Log bot activity
 const logBotActivity = (action, data) => {
+  const agentId = data?.agentId || data?.clientId || "system";
   const event = {
     id: `bot_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
     action,
+    agentId,
     timestamp: new Date().toISOString(),
     ...data,
   };
   botActivityLogs.unshift(event);
-  if (botActivityLogs.length > 500) botActivityLogs.pop();
+  if (botActivityLogs.length > 1000) botActivityLogs.pop();
   emitRealtimeEvent("admin.bot_activity", event);
   return event;
 };
@@ -183,12 +185,16 @@ exports.getDashboard = async (req, res) => {
     cleanInactiveUsers();
     const metrics = getSystemMetrics();
 
+    const filteredBotActivity = req.isAdmin 
+      ? botActivityLogs 
+      : botActivityLogs.filter(log => log.agentId === req.agentId);
+
     const dashboard = {
       activeUsers: Array.from(activeUsers.values()),
       totalActiveUsers: activeUsers.size,
       systemMetrics: metrics,
       recentSecurityLogs: securityLogs.slice(0, 10),
-      recentBotActivity: botActivityLogs.slice(0, 10),
+      recentBotActivity: filteredBotActivity.slice(0, 10),
       recentExtensionErrors: extensionErrors.slice(0, 10),
       serverStartTime: new Date(Date.now() - process.uptime() * 1000).toISOString(),
     };
@@ -388,9 +394,13 @@ exports.reportSecurityEvent = async (req, res) => {
 exports.getBotActivity = async (req, res) => {
   try {
     const { limit = 100 } = req.query;
+    const filtered = req.isAdmin 
+      ? botActivityLogs 
+      : botActivityLogs.filter(log => log.agentId === req.agentId);
+
     res.json({
-      logs: botActivityLogs.slice(0, parseInt(limit)),
-      total: botActivityLogs.length,
+      logs: filtered.slice(0, parseInt(limit)),
+      total: filtered.length,
     });
   } catch (err) {
     res.status(500).json({ msg: "Failed to get bot activity" });
@@ -401,7 +411,8 @@ exports.getBotActivity = async (req, res) => {
 exports.reportBotActivity = async (req, res) => {
   try {
     const { action, data } = req.body;
-    const event = logBotActivity(action, data);
+    const payload = { ...data, agentId: req.agentId || data?.agentId };
+    const event = logBotActivity(action, payload);
     res.json({ success: true, event });
   } catch (err) {
     res.status(500).json({ msg: "Failed to report bot activity" });

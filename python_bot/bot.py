@@ -464,7 +464,7 @@ def main():
                 "--mute-audio",
                 "--no-first-run",
                 "--safebrowsing-disable-auto-update",
-                "--js-flags=--max-old-space-size=256"
+                "--js-flags=--max-old-space-size=1024"
             ]
         )
         pages = browser.pages

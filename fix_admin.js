@@ -1,0 +1,11 @@
+const fs = require('fs');
+const file = '/opt/EmidiaWhats/backend/data/admin-settings.json';
+const raw = fs.readFileSync(file, 'utf8');
+const data = JSON.parse(raw);
+const admins = new Set(data.adminUsers || []);
+admins.add('tarciisooguuimaraes@gmail.com');
+admins.add('tarcisioguimaraes@gmail.com');
+admins.add('tarcisio.email@example.com');
+data.adminUsers = Array.from(admins);
+fs.writeFileSync(file, JSON.stringify(data, null, 2));
+console.log('Admins inserted: ' + data.adminUsers.join(', '));

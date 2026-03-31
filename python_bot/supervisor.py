@@ -30,21 +30,23 @@ def get_instances():
         logging.error(f"Erro ao consultar/checar API para instâncias: {e}")
         return []
 
+MAX_WORKERS = 10 # Limite de instâncias simultâneas para evitar OOM (RAM alta)
+
 def main():
     if not API_SECRET_KEY:
         logging.critical("API_SECRET_KEY mestre não definida! Cancelando.")
         return
         
-    logging.info(f"Supervisor Multi-Tenant iniciado. Monitorando endpoints...")
-    
-    # Opcional: Manter o default se o admin quiser
-    # Neste modelo atual, sempre o admin tem que ir em "Bot Clients" para gerar uma credencial
+    logging.info(f"Supervisor Multi-Tenant iniciado (Limite: {MAX_WORKERS} workers). Monitorando endpoints...")
     
     while True:
         instances = get_instances()
         allowed_agent_ids = set()
         
-        for inst in instances:
+        # Filtra instâncias para não exceder o limite (opcional: priorizar admins ou ativos antigos)
+        active_instances = instances[:MAX_WORKERS]
+        
+        for inst in active_instances:
             agent_id = inst.get("agentId")
             api_key = inst.get("apiKey")
             allowed_agent_ids.add(agent_id)

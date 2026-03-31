@@ -1,4 +1,4 @@
-﻿const Message = require("../models/Message");
+const Message = require("../models/Message");
 const Campaign = require("../models/Campaign");
 const ConversationAssignment = require("../models/ConversationAssignment");
 const SupportProtocol = require("../models/SupportProtocol");
@@ -357,10 +357,10 @@ exports.getMessages = async (req, res) => {
       : 200;
     
     let query = {};
-    if (req.agentId && req.agentId !== 'bot' && req.agentId !== 'system' && !req.isAdmin) {
+    if (req.agentId && req.agentId !== 'bot' && req.agentId !== 'system') {
       const safeAgentId = String(req.agentId);
       const agentCampaigns = await Campaign.find({ agentId: safeAgentId }).select('_id');
-      const agentCampaignIds = agentCampaigns.map(c => c._id);
+      const agentCampaignIds = agentCampaigns.map(c => String(c._id));
       query.campaign = { $in: agentCampaignIds };
     }
 
@@ -408,10 +408,10 @@ exports.getConversations = async (req, res) => {
     const { search = "", onlyWithReplies, onlyAssigned, limit } = req.query;
     
     let query = {};
-    if (req.agentId && req.agentId !== 'bot' && req.agentId !== 'system' && !req.isAdmin) {
+    if (req.agentId && req.agentId !== 'bot' && req.agentId !== 'system') {
       const safeAgentId = String(req.agentId);
       const agentCampaigns = await Campaign.find({ agentId: safeAgentId }).select('_id');
-      const agentCampaignIds = agentCampaigns.map(c => c._id);
+      const agentCampaignIds = agentCampaigns.map(c => String(c._id));
       query.campaign = { $in: agentCampaignIds };
     }
 
@@ -555,10 +555,10 @@ exports.getHelpdeskQueues = async (req, res) => {
       .toLowerCase();
 
     let queryMsg = {};
-    if (req.agentId && req.agentId !== 'bot' && req.agentId !== 'system' && !req.isAdmin) {
+    if (req.agentId && req.agentId !== 'bot' && req.agentId !== 'system') {
       const safeAgentId = String(req.agentId);
       const agentCampaigns = await Campaign.find({ agentId: safeAgentId }).select('_id');
-      const agentCampaignIds = agentCampaigns.map(c => c._id);
+      const agentCampaignIds = agentCampaigns.map(c => String(c._id));
       queryMsg.campaign = { $in: agentCampaignIds };
     }
 
@@ -763,10 +763,10 @@ exports.getConversationHistory = async (req, res) => {
       : 2000;
     
     let query = { phone: normalizedPhone };
-    if (agentId && agentId !== 'bot' && agentId !== 'system' && agentId !== 'admin') {
+    if (agentId && agentId !== 'bot' && agentId !== 'system') {
       const safeAgentId = String(agentId);
       const agentCampaigns = await Campaign.find({ agentId: safeAgentId }).select('_id');
-      const agentCampaignIds = agentCampaigns.map(c => c._id);
+      const agentCampaignIds = agentCampaigns.map(c => String(c._id));
       query.campaign = { $in: agentCampaignIds };
     }
 
@@ -1336,9 +1336,11 @@ exports.registerInboundMessage = async (req, res) => {
       return delta <= 2 * 60 * 1000;
     });
     if (duplicate) {
+      const campaign = await Campaign.findById(relatedCampaignId);
       emitRealtimeEvent("messages.inbound.duplicate", {
         phone: normalizedPhone,
         campaignId: relatedCampaignId,
+        agentId: campaign?.agentId || null,
         messageId: duplicate._id,
       });
       return res.json({ duplicate: true, message: duplicate });
@@ -1377,9 +1379,11 @@ exports.registerInboundMessage = async (req, res) => {
       lastInboundAt: messageDate,
       stage: 'qualified',
     });
+    const campaign = await Campaign.findById(relatedCampaignId);
     emitRealtimeEvent("messages.inbound.received", {
       phone: normalizedPhone,
       campaignId: relatedCampaignId,
+      agentId: campaign?.agentId || null,
       message: createdMessage,
     });
     try {
@@ -1813,6 +1817,7 @@ exports.updateJobStatus = async (req, res) => {
     emitRealtimeEvent("messages.status.updated", {
       messageId: message._id,
       campaignId: message.campaign || null,
+      agentId: campaign?.agentId || null,
       phone: message.phone || "",
       previousStatus,
       status: message.status,
@@ -1826,6 +1831,7 @@ exports.updateJobStatus = async (req, res) => {
       await campaign.save();
       emitRealtimeEvent("campaign.stats.updated", {
         campaignId: campaign._id,
+        agentId: campaign.agentId || null,
         stats: campaign.stats,
         updatedAt: campaign.updatedAt,
       });
@@ -1868,9 +1874,11 @@ exports.updateMessage = async (req, res) => {
     message.updatedAt = new Date();
     appendAudit(message, "edited", "Message edited by user", { changedFields });
     await message.save();
+    const campaign = await Campaign.findById(message.campaign);
     emitRealtimeEvent("messages.edited", {
       messageId: message._id,
       campaignId: message.campaign || null,
+      agentId: campaign?.agentId || null,
       phone: message.phone || "",
       changedFields,
       updatedAt: message.updatedAt,
@@ -1900,22 +1908,24 @@ exports.retryMessage = async (req, res) => {
       changedFields,
     });
     await message.save();
+    const campaign = await Campaign.findById(message.campaign);
     emitRealtimeEvent("messages.retried", {
       messageId: message._id,
       campaignId: message.campaign || null,
+      agentId: campaign?.agentId || null,
       phone: message.phone || "",
       previousStatus,
       status: message.status,
       changedFields,
       updatedAt: message.updatedAt,
     });
-    const campaign = await Campaign.findById(message.campaign);
     if (campaign) {
       applyCampaignStatTransition(campaign, previousStatus, "pending");
       campaign.updatedAt = new Date();
       await campaign.save();
       emitRealtimeEvent("campaign.stats.updated", {
         campaignId: campaign._id,
+        agentId: campaign.agentId || null,
         stats: campaign.stats,
         updatedAt: campaign.updatedAt,
       });
