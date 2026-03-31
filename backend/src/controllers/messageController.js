@@ -1,5 +1,6 @@
 const Message = require("../models/Message");
 const Campaign = require("../models/Campaign");
+const { isWithinDeliveryWindow } = require("../utils/time");
 const ConversationAssignment = require("../models/ConversationAssignment");
 const SupportProtocol = require("../models/SupportProtocol");
 const { normalizePhone } = require("../utils/phone");
@@ -1552,7 +1553,8 @@ exports.getNextJob = async (req, res) => {
     if (req.agentId) {
       query.agentId = req.agentId;
     }
-    const activeCampaigns = await Campaign.find(query).select("_id");
+    const allActive = await Campaign.find(query);
+    const activeCampaigns = allActive.filter(c => isWithinDeliveryWindow(c));
     const activeCampaignIds = activeCampaigns.map((c) => c._id);
     const activeCampaignIdSet = new Set(
       activeCampaignIds.map((id) => String(id)),

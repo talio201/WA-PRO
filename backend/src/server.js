@@ -159,6 +159,20 @@ app.post("/api/bot/status", requireAuth, (req, res) => {
   res.json({ success: true, botState: currentState });
 });
 
+app.post("/api/bot/live-activity", requireAuth, (req, res) => {
+  const { activity, data, agentId } = req.body;
+  const targetAgentId = agentId || req.agentId;
+  
+  emitRealtimeEvent("bot.live_activity", {
+    agentId: targetAgentId,
+    activity,
+    data: data || {},
+    timestamp: new Date().toISOString()
+  });
+  
+  res.json({ success: true });
+});
+
 app.get("/api/bot/status", requireAuth, (req, res) => {
   if (req.user && !req.isAdmin) {
     const status = String(req.saasUser?.status || 'pending').trim().toLowerCase();

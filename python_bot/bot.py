@@ -36,8 +36,21 @@ else:
     logging.info(f"Bot autenticando com x-agent-id={BOT_AGENT_ID} | key={masked} | api={API_BASE_URL}")
 if BOT_AGENT_ID == "bot":
     logging.warning("BOT_AGENT_ID está como 'bot' (compartilhado). Para multiusuario real, execute uma instância do python_bot por agentId.")
+
+def send_live_activity(activity, data=None):
+    try:
+        payload = {
+            "activity": activity,
+            "data": data or {},
+            "agentId": BOT_AGENT_ID
+        }
+        requests.post(f"{API_BASE_URL}/bot/live-activity", json=payload, headers=API_HEADERS, timeout=2)
+    except Exception:
+        pass
+
 def type_like_human(page, text, is_priority=False):
     logging.info("Iniciando digitação...")
+    send_live_activity("typing", {"text": text[:20] + "..." if len(text) > 20 else text})
     if text:
         page.keyboard.type(text[0])
         time.sleep(random.uniform(0.6, 1.2))
@@ -131,6 +144,7 @@ def send_message(page, phone, message, is_priority=False, media=None):
                     time.sleep(random.uniform(0.5, 1.2))
                 type_like_human(page, message, is_priority)
                 page.wait_for_timeout(400)
+                send_live_activity("sending")
                 page.keyboard.press("Enter")
                 logging.info("Texto enviado com sucesso.")
                 page.wait_for_timeout(1500)
@@ -579,7 +593,8 @@ def main():
                     media = job.get("media")
 
                 logging.info(f"Iniciando job {job_id} para {phone} | Prioridade: {is_priority} | Midia: {bool(media)} | fileUrl: {media.get('fileUrl') if isinstance(media, dict) else None}")
-
+                send_live_activity("processing", {"job_id": job_id, "phone": phone})
+                
                 action = job.get("action", "send_message")
                 if action == "history_sync":
                     success, error_reason = scrape_history_for_job(page, phone)
@@ -605,6 +620,8 @@ def main():
                                     f"Anti-ban sorteado: {tempo_sorteado}s | processamento: {tempo_processamento}s | espera restante: {tempo_espera}s"
                                 )
                             if tempo_espera > 0:
+                                next_send_at = int((time.time() + tempo_espera) * 1000)
+                                send_live_activity("waiting", {"tempo_espera": tempo_espera, "nextSendAt": next_send_at})
                                 interrupted = wait_with_command_poll(tempo_espera, browser, user_data_dir)
                                 if interrupted:
                                     logging.info("Espera anti-ban interrompida por comando de disparo imediato.")

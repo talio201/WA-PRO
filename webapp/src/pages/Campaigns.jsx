@@ -108,6 +108,8 @@ const Campaigns = () => {
     const [retryingAllFailures, setRetryingAllFailures] = useState(false);
     const [messageEdits, setMessageEdits] = useState({});
     const [leadAnalytics, setLeadAnalytics] = useState(null);
+    const [liveActivity, setLiveActivity] = useState(null);
+    const [countdown, setCountdown] = useState(0);
     const syncInFlightRef = useRef(false);
     const realtimeReloadTimerRef = useRef(null);
     const loadDashboardData = useCallback(async (options = {}) => {
@@ -149,6 +151,19 @@ const Campaigns = () => {
                 if (!autoRefresh) return;
                 const eventName = String(message?.event || '');
                 setLastRealtimeAt(message?.at || new Date().toISOString());
+                
+                if (eventName === 'bot.live_activity') {
+                    const payload = message.payload || {};
+                    setLiveActivity(payload);
+                    if (payload.activity === 'waiting' && payload.data?.nextSendAt) {
+                        const remaining = Math.max(0, Math.round((payload.data.nextSendAt - Date.now()) / 1000));
+                        setCountdown(remaining);
+                    } else {
+                        setCountdown(0);
+                    }
+                    return;
+                }
+
                 const shouldReload = eventName.startsWith('campaign.')
                     || eventName.startsWith('messages.')
                     || eventName === 'upload.completed'
@@ -178,6 +193,20 @@ const Campaigns = () => {
         }, CAMPAIGNS_FALLBACK_REFRESH_INTERVAL_MS);
         return () => clearInterval(interval);
     }, [autoRefresh, realtimeStatus, loadDashboardData]);
+
+    useEffect(() => {
+        if (!countdown || countdown <= 0) return undefined;
+        const timer = setInterval(() => {
+            setCountdown(prev => {
+                if (prev <= 1) {
+                    clearInterval(timer);
+                    return 0;
+                }
+                return prev - 1;
+            });
+        }, 1000);
+        return () => clearInterval(timer);
+    }, [countdown]);
     useEffect(() => {
         if (typeof window === 'undefined') return;
         try {
@@ -513,6 +542,47 @@ const Campaigns = () => {
                             <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-emerald-700">Operations</p>
                             <h2 className="mt-1 text-2xl font-bold tracking-tight text-slate-900">Painel de Campanhas</h2>
                             <p className="mt-1 text-sm text-slate-600">Fluxo de envio, falhas e produtividade em uma visao executiva unica.</p>
+                            
+                            {/* Live Activity Feed */}
+                            <div className="mt-4 flex flex-col md:flex-row md:items-center gap-3">
+                                {liveActivity && (
+                                    <div className={`inline-flex items-center gap-3 px-4 py-1.5 rounded-2xl border backdrop-blur-md shadow-sm transition-all duration-300 ${
+                                        liveActivity.activity === 'typing' ? 'bg-sky-50/80 border-sky-100 text-sky-700 animate-pulse' :
+                                        liveActivity.activity === 'waiting' ? 'bg-amber-50/80 border-amber-100 text-amber-700' :
+                                        liveActivity.activity === 'sending' ? 'bg-emerald-50/80 border-emerald-100 text-emerald-700' :
+                                        'bg-slate-50/80 border-slate-100 text-slate-600'
+                                    }`}>
+                                        <div className="relative">
+                                            <div className={`h-2 w-2 rounded-full ${
+                                                liveActivity.activity === 'typing' ? 'bg-sky-500' :
+                                                liveActivity.activity === 'waiting' ? 'bg-amber-500' :
+                                                liveActivity.activity === 'sending' ? 'bg-emerald-500' :
+                                                'bg-slate-400'
+                                            }`} />
+                                            {liveActivity.activity === 'typing' && (
+                                                <div className="absolute inset-0 h-2 w-2 rounded-full bg-sky-500 animate-ping" />
+                                            )}
+                                        </div>
+                                        <span className="text-xs font-semibold">
+                                            {liveActivity.activity === 'typing' && `Robô está digitando para ${liveActivity.data?.text || 'contato'}...`}
+                                            {liveActivity.activity === 'waiting' && (
+                                                countdown > 0 
+                                                    ? `Anti-ban: Próximo envio em ${countdown}s`
+                                                    : `Aguardando início do próximo envio...`
+                                            )}
+                                            {liveActivity.activity === 'sending' && `Enviando mensagem agora...`}
+                                            {liveActivity.activity === 'processing' && `Processando fila de mensagens...`}
+                                            {!['typing', 'waiting', 'sending', 'processing'].includes(liveActivity.activity) && `Atividade detectada: ${liveActivity.activity}`}
+                                        </span>
+                                    </div>
+                                )}
+                                {!liveActivity && (
+                                    <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-2xl bg-white/30 border border-white/50 text-slate-400 text-[11px] italic">
+                                        <ClockIcon className="w-3.5 h-3.5" />
+                                        Aguardando atividade do robô...
+                                    </div>
+                                )}
+                            </div>
                         </div>
                         <div className="flex flex-wrap items-center gap-2">
                             <button
