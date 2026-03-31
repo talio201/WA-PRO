@@ -1814,17 +1814,12 @@ exports.updateJobStatus = async (req, res) => {
         campaignId: message.campaign,
       },
     });
+    const campaign = await Campaign.findById(message.campaign);
     emitRealtimeEvent("messages.status.updated", {
       messageId: message._id,
       campaignId: message.campaign || null,
       agentId: campaign?.agentId || null,
-      phone: message.phone || "",
-      previousStatus,
-      status: message.status,
-      direction: message.direction || "outbound",
-      updatedAt: message.updatedAt,
-    });
-    const campaign = await Campaign.findById(message.campaign);
+
     if (campaign) {
       applyCampaignStatTransition(campaign, previousStatus, status);
       campaign.updatedAt = new Date();
