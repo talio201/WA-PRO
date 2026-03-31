@@ -45,9 +45,10 @@ export async function getAuthorizedHeaders(extraHeaders = {}, agentIdOverride = 
   const { data } = await sb.auth.getSession();
   const token = data?.session?.access_token || '';
   const localAgentId = String(localStorage.getItem('emidia_agent_id') || '').trim();
-  const sessionAgentId = String(data?.session?.user?.user_metadata?.agentId || '').trim();
-  const emailPrefix = String(data?.session?.user?.email || '').split('@')[0].replace(/[^a-z0-9_-]/gi, '').slice(0, 20);
-  const fallbackAgentId = emailPrefix ? `user_${emailPrefix}` : '';
+  const sessionUser = data?.session?.user;
+  const sessionAgentId = String(sessionUser?.user_metadata?.agentId || '').trim();
+  const userIdPrefix = String(sessionUser?.id || '').replace(/[^a-z0-9_-]/gi, '').slice(0, 12);
+  const fallbackAgentId = userIdPrefix ? `user_${userIdPrefix}` : '';
   const agentId = (extraHeaders && extraHeaders['x-agent-id']) || agentIdOverride || localAgentId || sessionAgentId || fallbackAgentId;
   const headers = { ...extraHeaders };
   if (token) headers['Authorization'] = `Bearer ${token}`;
