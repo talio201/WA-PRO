@@ -1819,7 +1819,12 @@ exports.updateJobStatus = async (req, res) => {
       messageId: message._id,
       campaignId: message.campaign || null,
       agentId: campaign?.agentId || null,
-
+      phone: message.phone || "",
+      previousStatus,
+      status: message.status,
+      direction: message.direction || "outbound",
+      updatedAt: message.updatedAt,
+    });
     if (campaign) {
       applyCampaignStatTransition(campaign, previousStatus, status);
       campaign.updatedAt = new Date();
