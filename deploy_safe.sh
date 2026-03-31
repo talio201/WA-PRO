@@ -4,7 +4,7 @@ set -e
 echo '[1/4] Criando backup automático do diretório raiz...'
 TIMESTAMP=$(date +'%Y%m%d_%H%M%S')
 BACKUP_PATH="/root/EmidiaWhats_backup_${TIMESTAMP}.tar.gz"
-tar -czvf "$BACKUP_PATH" -C /opt EmidiaWhats
+tar -czvf "$BACKUP_PATH" --exclude='node_modules' --exclude='whatsapp_session' --exclude='.git' -C /opt EmidiaWhats
 echo "✔️ Backup salvo em $BACKUP_PATH"
 
 echo '[2/4] Atualizando repositório...'
