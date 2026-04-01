@@ -761,6 +761,25 @@ exports.getHelpdeskQueues = async (req, res) => {
     return res.status(errorResponse.statusCode).json(errorResponse.body);
   }
 };
+
+// Supervisor endpoint consumed by server route. Keep response stable even when no instances are tracked.
+exports.getBotInstancesForSupervisor = async (req, res) => {
+  try {
+    const ownerId = resolveOwnerId(req);
+    const campaigns = await Campaign.find({ agentId: ownerId });
+    const list = (Array.isArray(campaigns) ? campaigns : []).map((item) => ({
+      campaignId: item._id,
+      campaignName: item.name,
+      status: item.status || 'unknown',
+      agentId: item.agentId || ownerId,
+    }));
+    return res.json({ success: true, instances: list });
+  } catch (err) {
+    console.error(err.message);
+    const errorResponse = buildServerErrorResponse(err);
+    return res.status(errorResponse.statusCode).json(errorResponse.body);
+  }
+};
 exports.getConversationHistory = async (req, res) => {
   try {
     const normalizedPhone = toSafePhone(req.params.phone);
