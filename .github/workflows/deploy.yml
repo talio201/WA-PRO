@@ -103,7 +103,7 @@ jobs:
              
              # Start new containers (rolling update - no downtime)
              echo "Deploying new containers..."
-             docker compose up -d --no-deps --build backend backend_worker
+             docker compose up -d --no-deps --build backend backend_worker python_bot
              
              sleep 5
              
@@ -130,8 +130,8 @@ jobs:
 
                echo "Rolling back to $PREV_SHA"
                git checkout --force "$PREV_SHA"
-               docker compose rm -sf backend backend_worker || true
-               docker compose up -d --build backend backend_worker
+               docker compose rm -sf backend backend_worker python_bot || true
+               docker compose up -d --build backend backend_worker python_bot
                echo "Rollback completed"
                exit 1
              fi

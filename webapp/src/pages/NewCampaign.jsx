@@ -293,7 +293,13 @@ const NewCampaign = ({ onCancel }) => {
       setMessageVariants(variants.slice(0, 5));
     } catch (error) {
       console.error("Gemini generation error:", error);
-      setAiError(error.message || "Não foi possível gerar versões com Gemini.");
+      const rawMessage = String(error?.message || "");
+      const hasTechnicalHint = /gemini|google_api_key|api_key|backend\/.env|env/i.test(rawMessage);
+      setAiError(
+        hasTechnicalHint
+          ? "Assistente de IA indisponível no momento. Tente novamente em instantes."
+          : "Não foi possível gerar versões agora. Tente novamente em instantes.",
+      );
     } finally {
       setIsGeneratingVariants(false);
     }

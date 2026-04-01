@@ -9,7 +9,35 @@ try {
   logSecurityEvent = () => {}; // Fallback if not available
 }
 const authFailureThrottle = new Map();
+
+function isInternalBotAuthNoise({ reason = '', ip = '', agentId = '', endpoint = '' }) {
+  const safeReason = String(reason || '').trim().toLowerCase();
+  const safeAgent = String(agentId || '').trim().toLowerCase();
+  const safeIp = String(ip || '').trim().toLowerCase();
+  const safeEndpoint = String(endpoint || '').trim().toLowerCase();
+  const isInternalIp =
+    safeIp.startsWith('::ffff:172.18.') ||
+    safeIp.startsWith('172.18.') ||
+    safeIp === '::1' ||
+    safeIp === '127.0.0.1';
+  const isBotAgent = safeAgent === 'bot';
+  const isInternalPollingEndpoint =
+    safeEndpoint.includes('/api/messages/next') ||
+    safeEndpoint.includes('/api/bot/status') ||
+    safeEndpoint.includes('/api/bot/live-activity') ||
+    safeEndpoint.includes('/api/bot/commands/next');
+  return (
+    safeReason === 'invalid_token' &&
+    isBotAgent &&
+    isInternalIp &&
+    isInternalPollingEndpoint
+  );
+}
+
 function shouldLogAuthFailure({ reason = '', ip = '', agentId = '', endpoint = '', userAgent = '' }) {
+  if (isInternalBotAuthNoise({ reason, ip, agentId, endpoint })) {
+    return false;
+  }
   const key = `${reason}|${ip}|${agentId}|${endpoint}|${userAgent}`;
   const now = Date.now();
   const lastAt = Number(authFailureThrottle.get(key) || 0);
