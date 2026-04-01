@@ -6,6 +6,9 @@ on:
       - main
   workflow_dispatch:
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
 jobs:
   security-gate:
     runs-on: ubuntu-latest
@@ -39,6 +42,19 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+
+      - name: Preflight SSH reachability
+        shell: bash
+        run: |
+          set -euo pipefail
+          host='${{ secrets.DO_HOST }}'
+          port='${{ secrets.DO_PORT }}'
+          echo "Testing TCP connectivity to ${host}:${port}"
+          if ! timeout 8 bash -lc "cat < /dev/null > /dev/tcp/${host}/${port}"; then
+            echo "::error::Cannot reach ${host}:${port} from GitHub runner. Check cloud firewall/ACL, host firewall (ufw/iptables), and sshd ListenPort."
+            exit 1
+          fi
+          echo "TCP connectivity OK"
 
       - name: Deploy via SSH
         uses: appleboy/ssh-action@v1.0.0
