@@ -47,6 +47,8 @@ jobs:
           username: ${{ secrets.DO_USERNAME }}
           key: ${{ secrets.DO_SSH_KEY }}
           port: ${{ secrets.DO_PORT }}
+          timeout: 120s
+          debug: true
           script: |
              set -euo pipefail
              cd /opt/EmidiaWhats
