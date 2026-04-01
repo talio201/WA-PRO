@@ -46,7 +46,7 @@ jobs:
           host: ${{ secrets.DO_HOST }}
           username: ${{ secrets.DO_USERNAME }}
           key: ${{ secrets.DO_SSH_KEY }}
-          port: 52088
+          port: ${{ secrets.DO_PORT }}
           script: |
              set -e
              cd /opt/EmidiaWhats
