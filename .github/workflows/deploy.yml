@@ -48,12 +48,13 @@ jobs:
           key: ${{ secrets.DO_SSH_KEY }}
           port: ${{ secrets.DO_PORT }}
           script: |
-             set -e
+             set -euo pipefail
              cd /opt/EmidiaWhats
              echo "🚀 Starting safe zero-downtime deploy..."
-             
-             # Create backup tag for rollback
-             git tag "backup-$(date +%Y%m%d-%H%M%S)" || true
+
+             # Keep an always-valid rollback target before updating code.
+             PREV_SHA=$(git rev-parse HEAD)
+             echo "Previous SHA: $PREV_SHA"
              
              # Fetch and update without disruption
              git fetch origin main
@@ -86,11 +87,11 @@ jobs:
              
              # Health check new service
              echo "Verifying new service health..."
-             max_retries=30
+             max_retries=60
              retry_count=0
              success=false
              while [ $retry_count -lt $max_retries ]; do
-               if curl -f http://localhost:3000/health > /dev/null 2>&1; then
+               if curl -fsS http://localhost:3000/health > /dev/null 2>&1; then
                  echo "✓ New service is healthy - deploy successful!"
                  success=true
                  break
@@ -102,9 +103,13 @@ jobs:
              
              if [ "$success" = false ]; then
                echo "✗ New service failed health check - ROLLING BACK"
-               docker compose down
-               git checkout "$(git describe --tags --abbrev=0)"
-               docker compose up -d --build
+               echo "Health check failed. Showing backend logs before rollback:"
+               docker compose logs --tail=200 backend || true
+
+               echo "Rolling back to $PREV_SHA"
+               git checkout --force "$PREV_SHA"
+               docker compose rm -sf backend backend_worker || true
+               docker compose up -d --build backend backend_worker
                echo "Rollback completed"
                exit 1
              fi
