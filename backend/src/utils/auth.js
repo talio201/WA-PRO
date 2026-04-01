@@ -7,6 +7,9 @@ const {
   getInstallationByActivationCode,
   touchInstallation,
   getAppConfig,
+  isAdminEmail,
+  getSaasUserByEmail,
+  touchSaasUserLogin,
 } = require('../config/adminStore');
 
 function toBase64Url(value) {
@@ -62,6 +65,31 @@ function getSupabaseClient() {
 
 function getValidApiKey() {
   return String(process.env.API_SECRET_KEY || '').trim();
+}
+
+function shouldRequireStrictApproval() {
+  const raw = String(process.env.SAAS_REQUIRE_APPROVAL_STRICT || '').trim().toLowerCase();
+  return raw === '1' || raw === 'true' || raw === 'yes';
+}
+
+function buildLegacySaasUserFallback({ email = '', agentId = '' }) {
+  return {
+    email: String(email || '').trim().toLowerCase() || null,
+    agentId: String(agentId || '').trim() || null,
+    status: shouldRequireStrictApproval() ? 'pending' : 'active',
+    clientId: null,
+    activationCode: null,
+    planTerm: null,
+    expiresAt: null,
+    activatedAt: null,
+    createdAt: null,
+    updatedAt: null,
+    lastLoginAt: new Date().toISOString(),
+    metadata: {
+      source: 'legacy-auth-fallback',
+      strictApproval: shouldRequireStrictApproval(),
+    },
+  };
 }
 
 async function authenticateBearerToken(token, agentId = '') {
@@ -142,11 +170,31 @@ async function authenticateBearerToken(token, agentId = '') {
     try {
       const { data: { user } = {}, error } = await supabase.auth.getUser(safeToken);
       if (!error && user) {
-        const resolvedAgentId = String(user?.id || agentId || 'admin').trim() || 'admin';
+        const email = String(user?.email || '').trim().toLowerCase();
+        const isAdmin = Boolean(email && isAdminEmail(email));
+        const mappedSaasUser = email ? getSaasUserByEmail(email) : null;
+        const saasUser = mappedSaasUser || buildLegacySaasUserFallback({
+          email,
+          agentId: String(user?.id || agentId || '').trim(),
+        });
+
+        const resolvedAgentId = String(
+          saasUser?.agentId || user?.id || agentId || (isAdmin ? 'admin' : 'user'),
+        ).trim() || (isAdmin ? 'admin' : 'user');
+
+        if (mappedSaasUser && email) {
+          touchSaasUserLogin(email, {
+            source: 'supabase-login',
+            supabaseUserId: String(user?.id || '').trim() || null,
+          });
+        }
+
         return {
           kind: 'supabase-user',
           user,
           agentId: resolvedAgentId,
+          isAdmin,
+          saasUser,
           permissions: {
             allowGemini: true,
             allowRealtime: true,
