@@ -57,6 +57,14 @@ https://github.com/talio201/WA-PRO/settings/secrets/actions
 
 ### 3️⃣ Clique "New repository secret" e adicione CADA UM:
 
+Secrets obrigatórios:
+- `DO_HOST`
+- `DO_USERNAME`
+- `DO_SSH_KEY`
+
+Secret opcional:
+- `DO_PORT` (se nao informar, o workflow usa porta `22`)
+
 ---
 
 ### 🔑 **Secret #1: DO_HOST**
@@ -106,6 +114,14 @@ b3BlbnNzaC1rZXktdjEAAAAABG5vbmUtY25vbmXAAAAg...
 
 ---
 
+### 🔑 **Secret #4 (Opcional): DO_PORT**
+- **Name**: `DO_PORT`
+- **Value**: porta SSH customizada (ex: `52088`)
+
+Se seu servidor usa a porta padrão SSH, não precisa criar este secret.
+
+---
+
 ## ✅ Passo 3: Verificar que funcionou
 
 ```bash
@@ -130,7 +146,7 @@ git push origin main
 
 ### ❌ "SSH Connection refused"
 - Serverip/hostname errado em `DO_HOST`
-- Porta SSH não é 22 (configure em `.github/workflows/deploy.yml`)
+- Porta SSH não é 22 (crie `DO_PORT` com a porta correta)
 - Chave pública não foi adicionada ao servidor corretamente
 
 ### ❌ "Permission denied (publickey)"

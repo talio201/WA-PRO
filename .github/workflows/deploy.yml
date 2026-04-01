@@ -48,7 +48,11 @@ jobs:
         run: |
           set -euo pipefail
           host='${{ secrets.DO_HOST }}'
-          port='${{ secrets.DO_PORT }}'
+          port='${{ secrets.DO_PORT || 22 }}'
+          if [ -z "$host" ]; then
+            echo "::error::Missing required secret DO_HOST"
+            exit 1
+          fi
           echo "Testing TCP connectivity to ${host}:${port}"
           if ! timeout 8 bash -lc "cat < /dev/null > /dev/tcp/${host}/${port}"; then
             echo "::error::Cannot reach ${host}:${port} from GitHub runner. Check cloud firewall/ACL, host firewall (ufw/iptables), and sshd ListenPort."
@@ -62,7 +66,7 @@ jobs:
           host: ${{ secrets.DO_HOST }}
           username: ${{ secrets.DO_USERNAME }}
           key: ${{ secrets.DO_SSH_KEY }}
-          port: ${{ secrets.DO_PORT }}
+          port: ${{ secrets.DO_PORT || 22 }}
           timeout: 120s
           debug: true
           script: |

@@ -101,6 +101,23 @@ function sanitizeMessageVariants(input, baseMessageTemplate) {
   }
   return unique;
 }
+
+function appendAudit(message, action, details, meta = {}) {
+  if (!Array.isArray(message.audit)) {
+    message.audit = [];
+  }
+  message.audit.push({
+    at: new Date(),
+    action,
+    details,
+    meta,
+  });
+}
+
+async function findOwnedCampaign(campaignId, ownerId) {
+  const campaigns = await Campaign.find({ _id: campaignId, agentId: ownerId });
+  return Array.isArray(campaigns) && campaigns.length > 0 ? campaigns[0] : null;
+}
 exports.createCampaign = async (req, res) => {
   try {
     const ownerId = resolveOwnerId(req);
@@ -302,6 +319,192 @@ exports.deleteCampaign = async (req, res) => {
       name: campaign.name || "",
     });
     res.json({ msg: "Campaign removed" });
+  } catch (err) {
+    console.error(err.message);
+    const errorResponse = buildServerErrorResponse(err);
+    res.status(errorResponse.statusCode).json(errorResponse.body);
+  }
+};
+
+exports.updateCampaign = async (req, res) => {
+  try {
+    const ownerId = resolveOwnerId(req);
+    const campaign = await findOwnedCampaign(req.params.id, ownerId);
+    if (!campaign) {
+      return res.status(404).json({ msg: "Campaign not found or unauthorized" });
+    }
+
+    const payload = req.body || {};
+    const nextName =
+      payload.name !== undefined ? String(payload.name || "").trim() : campaign.name;
+    const nextTemplate =
+      payload.messageTemplate !== undefined
+        ? String(payload.messageTemplate || "")
+        : campaign.messageTemplate;
+    const providedVariants = payload.messageVariants !== undefined
+      ? payload.messageVariants
+      : campaign.messageVariants;
+    const nextVariants = sanitizeMessageVariants(providedVariants, nextTemplate);
+    const nextTurboMode =
+      payload.turboMode !== undefined
+        ? Boolean(payload.turboMode)
+        : Boolean(campaign.turboMode);
+
+    const antiBanInput = {
+      ...(campaign.antiBan || {}),
+      ...(payload.antiBan || {}),
+      deliveryWindow:
+        payload.deliveryWindow !== undefined
+          ? payload.deliveryWindow
+          : payload.antiBan?.deliveryWindow !== undefined
+            ? payload.antiBan.deliveryWindow
+            : campaign.antiBan?.deliveryWindow || {},
+      resendPolicy:
+        payload.resendPolicy !== undefined
+          ? payload.resendPolicy
+          : payload.antiBan?.resendPolicy !== undefined
+            ? payload.antiBan.resendPolicy
+            : campaign.antiBan?.resendPolicy || {},
+    };
+
+    const updatePayload = {
+      name: nextName,
+      messageTemplate: nextTemplate,
+      messageVariants: nextVariants,
+      turboMode: nextTurboMode && nextVariants.length > 1,
+      antiBan: sanitizeAntiBanSettings(antiBanInput),
+      updatedAt: new Date(),
+    };
+
+    const updatedCampaign = await Campaign.findByIdAndUpdate(
+      campaign._id,
+      updatePayload,
+    );
+
+    emitRealtimeEvent("campaign.updated", {
+      campaignId: campaign._id,
+      campaign: updatedCampaign,
+      updatedAt: updatePayload.updatedAt,
+    });
+
+    res.json(updatedCampaign || { ...campaign, ...updatePayload });
+  } catch (err) {
+    console.error(err.message);
+    const errorResponse = buildServerErrorResponse(err);
+    res.status(errorResponse.statusCode).json(errorResponse.body);
+  }
+};
+
+exports.dispatchNextCampaignContact = async (req, res) => {
+  try {
+    const ownerId = resolveOwnerId(req);
+    const campaign = await findOwnedCampaign(req.params.id, ownerId);
+    if (!campaign) {
+      return res.status(404).json({ msg: "Campaign not found or unauthorized" });
+    }
+
+    const pending = await Message.find({
+      campaign: campaign._id,
+      status: "pending",
+    });
+    const queue = (Array.isArray(pending) ? pending : []).sort((a, b) => {
+      const aDate = new Date(a.updatedAt || a.createdAt || 0).getTime();
+      const bDate = new Date(b.updatedAt || b.createdAt || 0).getTime();
+      return aDate - bDate;
+    });
+
+    const next = queue[0];
+    if (!next) {
+      return res.status(404).json({ msg: "No pending contacts in this campaign." });
+    }
+
+    const message = await Message.findById(next._id);
+    if (!message) {
+      return res.status(404).json({ msg: "Message not found." });
+    }
+
+    message.attemptCount = -1;
+    message.updatedAt = new Date();
+    appendAudit(
+      message,
+      "manual_priority_dispatch",
+      "Message promoted for immediate dispatch",
+      { campaignId: campaign._id },
+    );
+    await message.save();
+
+    emitRealtimeEvent("campaign.dispatch.next", {
+      campaignId: campaign._id,
+      messageId: message._id,
+      phone: message.phone || "",
+      updatedAt: message.updatedAt,
+    });
+
+    res.json({
+      msg: "Next contact dispatched successfully.",
+      campaignId: campaign._id,
+      messageId: message._id,
+    });
+  } catch (err) {
+    console.error(err.message);
+    const errorResponse = buildServerErrorResponse(err);
+    res.status(errorResponse.statusCode).json(errorResponse.body);
+  }
+};
+
+exports.retryCampaignFailures = async (req, res) => {
+  try {
+    const ownerId = resolveOwnerId(req);
+    const campaign = await findOwnedCampaign(req.params.id, ownerId);
+    if (!campaign) {
+      return res.status(404).json({ msg: "Campaign not found or unauthorized" });
+    }
+
+    const failures = await Message.find({
+      campaign: campaign._id,
+      status: "failed",
+    });
+    const list = Array.isArray(failures) ? failures : [];
+
+    let retriedCount = 0;
+    for (const item of list) {
+      if (!item?._id) continue;
+      const message = await Message.findById(item._id);
+      if (!message || message.status !== "failed") continue;
+      const previousStatus = message.status;
+      message.status = "pending";
+      message.error = null;
+      message.lastError = null;
+      message.sentAt = null;
+      message.updatedAt = new Date();
+      appendAudit(message, "retried_bulk", "Message moved back to queue", {
+        previousStatus,
+        campaignId: campaign._id,
+      });
+      await message.save();
+      retriedCount += 1;
+    }
+
+    const currentStats = campaign.stats || { total: 0, sent: 0, failed: 0 };
+    const nextFailed = Math.max(0, Number(currentStats.failed || 0) - retriedCount);
+    const updatedCampaign = await Campaign.findByIdAndUpdate(campaign._id, {
+      stats: {
+        ...currentStats,
+        failed: nextFailed,
+      },
+      updatedAt: new Date(),
+    });
+
+    emitRealtimeEvent("campaign.failures.retried", {
+      campaignId: campaign._id,
+      retriedCount,
+      stats: updatedCampaign?.stats || currentStats,
+    });
+
+    res.json({
+      campaignId: campaign._id,
+      retriedCount,
+    });
   } catch (err) {
     console.error(err.message);
     const errorResponse = buildServerErrorResponse(err);
