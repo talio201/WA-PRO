@@ -4,8 +4,11 @@ param(
 
 $Tag = 'v2.0'
 $CommitMsg = "chore: release $Tag - deploy from local"
-$RemoteHost = 'root@144.126.214.121'
-$RemotePort = 52088
+$RemoteHost = $env:REMOTE_USER_HOST
+if (-not $RemoteHost) { $RemoteHost = 'root@<HOST>' }
+
+$RemotePort = $env:REMOTE_PORT
+if (-not $RemotePort) { $RemotePort = '<PORT>' }
 $RemotePath = '/var/www/emidiawhats'
 
 Write-Host '>>> Committing local changes'

@@ -325,7 +325,6 @@ exports.deleteCampaign = async (req, res) => {
     res.status(errorResponse.statusCode).json(errorResponse.body);
   }
 };
-
 exports.updateCampaign = async (req, res) => {
   try {
     const ownerId = resolveOwnerId(req);
@@ -350,6 +349,14 @@ exports.updateCampaign = async (req, res) => {
         ? Boolean(payload.turboMode)
         : Boolean(campaign.turboMode);
 
+    const nextStatus = payload.status !== undefined
+      ? String(payload.status || '').trim().toLowerCase()
+      : campaign.status;
+    const allowedStatuses = ["draft", "running", "paused", "completed", "archived"];
+    if (payload.status !== undefined && !allowedStatuses.includes(nextStatus)) {
+      return res.status(400).json({ msg: `Invalid status. Allowed: ${allowedStatuses.join(", ")}` });
+    }
+
     const antiBanInput = {
       ...(campaign.antiBan || {}),
       ...(payload.antiBan || {}),
@@ -373,6 +380,7 @@ exports.updateCampaign = async (req, res) => {
       messageVariants: nextVariants,
       turboMode: nextTurboMode && nextVariants.length > 1,
       antiBan: sanitizeAntiBanSettings(antiBanInput),
+      status: nextStatus,
       updatedAt: new Date(),
     };
 
@@ -394,7 +402,6 @@ exports.updateCampaign = async (req, res) => {
     res.status(errorResponse.statusCode).json(errorResponse.body);
   }
 };
-
 exports.dispatchNextCampaignContact = async (req, res) => {
   try {
     const ownerId = resolveOwnerId(req);
@@ -451,7 +458,6 @@ exports.dispatchNextCampaignContact = async (req, res) => {
     res.status(errorResponse.statusCode).json(errorResponse.body);
   }
 };
-
 exports.retryCampaignFailures = async (req, res) => {
   try {
     const ownerId = resolveOwnerId(req);

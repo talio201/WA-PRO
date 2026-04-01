@@ -179,6 +179,14 @@ function getSupabaseClient() {
   const anonKey = String(
     process.env.SUPABASE_ANON_KEY || supabaseConfig.anonKey || "",
   ).trim();
+  const requireServiceRole = String(process.env.SUPABASE_REQUIRE_SERVICE_ROLE || "")
+    .trim()
+    .toLowerCase() === "true";
+  if (requireServiceRole && !serviceRoleKey) {
+    throw new Error(
+      "SUPABASE_SERVICE_ROLE_KEY is required when SUPABASE_REQUIRE_SERVICE_ROLE=true.",
+    );
+  }
   const key = serviceRoleKey || anonKey;
   if (!url || !key) return null;
   if (!serviceRoleKey && anonKey && !hasWarnedSupabaseAnonOnly) {
@@ -209,6 +217,7 @@ function mapFieldToDb(collection, field) {
     const map = {
       _id: "id",
       agentId: "agent_id",
+      tenantId: "tenant_id",
       messageTemplate: "message_template",
       messageVariants: "message_variants",
       turboMode: "turbo_mode",
@@ -222,6 +231,7 @@ function mapFieldToDb(collection, field) {
     const map = {
       _id: "id",
       agentId: "agent_id",
+      tenantId: "tenant_id",
       campaign: "campaign_id",
       phoneOriginal: "phone_original",
       searchTerms: "search_terms",
@@ -238,6 +248,7 @@ function mapFieldToDb(collection, field) {
   if (collection === "conversation_assignments") {
     const map = {
       _id: "id",
+      tenantId: "tenant_id",
       campaignId: "campaign_id",
       assignedTo: "assigned_to",
       assignedBy: "assigned_by",
@@ -252,6 +263,7 @@ function mapFieldToDb(collection, field) {
     const map = {
       _id: "id",
       agentId: "agent_id",
+      tenantId: "tenant_id",
       phone: "phone",
       name: "name",
       createdAt: "created_at",
@@ -266,6 +278,7 @@ function mapCampaignFromDb(row) {
   return {
     _id: row.id,
     agentId: row.agent_id || "",
+    tenantId: row.tenant_id || row.agent_id || "",
     name: row.name || "",
     messageTemplate: row.message_template || "",
     messageVariants: Array.isArray(row.message_variants)
@@ -285,6 +298,7 @@ function mapMessageFromDb(row) {
   return {
     _id: row.id,
     agentId: row.agent_id || "",
+    tenantId: row.tenant_id || row.agent_id || "",
     campaign: row.campaign_id || null,
     phone: row.phone || "",
     phoneOriginal: row.phone_original || "",
@@ -311,6 +325,7 @@ function mapFromDb(collection, row) {
     if (!row) return null;
     return {
       _id: row.id,
+      tenantId: row.tenant_id || "",
       phone: row.phone || "",
       campaignId: row.campaign_id || null,
       assignedTo: row.assigned_to || "",
@@ -328,6 +343,7 @@ function mapFromDb(collection, row) {
     return {
       _id: row.id,
       agentId: row.agent_id || "",
+      tenantId: row.tenant_id || row.agent_id || "",
       phone: row.phone || "",
       name: row.name || "",
       createdAt: row.created_at || null,
@@ -340,6 +356,7 @@ function mapCampaignToDb(item) {
   const payload = {
     id: item._id,
     agent_id: item.agentId || "",
+    tenant_id: item.tenantId || item.agentId || "",
     name: item.name,
     message_template: item.messageTemplate,
     message_variants: Array.isArray(item.messageVariants)
@@ -359,6 +376,7 @@ function mapMessageToDb(item) {
   const payload = {
     id: item._id,
     agent_id: item.agentId || "",
+    tenant_id: item.tenantId || item.agentId || "",
     campaign_id: item.campaign || null,
     phone: item.phone,
     phone_original: item.phoneOriginal || "",
@@ -385,6 +403,7 @@ function mapToDb(collection, item) {
   if (collection === "conversation_assignments") {
     const payload = {
       id: item._id,
+      tenant_id: item.tenantId || item.agentId || item.ownerAgentId || "",
       phone: item.phone || "",
       campaign_id: item.campaignId || null,
       assigned_to: item.assignedTo || "",
@@ -402,6 +421,7 @@ function mapToDb(collection, item) {
     const payload = {
       id: item._id,
       agent_id: item.agentId || "",
+      tenant_id: item.tenantId || item.agentId || "",
       phone: item.phone || "",
       name: item.name || "",
       created_at: toIsoDate(item.createdAt),

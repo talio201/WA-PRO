@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # Usage: ./deploy/remote_deploy.sh <user> <host> <port> [remote_dir]
-# Example: ./deploy/remote_deploy.sh root 144.126.214.121 52088 /opt/emidiawhats
+# Example: ./deploy/remote_deploy.sh root <HOST> <PORT> /opt/emidiawhats
 
 if [ "$#" -lt 3 ]; then
   echo "Usage: $0 <user> <host> <port> [remote_dir]" >&2

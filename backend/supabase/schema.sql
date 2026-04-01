@@ -16,6 +16,7 @@ $$;
 create table if not exists public.campaigns (
   id uuid primary key default gen_random_uuid(),
   agent_id text not null,
+  tenant_id text,
   name text not null,
   message_template text,
   message_variants jsonb not null default '[]'::jsonb,
@@ -37,6 +38,7 @@ for each row execute function public.set_updated_at();
 create table if not exists public.messages (
   id uuid primary key default gen_random_uuid(),
   agent_id text not null,
+  tenant_id text,
   campaign_id uuid not null references public.campaigns(id) on delete cascade,
   phone text not null,
   phone_original text,
@@ -66,11 +68,28 @@ for each row execute function public.set_updated_at();
 alter table public.campaigns
   add column if not exists agent_id text;
 
+alter table public.campaigns
+  add column if not exists tenant_id text;
+
 alter table public.messages
   add column if not exists agent_id text;
 
+alter table public.messages
+  add column if not exists tenant_id text;
+
+alter table public.conversation_assignments
+  add column if not exists tenant_id text;
+
+alter table public.contacts
+  add column if not exists tenant_id text;
+
 update public.campaigns set agent_id = coalesce(agent_id, '') where agent_id is null;
 update public.messages set agent_id = coalesce(agent_id, '') where agent_id is null;
+
+update public.campaigns set tenant_id = coalesce(tenant_id, agent_id) where tenant_id is null;
+update public.messages set tenant_id = coalesce(tenant_id, agent_id) where tenant_id is null;
+update public.conversation_assignments set tenant_id = coalesce(tenant_id, '') where tenant_id is null;
+update public.contacts set tenant_id = coalesce(tenant_id, agent_id) where tenant_id is null;
 
 alter table public.campaigns
   alter column agent_id set not null;
@@ -80,6 +99,7 @@ alter table public.messages
 
 create table if not exists public.conversation_assignments (
   id uuid primary key default gen_random_uuid(),
+  tenant_id text,
   phone text not null unique,
   campaign_id uuid references public.campaigns(id) on delete set null,
   assigned_to text not null,
@@ -101,6 +121,7 @@ for each row execute function public.set_updated_at();
 create table if not exists public.contacts (
   id uuid primary key default gen_random_uuid(),
   agent_id text not null,
+  tenant_id text,
   name text,
   phone text not null,
   created_at timestamptz not null default timezone('utc', now()),
@@ -114,15 +135,19 @@ for each row execute function public.set_updated_at();
 
 create index if not exists idx_campaigns_status on public.campaigns (status);
 create index if not exists idx_campaigns_agent_id on public.campaigns (agent_id);
+create index if not exists idx_campaigns_tenant_id on public.campaigns (tenant_id);
 create index if not exists idx_campaigns_created_at_desc on public.campaigns (created_at desc);
 create index if not exists idx_messages_campaign_status on public.messages (campaign_id, status);
 create index if not exists idx_messages_agent_id on public.messages (agent_id);
+create index if not exists idx_messages_tenant_id on public.messages (tenant_id);
 create index if not exists idx_messages_status on public.messages (status);
 create index if not exists idx_messages_phone on public.messages (phone);
 create index if not exists idx_messages_updated_at_desc on public.messages (updated_at desc);
 create index if not exists idx_conversation_assignments_status on public.conversation_assignments (status);
 create index if not exists idx_conversation_assignments_phone on public.conversation_assignments (phone);
+create index if not exists idx_conversation_assignments_tenant_id on public.conversation_assignments (tenant_id);
 create index if not exists idx_contacts_agent_id on public.contacts (agent_id);
+create index if not exists idx_contacts_tenant_id on public.contacts (tenant_id);
 create index if not exists idx_contacts_phone on public.contacts (phone);
 
 alter table public.contacts

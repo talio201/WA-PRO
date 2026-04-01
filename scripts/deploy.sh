@@ -9,8 +9,8 @@ TAG="v2.0"
 COMMIT_MSG="chore: release ${TAG} - deploy from local"
 
 # Remote server settings - update if needed
-REMOTE_USER_HOST="root@144.126.214.121"
-REMOTE_PORT=52088
+REMOTE_USER_HOST="${REMOTE_USER_HOST:-root@<HOST>}"
+REMOTE_PORT="${REMOTE_PORT:-<PORT>}"
 REMOTE_PATH="/var/www/emidiawhats"
 
 echo ">>> Committing local changes"

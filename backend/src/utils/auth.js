@@ -172,23 +172,22 @@ async function authenticateBearerToken(token, agentId = '') {
       if (!error && user) {
         const email = String(user?.email || '').trim().toLowerCase();
         const isAdmin = Boolean(email && isAdminEmail(email));
-        const mappedSaasUser = email ? getSaasUserByEmail(email) : null;
+        const touchedUser = email
+          ? touchSaasUserLogin(email, {
+              userId: String(user?.id || '').trim() || null,
+              source: 'supabase-login',
+              supabaseUserId: String(user?.id || '').trim() || null,
+            })
+          : null;
+        const mappedSaasUser = touchedUser || (email ? getSaasUserByEmail(email) : null);
         const saasUser = mappedSaasUser || buildLegacySaasUserFallback({
           email,
           agentId: String(user?.id || agentId || '').trim(),
         });
 
         const resolvedAgentId = String(
-          saasUser?.agentId || user?.id || agentId || (isAdmin ? 'admin' : 'user'),
+          saasUser?.clientId || saasUser?.agentId || user?.id || agentId || (isAdmin ? 'admin' : 'user'),
         ).trim() || (isAdmin ? 'admin' : 'user');
-
-        if (mappedSaasUser && email) {
-          touchSaasUserLogin(email, {
-            source: 'supabase-login',
-            supabaseUserId: String(user?.id || '').trim() || null,
-          });
-        }
-
         return {
           kind: 'supabase-user',
           user,
