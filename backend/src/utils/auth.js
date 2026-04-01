@@ -7,6 +7,8 @@ const {
   getInstallationByActivationCode,
   touchInstallation,
   getAppConfig,
+  getSaasUserByEmail,
+  touchSaasUserLogin,
 } = require('../config/adminStore');
 
 function toBase64Url(value) {
@@ -142,11 +144,14 @@ async function authenticateBearerToken(token, agentId = '') {
     try {
       const { data: { user } = {}, error } = await supabase.auth.getUser(safeToken);
       if (!error && user) {
-        const resolvedAgentId = String(user?.id || agentId || 'admin').trim() || 'admin';
+        const touchedUser = touchSaasUserLogin(user?.email || '', { userId: user?.id || null });
+        const saasUser = touchedUser || getSaasUserByEmail(user?.email || '');
+        const resolvedAgentId = String(saasUser?.clientId || user?.id || agentId || 'admin').trim() || 'admin';
         return {
           kind: 'supabase-user',
           user,
           agentId: resolvedAgentId,
+          saasUser,
           permissions: {
             allowGemini: true,
             allowRealtime: true,

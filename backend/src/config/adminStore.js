@@ -340,6 +340,10 @@ function touchSaasUserLogin(email = '', metadata = {}) {
   const store = readStore();
   const entry = (store.saasUsers || []).find((item) => String(item.email || '').trim().toLowerCase() === safeEmail);
   if (!entry) return null;
+  if (!entry.clientId) {
+    const userId = String(metadata.userId || '').trim();
+    entry.clientId = userId || generateClientId();
+  }
   entry.lastLoginAt = new Date().toISOString();
   entry.updatedAt = entry.lastLoginAt;
   entry.metadata = {
@@ -357,6 +361,9 @@ function writeStore(store) {
 }
 
 function generateClientId() {
+  if (typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
   return `bot_${Date.now().toString(36)}_${crypto.randomBytes(3).toString('hex')}`;
 }
 

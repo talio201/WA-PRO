@@ -68,9 +68,7 @@ export function AuthProvider({ children }) {
 function deriveAgentIdFromUser(user) {
   const metadataAgentId = String(user?.user_metadata?.agentId || '').trim();
   if (metadataAgentId) return metadataAgentId;
-  const userIdPrefix = String(user?.id || '').replace(/[^a-z0-9_-]/gi, '').slice(0, 12);
-  if (userIdPrefix) return `user_${userIdPrefix}`;
-  return '';
+  return String(user?.id || '').trim();
 }
 
 async function resolveAndSyncAgentId(session) {

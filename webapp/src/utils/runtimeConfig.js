@@ -47,9 +47,8 @@ export async function getAuthorizedHeaders(extraHeaders = {}, agentIdOverride = 
   const localAgentId = String(localStorage.getItem('emidia_agent_id') || '').trim();
   const sessionUser = data?.session?.user;
   const sessionAgentId = String(sessionUser?.user_metadata?.agentId || '').trim();
-  const userIdPrefix = String(sessionUser?.id || '').replace(/[^a-z0-9_-]/gi, '').slice(0, 12);
-  const fallbackAgentId = userIdPrefix ? `user_${userIdPrefix}` : '';
-  const agentId = (extraHeaders && extraHeaders['x-agent-id']) || agentIdOverride || localAgentId || sessionAgentId || fallbackAgentId;
+  const userAgentId = String(sessionUser?.id || '').trim();
+  const agentId = (extraHeaders && extraHeaders['x-agent-id']) || agentIdOverride || localAgentId || sessionAgentId || userAgentId;
   const headers = { ...extraHeaders };
   if (token) headers['Authorization'] = `Bearer ${token}`;
   if (agentId) headers['x-agent-id'] = agentId;

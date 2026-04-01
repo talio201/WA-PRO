@@ -28,6 +28,9 @@ API_HEADERS = {
 }
 WHATSAPP_URL = "https://web.whatsapp.com"
 MAX_WAIT_TIME = 120000  # 120 segundos para aguardar página carregar
+IDLE_POLL_BASE = int(os.getenv("BOT_IDLE_POLL_BASE", "5"))
+IDLE_POLL_MAX = int(os.getenv("BOT_IDLE_POLL_MAX", "20"))
+IDLE_INBOUND_INTERVAL = int(os.getenv("BOT_IDLE_INBOUND_INTERVAL", "30"))
 
 if not API_SECRET_KEY:
     logging.critical("API_SECRET_KEY/BOT_API_KEY não definida. O bot não conseguirá autenticar na API.")
@@ -457,6 +460,17 @@ def main():
         sessions_root = os.path.join(os.getcwd(), "whatsapp_session", "sessions")
         os.makedirs(sessions_root, exist_ok=True)
         user_data_dir = os.path.join(sessions_root, session_folder)
+        session_exists = os.path.isdir(user_data_dir) and bool(os.listdir(user_data_dir))
+        try:
+            status_hint = "RESTORING_SESSION" if session_exists else "INITIALIZING"
+            requests.post(
+                f"{API_BASE_URL}/bot/status",
+                json={"status": status_hint, "qrCodeBase64": None, "agentId": BOT_AGENT_ID},
+                headers=API_HEADERS,
+                timeout=5,
+            )
+        except Exception:
+            pass
         browser = p.chromium.launch_persistent_context(
             user_data_dir=user_data_dir,
             headless=True, 
@@ -496,6 +510,7 @@ def main():
         logging.info("Aguardando carregamento da página e verificando estado de login...")
         
         import base64
+        login_fast_window_ends = time.time() + (20 if session_exists else 10)
         while True:
             try:
                 # logging.info("Checando estado do WhatsApp...") # Comentado para não poluir demais
@@ -520,7 +535,11 @@ def main():
                     time.sleep(3)
                 else:
                     # logging.info("Nenhum estado detectado (nem logado, nem QR). Aguardando...")
-                    time.sleep(2)
+                    now_ts = time.time()
+                    if now_ts < login_fast_window_ends:
+                        time.sleep(1)
+                    else:
+                        time.sleep(2)
             except Exception as e:
                 logging.error(f"Erro no laco de verificacao de QR Code: {e}")
                 time.sleep(5)
@@ -533,6 +552,8 @@ def main():
         skip_delay_once = False
         messages_sent_counter = 0
 
+        idle_sleep = max(1, IDLE_POLL_BASE)
+        last_inbound_check = 0
         while True:
             try:
                 # Se atingiu o limite, recarrega para liberar o DOM (Gargalo de RAM)
@@ -574,9 +595,14 @@ def main():
                 job = data.get("job")
                 is_priority = data.get("isPriority", False)
                 if not job:
-                    check_inbound_messages(page)
-                    time.sleep(5)
+                    now_idle = time.time()
+                    if now_idle - last_inbound_check >= IDLE_INBOUND_INTERVAL:
+                        check_inbound_messages(page)
+                        last_inbound_check = now_idle
+                    time.sleep(idle_sleep)
+                    idle_sleep = min(IDLE_POLL_MAX, idle_sleep + 2)
                     continue
+                idle_sleep = max(1, IDLE_POLL_BASE)
                 job_id = job.get("_id")
                 phone = job.get("phone")
                 message_text = job.get("processedMessage", "Mensagem vazia")

@@ -178,6 +178,9 @@ function pickLatestAssignment(assignments = []) {
 }
 function resolveAgentIdFromRequest(req) {
   const fromAuth = String(req.user?.id || req.agentId || "").trim();
+  if (req.user && !req.isAdmin) {
+    return fromAuth;
+  }
   const fromBody = String(req.body?.agentId || "").trim();
   const fromQuery = String(req.query?.agentId || "").trim();
   const fromHeader = String(req.headers?.["x-agent-id"] || "").trim();
