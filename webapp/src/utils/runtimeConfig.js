@@ -48,7 +48,7 @@ export async function getAuthorizedHeaders(extraHeaders = {}, agentIdOverride = 
   const sessionUser = data?.session?.user;
   const sessionAgentId = String(sessionUser?.user_metadata?.agentId || '').trim();
   const userAgentId = String(sessionUser?.id || '').trim();
-  const agentId = (extraHeaders && extraHeaders['x-agent-id']) || agentIdOverride || localAgentId || sessionAgentId || userAgentId;
+  const agentId = (extraHeaders && extraHeaders['x-agent-id']) || agentIdOverride || sessionAgentId || userAgentId || localAgentId;
   const headers = { ...extraHeaders };
   if (token) headers['Authorization'] = `Bearer ${token}`;
   if (agentId) headers['x-agent-id'] = agentId;

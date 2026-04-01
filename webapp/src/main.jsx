@@ -18,18 +18,23 @@ function Root() {
       }
       if (!cancelled) setAccount((prev) => ({ ...prev, loading: true }));
       try {
-        const response = await fetch('/api/account/status', {
-          headers: {
-            Authorization: `Bearer ${session.access_token}`,
-            'x-agent-id': session?.user?.user_metadata?.agentId || 'webapp-user',
-          },
-        });
+        const localAgentId = String(localStorage.getItem('emidia_agent_id') || '').trim();
+        const sessionAgentId = String(session?.user?.user_metadata?.agentId || '').trim();
+        const userAgentId = String(session?.user?.id || '').trim();
+        const headers = {
+          Authorization: `Bearer ${session.access_token}`,
+        };
+        const agentId = sessionAgentId || userAgentId || localAgentId;
+        if (agentId) headers['x-agent-id'] = agentId;
+        const response = await fetch('/api/account/status', { headers });
         const payload = await response.json().catch(() => ({}));
-        console.log('[DEBUG] /api/account/status response:', response.status, 'payload:', payload);          if (response.status === 401) {
-            setAccount({ loading: false, status: 'expired', message: 'Sessão expirada. Refaça o login.' });
-            if (supabase) await supabase.auth.signOut();
-            return;
-          }        const status = String(payload?.account?.status || 'pending').toLowerCase();
+        console.log('[DEBUG] /api/account/status response:', response.status, 'payload:', payload);
+        if (response.status === 401) {
+          setAccount({ loading: false, status: 'expired', message: 'Sessão expirada. Refaça o login.' });
+          if (supabase) await supabase.auth.signOut();
+          return;
+        }
+        const status = String(payload?.account?.status || 'pending').toLowerCase();
         if (!cancelled) {
           setAccount({
             loading: false,
