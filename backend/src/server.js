@@ -189,6 +189,15 @@ app.get("/api/bot/status", requireAuth, (req, res) => {
       });
     }
   }
+  if (req.user?.email) {
+    try {
+      const { markSaasUserBotDesired } = require('./config/adminStore');
+      markSaasUserBotDesired(req.user.email, {
+        requestedBy: req.user.email,
+        source: 'bot-status-poll',
+      });
+    } catch (_error) {}
+  }
   const requestedAgentId = req.headers["x-agent-id"] || req.query.agentId;
   const targetAgentId = (req.user && !req.isAdmin && requestedAgentId !== "bot")
     ? req.agentId

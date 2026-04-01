@@ -233,6 +233,22 @@ function listSaasUsers(filters = {}) {
   return items.filter((item) => item.status === statusFilter);
 }
 
+function isSaasUserActive(entry = {}) {
+  const status = normalizeSaasUserStatus(entry.status);
+  if (status !== 'active') return false;
+  if (entry.expiresAt) {
+    const expiresAtMs = new Date(entry.expiresAt).getTime();
+    if (Number.isFinite(expiresAtMs) && expiresAtMs <= Date.now()) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function listActiveSaasUsers() {
+  return listSaasUsers().filter(isSaasUserActive);
+}
+
 function upsertSaasUser(payload = {}) {
   const store = readStore();
   const email = String(payload.email || '').trim().toLowerCase();
@@ -350,6 +366,24 @@ function touchSaasUserLogin(email = '', metadata = {}) {
     ...(entry.metadata || {}),
     ...(metadata || {}),
   };
+  writeStore(store);
+  return normalizeSaasUser(entry);
+}
+
+function markSaasUserBotDesired(email = '', metadata = {}) {
+  const safeEmail = String(email || '').trim().toLowerCase();
+  if (!safeEmail) return null;
+  const store = readStore();
+  const entry = (store.saasUsers || []).find((item) => String(item.email || '').trim().toLowerCase() === safeEmail);
+  if (!entry) return null;
+  const now = new Date().toISOString();
+  entry.metadata = {
+    ...(entry.metadata || {}),
+    ...(metadata || {}),
+    botDesired: true,
+    botRequestedAt: now,
+  };
+  entry.updatedAt = now;
   writeStore(store);
   return normalizeSaasUser(entry);
 }
@@ -824,9 +858,11 @@ module.exports = { readStore,
   addAdminUser,
   removeAdminUser,
   listSaasUsers,
+  listActiveSaasUsers,
   getSaasUserByEmail,
   upsertSaasUser,
   deleteSaasUser,
   touchSaasUserLogin,
+  markSaasUserBotDesired,
   canStartDemoForIp,
 };

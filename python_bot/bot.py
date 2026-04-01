@@ -31,6 +31,7 @@ MAX_WAIT_TIME = 120000  # 120 segundos para aguardar página carregar
 IDLE_POLL_BASE = int(os.getenv("BOT_IDLE_POLL_BASE", "5"))
 IDLE_POLL_MAX = int(os.getenv("BOT_IDLE_POLL_MAX", "20"))
 IDLE_INBOUND_INTERVAL = int(os.getenv("BOT_IDLE_INBOUND_INTERVAL", "30"))
+IDLE_SHUTDOWN_MIN = int(os.getenv("BOT_IDLE_SHUTDOWN_MIN", "15"))
 
 if not API_SECRET_KEY:
     logging.critical("API_SECRET_KEY/BOT_API_KEY não definida. O bot não conseguirá autenticar na API.")
@@ -510,6 +511,8 @@ def main():
         logging.info("Aguardando carregamento da página e verificando estado de login...")
         
         import base64
+        logged_in = False
+        last_job_at = time.time()
         login_fast_window_ends = time.time() + (20 if session_exists else 10)
         while True:
             try:
@@ -518,6 +521,8 @@ def main():
                 if pane.is_visible():
                     logging.info("WhatsApp logado com sucesso. Status atualizado.")
                     requests.post(f"{API_BASE_URL}/bot/status", json={"status": "LOGGED_IN", "qrCodeBase64": None, "agentId": BOT_AGENT_ID}, headers=API_HEADERS)
+                    logged_in = True
+                    last_job_at = time.time()
                     break
                 
                 qr_canvas = page.locator('canvas')
@@ -601,9 +606,23 @@ def main():
                         last_inbound_check = now_idle
                     time.sleep(idle_sleep)
                     idle_sleep = min(IDLE_POLL_MAX, idle_sleep + 2)
+                    if logged_in and IDLE_SHUTDOWN_MIN > 0:
+                        if now_idle - last_job_at >= (IDLE_SHUTDOWN_MIN * 60):
+                            try:
+                                requests.post(
+                                    f"{API_BASE_URL}/bot/status",
+                                    json={"status": "IDLE_SHUTDOWN", "qrCodeBase64": None, "agentId": BOT_AGENT_ID},
+                                    headers=API_HEADERS,
+                                    timeout=5,
+                                )
+                            except Exception:
+                                pass
+                            logging.info("Encerrando bot por inatividade para economizar recursos.")
+                            raise SystemExit(0)
                     continue
                 idle_sleep = max(1, IDLE_POLL_BASE)
                 job_id = job.get("_id")
+                last_job_at = time.time()
                 phone = job.get("phone")
                 message_text = job.get("processedMessage", "Mensagem vazia")
                 campaign = job.get("campaign")

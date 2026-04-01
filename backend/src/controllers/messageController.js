@@ -768,15 +768,40 @@ exports.getHelpdeskQueues = async (req, res) => {
 // Supervisor endpoint consumed by server route. Keep response stable even when no instances are tracked.
 exports.getBotInstancesForSupervisor = async (req, res) => {
   try {
-    const ownerId = resolveOwnerId(req);
-    const campaigns = await Campaign.find({ agentId: ownerId });
-    const list = (Array.isArray(campaigns) ? campaigns : []).map((item) => ({
-      campaignId: item._id,
-      campaignName: item.name,
-      status: item.status || 'unknown',
-      agentId: item.agentId || ownerId,
+    const { listActiveSaasUsers } = require('../config/adminStore');
+    const activeUsers = listActiveSaasUsers();
+    const now = Date.now();
+    const desiredTtlMinutes = Number(process.env.BOT_DESIRED_TTL_MIN || 20);
+    const desiredTtlMs = Math.max(1, desiredTtlMinutes) * 60 * 1000;
+
+    const activeCampaigns = await Campaign.find({ status: 'running' });
+    const campaignAgentIds = new Set(
+      (Array.isArray(activeCampaigns) ? activeCampaigns : [])
+        .map((item) => String(item.agentId || '').trim())
+        .filter(Boolean),
+    );
+
+    const desiredAgentIds = new Set();
+    activeUsers.forEach((user) => {
+      const agentId = String(user.clientId || user.agentId || '').trim();
+      if (!agentId) return;
+      const requestedAt = user.metadata?.botRequestedAt || user.lastLoginAt || null;
+      const requestedAtMs = requestedAt ? new Date(requestedAt).getTime() : 0;
+      const desired = user.metadata?.botDesired === true
+        && Number.isFinite(requestedAtMs)
+        && now - requestedAtMs <= desiredTtlMs;
+      if (desired) {
+        desiredAgentIds.add(agentId);
+      }
+    });
+
+    const unionAgentIds = new Set([...campaignAgentIds, ...desiredAgentIds]);
+    const instances = Array.from(unionAgentIds).map((agentId) => ({
+      agentId,
+      name: agentId,
     }));
-    return res.json({ success: true, instances: list });
+
+    return res.json({ success: true, instances });
   } catch (err) {
     console.error(err.message);
     const errorResponse = buildServerErrorResponse(err);
@@ -801,9 +826,11 @@ exports.getConversationHistory = async (req, res) => {
     const agentCampaigns = await Campaign.find({ agentId });
     const agentCampaignIds = agentCampaigns.map(c => c._id);
 
-    let history = await Message.find({ phone: normalizedPhone });
+    let history = agentId && agentId !== 'bot'
+      ? await Message.find({ phone: normalizedPhone, agentId })
+      : await Message.find({ phone: normalizedPhone });
     if (agentId && agentId !== 'bot') {
-       history = history.filter(item => agentCampaignIds.includes(item.campaign));
+      history = history.filter(item => agentCampaignIds.includes(item.campaign));
     }
     const ordered = (Array.isArray(history) ? history : []).sort(
       (a, b) => getMessageDateMs(a) - getMessageDateMs(b),
@@ -1579,6 +1606,9 @@ exports.registerManualOutbound = async (req, res) => {
 exports.getNextJob = async (req, res) => {
   try {
     const ownerId = resolveOwnerId(req);
+    if (ownerId === 'bot') {
+      return res.json({ job: null });
+    }
     const requestedCampaignId = req.query.campaignId;
     const configuredStaleTimeoutMs = Number(
       process.env.STALE_PROCESSING_TIMEOUT_MS,

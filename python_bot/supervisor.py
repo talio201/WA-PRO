@@ -10,6 +10,7 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - [SUPERVISOR] - %(m
 
 API_BASE_URL = str(os.getenv("API_BASE_URL", "http://localhost:3000/api")).strip().rstrip('/')
 API_SECRET_KEY = str(os.getenv("API_SECRET_KEY", "")).strip()
+BOT_MASTER_KEY = str(os.getenv("BOT_API_KEY", "")).strip() or API_SECRET_KEY
 
 API_HEADERS = { 
     "Authorization": f"Bearer {API_SECRET_KEY}",
@@ -48,7 +49,7 @@ def main():
         
         for inst in active_instances:
             agent_id = inst.get("agentId")
-            api_key = inst.get("apiKey")
+            api_key = inst.get("apiKey") or BOT_MASTER_KEY
             allowed_agent_ids.add(agent_id)
             
             # Se não está rodando, inicie. (Ou se deu erro/morreu sozinho via .poll())
