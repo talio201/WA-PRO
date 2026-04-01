@@ -1,24 +1,21 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-    ArrowRightLeft,
-    ClipboardPaste,
-    Copy,
-    CornerUpRight,
-    ExternalLink,
-    FileText,
-    Lock,
-    ListTodo,
-    MessageCircle,
-    Mic,
-    MoreHorizontal,
-    Paperclip,
-    PhoneCall,
-    RefreshCw,
-    RotateCcw,
-    Search,    Send,
-    Smile,
-    Video,
-} from 'lucide-react';
+    MagnifyingGlassIcon,
+    ArrowPathIcon,
+    PaperAirplaneIcon,
+    TrashIcon,
+    ClipboardIcon,
+    DocumentDuplicateIcon,
+    ArrowsRightLeftIcon,
+    LockClosedIcon,
+    UserIcon,
+    VideoCameraIcon,
+    MicrophoneIcon,
+    PaperClipIcon,
+    EllipsisHorizontalIcon,
+    PhoneIcon,
+    XMarkIcon,
+} from '@heroicons/react/24/outline';
 import {
     assignConversation,
     getConversationProtocols,
@@ -1215,9 +1212,9 @@ const Inbox = () => {
                                     >
                                         {releasing ? 'Liberando...' : 'Liberar'}
                                     </button>
-                                    <button type="button" className="icon-btn" aria-label="Video" onClick={openWhatsAppChat}><Video size={16} /></button>
-                                    <button type="button" className="icon-btn" aria-label="Ligar" onClick={openWhatsAppChat}><PhoneCall size={16} /></button>
-                                    <button type="button" className="icon-btn" onClick={openWhatsAppChat} aria-label="Abrir no WhatsApp"><ExternalLink size={16} /></button>
+                                    <button type="button" className="icon-btn" aria-label="Video" onClick={openWhatsAppChat}><VideoCameraIcon className="w-4 h-4" /></button>
+                                    <button type="button" className="icon-btn" aria-label="Ligar" onClick={openWhatsAppChat}><PhoneIcon className="w-4 h-4" /></button>
+                                    <button type="button" className="icon-btn" onClick={openWhatsAppChat} aria-label="Abrir no WhatsApp"><ArrowsRightLeftIcon className="w-4 h-4" /></button>
                                 </div>
                             </header>
                             <section className="helpdesk-panel">
@@ -1229,7 +1226,7 @@ const Inbox = () => {
                                 </div>
                                 <div className="helpdesk-grid">
                                     <div className="helpdesk-card">
-                                        <h4><ArrowRightLeft size={14} /> Transferir atendimento</h4>
+                                        <h4><ArrowsRightLeftIcon className="w-4 h-4 inline" /> Transferir atendimento</h4>
                                         <input
                                             type="text"
                                             placeholder="Atendente destino"
@@ -1252,7 +1249,7 @@ const Inbox = () => {
                                         </button>
                                     </div>
                                     <div className="helpdesk-card">
-                                        <h4><FileText size={14} /> Abrir protocolo</h4>
+                                        <h4><DocumentDuplicateIcon className="w-4 h-4 inline" /> Abrir protocolo</h4>
                                         <input
                                             type="text"
                                             placeholder="Assunto do protocolo"
@@ -1286,7 +1283,7 @@ const Inbox = () => {
                                 </div>
                                 <div className="helpdesk-protocols">
                                     <div className="helpdesk-protocols-head">
-                                        <h4><ListTodo size={14} /> Protocolos da conversa</h4>
+                                        <h4><ClipboardIcon className="w-4 h-4 inline" /> Protocolos da conversa</h4>
                                         <span>
                                             Worker queue: {queueOverview?.queues?.workerOutbound?.waiting ?? 0} pendentes
                                         </span>
@@ -1369,7 +1366,7 @@ const Inbox = () => {
                                             </div>
                                             <div className="msg-actions">
                                                 <button type="button" className="msg-action-btn" onClick={() => copyMessageText(message)} title="Copiar mensagem">
-                                                    <Copy size={12} /> Copiar
+                                                    <DocumentDuplicateIcon className="w-3 h-3" /> Copiar
                                                 </button>
                                                 <button
                                                     type="button"
@@ -1378,7 +1375,7 @@ const Inbox = () => {
                                                     disabled={isForwarding || Boolean(messageActionId && !isForwarding)}
                                                     title="Encaminhar mensagem"
                                                 >
-                                                    <CornerUpRight size={12} /> {isForwarding ? 'Encaminhando...' : 'Encaminhar'}
+                                                    <ArrowsRightLeftIcon className="w-3 h-3" /> {isForwarding ? 'Encaminhando...' : 'Encaminhar'}
                                                 </button>
                                                 {!isInbound && (
                                                     <button
@@ -1388,7 +1385,7 @@ const Inbox = () => {
                                                         disabled={isResending || Boolean(messageActionId && !isResending)}
                                                         title="Reenviar mensagem"
                                                     >
-                                                        <RotateCcw size={12} /> {isResending ? 'Reenviando...' : 'Reenviar'}
+                                                        <ArrowPathIcon className="w-3 h-3" /> {isResending ? 'Reenviando...' : 'Reenviar'}
                                                     </button>
                                                 )}
                                             </div>
@@ -1421,7 +1418,7 @@ const Inbox = () => {
                                         onClick={handleClickAttachment}
                                         disabled={attachmentSending}
                                     >
-                                        <Paperclip size={16} />
+                                        <PaperClipIcon className="w-4 h-4" />
                                     </button>
                                     <button
                                         type="button"
@@ -1430,7 +1427,7 @@ const Inbox = () => {
                                         onClick={pasteFromClipboardToComposer}
                                         disabled={clipboardLoading}
                                     >
-                                        <ClipboardPaste size={16} />
+                                        <ClipboardIcon className="w-4 h-4" />
                                     </button>
                                     <textarea
                                         rows={2}
@@ -1446,9 +1443,9 @@ const Inbox = () => {
                                         aria-label="Emoji"
                                         onClick={() => setShowEmojiPicker((prev) => !prev)}
                                     >
-                                        <Smile size={16} />
+                                        <EllipsisHorizontalIcon className="w-4 h-4" />
                                     </button>
-                                    <button type="button" className="icon-btn" aria-label="Audio" onClick={handleMicButton}><Mic size={16} /></button>
+                                    <button type="button" className="icon-btn" aria-label="Audio" onClick={handleMicButton}><MicrophoneIcon className="w-4 h-4" /></button>
                                     <button
                                         type="button"
                                         onClick={sendReply}
@@ -1456,14 +1453,14 @@ const Inbox = () => {
                                         className="icon-btn send"
                                         aria-label="Enviar"
                                     >
-                                        {sending ? <MessageCircle size={16} /> : <Send size={16} />}
+                                        {sending ? <ArrowPathIcon className="w-4 h-4" /> : <PaperAirplaneIcon className="w-4 h-4" />}
                                     </button>
                                 </div>
                             </footer>
                         </>
                     ) : (
                         <div className="empty-chat">
-                            <MessageCircle size={20} />
+                            <UserIcon className="w-5 h-5" />
                             <p>Selecione uma conversa para iniciar o atendimento.</p>
                         </div>
                     )}

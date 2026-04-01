@@ -12,4 +12,4 @@ RUN playwright install chromium
 
 COPY . .
 
-CMD ["python", "bot.py"]
+CMD ["python", "supervisor.py"]

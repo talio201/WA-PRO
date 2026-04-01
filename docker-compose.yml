@@ -20,8 +20,6 @@ services:
       - PORT=3000
       - STORAGE_PROVIDER=local
       - REDIS_URL=redis://redis:6379
-      - API_SECRET_KEY=${API_SECRET_KEY:-emidia-session-secret}
-      - BOT_API_KEY=${BOT_API_KEY:-emidia-session-secret}
     volumes:
       - ./backend/uploads:/app/uploads
       - ./backend/data:/app/data
@@ -38,7 +36,6 @@ services:
     environment:
       - REDIS_URL=redis://redis:6379
       - STORAGE_PROVIDER=local
-      - API_SECRET_KEY=${API_SECRET_KEY:-emidia-session-secret}
     command: ["npm", "run", "worker:helpdesk"]
     volumes:
       - ./backend/data:/app/data

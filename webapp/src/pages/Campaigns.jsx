@@ -1,25 +1,27 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-    Activity,
-    AlertTriangle,
-    CheckCircle2,
-    Clock3,
-    Download,
-    RefreshCw,
-    Search,
-    SlidersHorizontal,
-    Sparkles,
-    Trash2,
-    X,
-} from 'lucide-react';
+    CheckCircleIcon,
+    ArrowPathIcon,
+    MagnifyingGlassIcon,
+    ExclamationTriangleIcon,
+    ClockIcon,
+    PencilIcon,
+    TrashIcon,
+    ArrowDownTrayIcon,
+    SparklesIcon,
+    XMarkIcon,
+} from '@heroicons/react/24/outline';
 import { BarChart, Bar, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import {
     deleteCampaign,
+    dispatchCampaignNext,
     getCampaignFailures,
     getCampaigns,
     getLeadAnalytics,
     getMessages,
+    retryCampaignFailures,
     retryMessage,
+    updateCampaign,
     updateMessage,
 } from '../utils/api.js';
 import { connectRealtime } from '../utils/realtime.js';
@@ -88,14 +90,26 @@ const Campaigns = () => {
     const [sortBy, setSortBy] = useState('recent');
     const [deletingId, setDeletingId] = useState(null);
     const [dispatchingCampaignId, setDispatchingCampaignId] = useState(null);
+    const [editingCampaign, setEditingCampaign] = useState(null);
+    const [savingCampaignEdit, setSavingCampaignEdit] = useState(false);
+    const [campaignEditForm, setCampaignEditForm] = useState({
+        name: '',
+        messageTemplate: '',
+        messageVariants: [],
+        minDelaySeconds: 0,
+        maxDelaySeconds: 120,
+    });
     const [glassMode, setGlassMode] = useState(getStoredGlassMode);
     const [selectedCampaign, setSelectedCampaign] = useState(null);
     const [failures, setFailures] = useState([]);
     const [loadingFailures, setLoadingFailures] = useState(false);
     const [savingMessageId, setSavingMessageId] = useState(null);
     const [retryingMessageId, setRetryingMessageId] = useState(null);
+    const [retryingAllFailures, setRetryingAllFailures] = useState(false);
     const [messageEdits, setMessageEdits] = useState({});
     const [leadAnalytics, setLeadAnalytics] = useState(null);
+    const [liveActivity, setLiveActivity] = useState(null);
+    const [countdown, setCountdown] = useState(0);
     const syncInFlightRef = useRef(false);
     const realtimeReloadTimerRef = useRef(null);
     const loadDashboardData = useCallback(async (options = {}) => {
@@ -137,6 +151,19 @@ const Campaigns = () => {
                 if (!autoRefresh) return;
                 const eventName = String(message?.event || '');
                 setLastRealtimeAt(message?.at || new Date().toISOString());
+                
+                if (eventName === 'bot.live_activity') {
+                    const payload = message.payload || {};
+                    setLiveActivity(payload);
+                    if (payload.activity === 'waiting' && payload.data?.nextSendAt) {
+                        const remaining = Math.max(0, Math.round((payload.data.nextSendAt - Date.now()) / 1000));
+                        setCountdown(remaining);
+                    } else {
+                        setCountdown(0);
+                    }
+                    return;
+                }
+
                 const shouldReload = eventName.startsWith('campaign.')
                     || eventName.startsWith('messages.')
                     || eventName === 'upload.completed'
@@ -166,6 +193,20 @@ const Campaigns = () => {
         }, CAMPAIGNS_FALLBACK_REFRESH_INTERVAL_MS);
         return () => clearInterval(interval);
     }, [autoRefresh, realtimeStatus, loadDashboardData]);
+
+    useEffect(() => {
+        if (!countdown || countdown <= 0) return undefined;
+        const timer = setInterval(() => {
+            setCountdown(prev => {
+                if (prev <= 1) {
+                    clearInterval(timer);
+                    return 0;
+                }
+                return prev - 1;
+            });
+        }, 1000);
+        return () => clearInterval(timer);
+    }, [countdown]);
     useEffect(() => {
         if (typeof window === 'undefined') return;
         try {
@@ -295,8 +336,65 @@ const Campaigns = () => {
     const handleDispatchCampaign = useCallback(async (campaign) => {
         if (!campaign?._id) return;
         if (Number(campaign?.pending || 0) <= 0) return;
-        alert('Disparo via Servidor SaaS: O Worker Python processará a fila automaticamente.');
+        try {
+            setDispatchingCampaignId(campaign._id);
+            await dispatchCampaignNext(campaign._id);
+            await loadDashboardData({ showSpinner: false });
+        } catch (error) {
+            console.error('Dispatch next contact error:', error);
+            alert('Nao foi possivel disparar o proximo contato da fila.');
+        } finally {
+            setDispatchingCampaignId(null);
+        }
     }, []);
+    const openCampaignEditModal = useCallback((campaign) => {
+        if (!campaign?._id) return;
+        setEditingCampaign(campaign);
+        setCampaignEditForm({
+            name: String(campaign.name || ''),
+            messageTemplate: String(campaign.messageTemplate || ''),
+            messageVariants: Array.isArray(campaign.messageVariants) ? [...campaign.messageVariants] : [],
+            minDelaySeconds: Number(campaign?.antiBan?.minDelaySeconds || 0),
+            maxDelaySeconds: Number(campaign?.antiBan?.maxDelaySeconds || 120),
+        });
+    }, []);
+    const closeCampaignEditModal = useCallback(() => {
+        setEditingCampaign(null);
+        setSavingCampaignEdit(false);
+    }, []);
+    const saveCampaignEdit = useCallback(async () => {
+        if (!editingCampaign?._id) return;
+        const minDelaySeconds = Number(campaignEditForm.minDelaySeconds);
+        const maxDelaySeconds = Number(campaignEditForm.maxDelaySeconds);
+        if (!campaignEditForm.name.trim()) {
+            alert('Informe o nome da campanha.');
+            return;
+        }
+        if (!Number.isFinite(minDelaySeconds) || !Number.isFinite(maxDelaySeconds) || minDelaySeconds < 0 || maxDelaySeconds < 0 || minDelaySeconds > maxDelaySeconds) {
+            alert('Revise os valores de anti-ban.');
+            return;
+        }
+        try {
+            setSavingCampaignEdit(true);
+            await updateCampaign(editingCampaign._id, {
+                name: campaignEditForm.name.trim(),
+                messageTemplate: campaignEditForm.messageTemplate,
+                  messageVariants: campaignEditForm.messageVariants,
+                  antiBan: {
+                    ...(editingCampaign?.antiBan || {}),
+                    minDelaySeconds,
+                    maxDelaySeconds,
+                },
+            });
+            await loadDashboardData({ showSpinner: false });
+            closeCampaignEditModal();
+        } catch (error) {
+            console.error('Update campaign error:', error);
+            alert('Nao foi possivel salvar a campanha.');
+        } finally {
+            setSavingCampaignEdit(false);
+        }
+    }, [editingCampaign, campaignEditForm, loadDashboardData, closeCampaignEditModal]);
     const buildEditState = (items) => {
         const result = {};
         items.forEach((item) => {
@@ -330,6 +428,7 @@ const Campaigns = () => {
         setMessageEdits({});
         setSavingMessageId(null);
         setRetryingMessageId(null);
+        setRetryingAllFailures(false);
     };
     const handleEditChange = (messageId, field, value) => {
         setMessageEdits((prev) => ({
@@ -373,10 +472,29 @@ const Campaigns = () => {
             setRetryingMessageId(null);
         }
     };
+    const handleRetryAllFailures = async () => {
+        if (!selectedCampaign?._id || failures.length === 0) return;
+        const confirmed = window.confirm(`Reenfileirar todas as ${failures.length} falhas desta campanha?`);
+        if (!confirmed) return;
+        try {
+            setRetryingAllFailures(true);
+            const result = await retryCampaignFailures(selectedCampaign._id);
+            const retriedCount = Number(result?.retriedCount || 0);
+            setFailures([]);
+            setMessageEdits({});
+            await loadDashboardData({ showSpinner: false });
+            alert(`${retriedCount} mensagem(ns) reenfileirada(s) com sucesso.`);
+        } catch (error) {
+            console.error('Bulk retry message error:', error);
+            alert('Nao foi possivel reenfileirar todas as falhas.');
+        } finally {
+            setRetryingAllFailures(false);
+        }
+    };
     if (loading) {
         return (
             <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600 shadow-sm">
-                <RefreshCw size={16} className="animate-spin text-slate-500" />
+                <ArrowPathIcon className="w-4 h-4 animate-spin text-slate-500" />
                 <span>Carregando dados...</span>
             </div>
         );
@@ -424,6 +542,47 @@ const Campaigns = () => {
                             <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-emerald-700">Operations</p>
                             <h2 className="mt-1 text-2xl font-bold tracking-tight text-slate-900">Painel de Campanhas</h2>
                             <p className="mt-1 text-sm text-slate-600">Fluxo de envio, falhas e produtividade em uma visao executiva unica.</p>
+                            
+                            {/* Live Activity Feed */}
+                            <div className="mt-4 flex flex-col md:flex-row md:items-center gap-3">
+                                {liveActivity && (
+                                    <div className={`inline-flex items-center gap-3 px-4 py-1.5 rounded-2xl border backdrop-blur-md shadow-sm transition-all duration-300 ${
+                                        liveActivity.activity === 'typing' ? 'bg-sky-50/80 border-sky-100 text-sky-700 animate-pulse' :
+                                        liveActivity.activity === 'waiting' ? 'bg-amber-50/80 border-amber-100 text-amber-700' :
+                                        liveActivity.activity === 'sending' ? 'bg-emerald-50/80 border-emerald-100 text-emerald-700' :
+                                        'bg-slate-50/80 border-slate-100 text-slate-600'
+                                    }`}>
+                                        <div className="relative">
+                                            <div className={`h-2 w-2 rounded-full ${
+                                                liveActivity.activity === 'typing' ? 'bg-sky-500' :
+                                                liveActivity.activity === 'waiting' ? 'bg-amber-500' :
+                                                liveActivity.activity === 'sending' ? 'bg-emerald-500' :
+                                                'bg-slate-400'
+                                            }`} />
+                                            {liveActivity.activity === 'typing' && (
+                                                <div className="absolute inset-0 h-2 w-2 rounded-full bg-sky-500 animate-ping" />
+                                            )}
+                                        </div>
+                                        <span className="text-xs font-semibold">
+                                            {liveActivity.activity === 'typing' && `Robô está digitando para ${liveActivity.data?.text || 'contato'}...`}
+                                            {liveActivity.activity === 'waiting' && (
+                                                countdown > 0 
+                                                    ? `Anti-ban: Próximo envio em ${countdown}s`
+                                                    : `Aguardando início do próximo envio...`
+                                            )}
+                                            {liveActivity.activity === 'sending' && `Enviando mensagem agora...`}
+                                            {liveActivity.activity === 'processing' && `Processando fila de mensagens...`}
+                                            {!['typing', 'waiting', 'sending', 'processing'].includes(liveActivity.activity) && `Atividade detectada: ${liveActivity.activity}`}
+                                        </span>
+                                    </div>
+                                )}
+                                {!liveActivity && (
+                                    <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-2xl bg-white/30 border border-white/50 text-slate-400 text-[11px] italic">
+                                        <ClockIcon className="w-3.5 h-3.5" />
+                                        Aguardando atividade do robô...
+                                    </div>
+                                )}
+                            </div>
                         </div>
                         <div className="flex flex-wrap items-center gap-2">
                             <button
@@ -431,7 +590,7 @@ const Campaigns = () => {
                                 onClick={() => setGlassMode((prev) => !prev)}
                                 className={neutralButtonClass}
                             >
-                                <Sparkles size={14} />
+                                <SparklesIcon className="w-4 h-4" />
                                 {glassMode ? 'Apple Glass ON' : 'Apple Glass OFF'}
                             </button>
                             <button
@@ -439,7 +598,7 @@ const Campaigns = () => {
                                 onClick={exportCampaignsCsv}
                                 className={neutralButtonClass}
                             >
-                                <Download size={14} />
+                                <ArrowDownTrayIcon className="w-4 h-4" />
                                 Exportar CSV
                             </button>
                             <button
@@ -448,7 +607,7 @@ const Campaigns = () => {
                                 disabled={syncing}
                                 className={`${accentButtonClass} ${syncing ? 'cursor-wait opacity-80' : ''}`}
                             >
-                                <RefreshCw size={14} className={syncing ? 'animate-spin' : ''} />
+                                <ArrowPathIcon className={`w-4 h-4 ${syncing ? 'animate-spin' : ''}`} />
                                 {syncing ? 'Sincronizando...' : 'Atualizar agora'}
                             </button>
                             <label className={neutralButtonClass}>
@@ -474,56 +633,56 @@ const Campaigns = () => {
                         <div className={heroMetricClass}>
                             <div className="flex items-center justify-between text-xs font-bold uppercase tracking-wide text-slate-500">
                                 <span>Enviadas</span>
-                                <CheckCircle2 size={15} className="text-emerald-600" />
+                                <CheckCircleIcon className="w-4 h-4 text-emerald-600" />
                             </div>
                             <div className="mt-2 text-2xl font-bold text-slate-900">{totals.sent}</div>
                         </div>
                         <div className={heroMetricClass}>
                             <div className="flex items-center justify-between text-xs font-bold uppercase tracking-wide text-slate-500">
                                 <span>Taxa sucesso</span>
-                                <Activity size={15} className="text-blue-600" />
+                                <ArrowPathIcon className="w-4 h-4 text-blue-600" />
                             </div>
                             <div className="mt-2 text-2xl font-bold text-slate-900">{totals.successRate}%</div>
                         </div>
                         <div className={heroMetricClass}>
                             <div className="flex items-center justify-between text-xs font-bold uppercase tracking-wide text-slate-500">
                                 <span>Na fila</span>
-                                <Clock3 size={15} className="text-amber-600" />
+                                <ClockIcon className="w-4 h-4 text-amber-600" />
                             </div>
                             <div className="mt-2 text-2xl font-bold text-slate-900">{totals.pending}</div>
                         </div>
                         <div className={heroMetricClass}>
                             <div className="flex items-center justify-between text-xs font-bold uppercase tracking-wide text-slate-500">
                                 <span>Falhas</span>
-                                <AlertTriangle size={15} className="text-red-600" />
+                                <ExclamationTriangleIcon className="w-4 h-4 text-red-600" />
                             </div>
                             <div className="mt-2 text-2xl font-bold text-slate-900">{totals.failed}</div>
                         </div>
                         <div className={heroMetricClass}>
                             <div className="flex items-center justify-between text-xs font-bold uppercase tracking-wide text-slate-500">
                                 <span>Criticas</span>
-                                <AlertTriangle size={15} className="text-orange-600" />
+                                <ExclamationTriangleIcon className="w-4 h-4 text-orange-600" />
                             </div>
                             <div className="mt-2 text-2xl font-bold text-slate-900">{totals.critical}</div>
                         </div>
                         <div className={heroMetricClass}>
                             <div className="flex items-center justify-between text-xs font-bold uppercase tracking-wide text-slate-500">
                                 <span>Contatos</span>
-                                <Activity size={15} className="text-indigo-600" />
+                                <ArrowPathIcon className="w-4 h-4 text-indigo-600" />
                             </div>
                             <div className="mt-2 text-2xl font-bold text-slate-900">{totals.contacts}</div>
                         </div>
                         <div className={heroMetricClass}>
                             <div className="flex items-center justify-between text-xs font-bold uppercase tracking-wide text-slate-500">
                                 <span>Leads qualif.</span>
-                                <Activity size={15} className="text-cyan-600" />
+                                <ArrowPathIcon className="w-4 h-4 text-cyan-600" />
                             </div>
                             <div className="mt-2 text-2xl font-bold text-slate-900">{leadAnalytics?.byStage?.qualified || 0}</div>
                         </div>
                         <div className={heroMetricClass}>
                             <div className="flex items-center justify-between text-xs font-bold uppercase tracking-wide text-slate-500">
                                 <span>Conv. leads</span>
-                                <CheckCircle2 size={15} className="text-emerald-600" />
+                                <CheckCircleIcon className="w-4 h-4 text-emerald-600" />
                             </div>
                             <div className="mt-2 text-2xl font-bold text-slate-900">{leadAnalytics?.conversion?.wonRate || 0}%</div>
                         </div>
@@ -584,7 +743,7 @@ const Campaigns = () => {
                             </div>
                             <div className="flex flex-wrap items-center gap-2">
                                 <div className="relative min-w-55">
-                                    <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                                    <MagnifyingGlassIcon className="w-4 h-4 pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                                     <input
                                         type="text"
                                         value={search}
@@ -594,7 +753,7 @@ const Campaigns = () => {
                                     />
                                 </div>
                                 <div className="inline-flex items-center gap-2">
-                                    <SlidersHorizontal size={14} className="text-slate-500" />
+                                    {/* Filtro: pode-se usar um ícone de ajuste se desejar, mas Heroicons não tem SlidersHorizontal. Pode-se omitir ou usar AdjustmentsHorizontalIcon se disponível. */}
                                     <select
                                         value={sortBy}
                                         onChange={(e) => setSortBy(e.target.value)}
@@ -707,8 +866,16 @@ const Campaigns = () => {
                                                                     : 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200'
                                                         }`}
                                                     >
-                                                        <CheckCircle2 size={13} />
-                                                        {dispatchingCampaignId === campaign._id ? 'Disparando...' : 'Disparar agora'}
+                                                        <CheckCircleIcon className="w-4 h-4" />
+                                                        {dispatchingCampaignId === campaign._id ? 'Disparando...' : 'Proximo imediato'}
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => openCampaignEditModal(campaign)}
+                                                        className="inline-flex items-center gap-1.5 rounded-lg bg-sky-100 px-3 py-1.5 text-xs font-semibold text-sky-800 transition hover:bg-sky-200"
+                                                    >
+                                                        <PencilIcon className="w-4 h-4" />
+                                                        Editar
                                                     </button>
                                                     <button
                                                         type="button"
@@ -716,7 +883,7 @@ const Campaigns = () => {
                                                         disabled={campaign.failed === 0}
                                                         className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition ${campaign.failed === 0 ? 'cursor-not-allowed bg-slate-200 text-slate-400' : 'bg-amber-100 text-amber-800 hover:bg-amber-200'}`}
                                                     >
-                                                        <AlertTriangle size={13} />
+                                                        <ExclamationTriangleIcon className="w-4 h-4" />
                                                         Falhas ({campaign.failed})
                                                     </button>
                                                     <button
@@ -725,7 +892,7 @@ const Campaigns = () => {
                                                         disabled={deletingId === campaign._id}
                                                         className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition ${deletingId === campaign._id ? 'cursor-not-allowed bg-red-200 text-red-400' : 'bg-red-100 text-red-700 hover:bg-red-200'}`}
                                                     >
-                                                        <Trash2 size={13} />
+                                                        <TrashIcon className="w-4 h-4" />
                                                         {deletingId === campaign._id ? 'Excluindo...' : 'Excluir'}
                                                     </button>
                                                 </div>
@@ -770,19 +937,30 @@ const Campaigns = () => {
                                 <h3 className="text-lg font-bold text-gray-900">Falhas da Campanha</h3>
                                 <p className="text-sm text-gray-500">{selectedCampaign.name}</p>
                             </div>
-                            <button
-                                type="button"
-                                onClick={closeFailuresModal}
-                                className={neutralButtonClass}
-                            >
-                                <X size={14} />
-                                Fechar
-                            </button>
+                            <div className="flex items-center gap-2">
+                                <button
+                                    type="button"
+                                    onClick={handleRetryAllFailures}
+                                    disabled={loadingFailures || failures.length === 0 || retryingAllFailures}
+                                    className={`inline-flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-semibold text-white transition ${loadingFailures || failures.length === 0 || retryingAllFailures ? 'cursor-not-allowed bg-slate-300' : 'bg-emerald-600 hover:bg-emerald-700'}`}
+                                >
+                                    <ArrowPathIcon className={`w-4 h-4 ${retryingAllFailures ? 'animate-spin' : ''}`} />
+                                    {retryingAllFailures ? 'Reenfileirando...' : 'Reenfileirar todas'}
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={closeFailuresModal}
+                                    className={neutralButtonClass}
+                                >
+                                    <XMarkIcon className="w-4 h-4" />
+                                    Fechar
+                                </button>
+                            </div>
                         </div>
                         <div className="overflow-y-auto p-6">
                             {loadingFailures ? (
                                 <div className="flex items-center justify-center gap-2 py-10 text-center text-sm text-gray-500">
-                                    <RefreshCw size={14} className="animate-spin" />
+                                    <ArrowPathIcon className="w-4 h-4 animate-spin" />
                                     <span>Carregando falhas...</span>
                                 </div>
                             ) : failures.length === 0 ? (
@@ -844,6 +1022,91 @@ const Campaigns = () => {
                                     })}
                                 </div>
                             )}
+                        </div>
+                    </div>
+                </div>
+            )}
+            {editingCampaign && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm">
+                    <div className={`w-full max-w-3xl overflow-hidden shadow-2xl ${glassMode ? 'rounded-3xl border border-white/60 bg-white/80 backdrop-blur-2xl' : 'rounded-xl bg-white'}`}>
+                        <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4">
+                            <div>
+                                <h3 className="text-lg font-bold text-slate-900">Editar campanha</h3>
+                                <p className="text-sm text-slate-500">{editingCampaign.name}</p>
+                            </div>
+                            <button type="button" onClick={closeCampaignEditModal} className={neutralButtonClass}>
+                                <XMarkIcon className="w-4 h-4" />
+                                Fechar
+                            </button>
+                        </div>
+                        <div className="space-y-4 p-6">
+                            <input
+                                type="text"
+                                value={campaignEditForm.name}
+                                onChange={(e) => setCampaignEditForm((prev) => ({ ...prev, name: e.target.value }))}
+                                placeholder="Nome da campanha"
+                                className={inputClass}
+                            />
+                            {editingCampaign?.turboMode || (campaignEditForm.messageVariants && campaignEditForm.messageVariants.length > 0) ? (
+                                  <div className="space-y-3">
+                                      <p className="text-sm font-semibold text-emerald-300">Variações de Mensagens (Modo Turbo)</p>
+                                      {campaignEditForm.messageVariants.map((variant, index) => (
+                                          <div key={index} className="flex flex-col gap-1">
+                                              <label className="text-xs text-slate-400">Variação {index + 1}</label>
+                                              <textarea
+                                                  rows="3"
+                                                  value={variant}
+                                                  onChange={(e) => {
+                                                      const newVariants = [...campaignEditForm.messageVariants];
+                                                      newVariants[index] = e.target.value;
+                                                      setCampaignEditForm(prev => ({ ...prev, messageVariants: newVariants }));
+                                                  }}
+                                                  className={`${inputClass} resize-y bg-slate-900 border-slate-700/50 text-white p-3 rounded-xl w-full focus:outline-none focus:border-emerald-500/50`}
+                                              />
+                                          </div>
+                                      ))}
+                                  </div>
+                              ) : (
+                                  <textarea
+                                      rows="4"
+                                      value={campaignEditForm.messageTemplate}
+                                      onChange={(e) => setCampaignEditForm((prev) => ({ ...prev, messageTemplate: e.target.value }))}
+                                      placeholder="Mensagem base"
+                                      className={`${inputClass} resize-y`}
+                                  />
+                              )}
+                            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                                <input
+                                    type="number"
+                                    min="0"
+                                    value={campaignEditForm.minDelaySeconds}
+                                    onChange={(e) => setCampaignEditForm((prev) => ({ ...prev, minDelaySeconds: e.target.value }))}
+                                    className={inputClass}
+                                    placeholder="Min delay (s)"
+                                />
+                                <input
+                                    type="number"
+                                    min="0"
+                                    value={campaignEditForm.maxDelaySeconds}
+                                    onChange={(e) => setCampaignEditForm((prev) => ({ ...prev, maxDelaySeconds: e.target.value }))}
+                                    className={inputClass}
+                                    placeholder="Max delay (s)"
+                                />
+                            </div>
+                            <div className="flex justify-end gap-2 pt-2">
+                                <button type="button" onClick={closeCampaignEditModal} className={neutralButtonClass}>
+                                    Cancelar
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={saveCampaignEdit}
+                                    disabled={savingCampaignEdit}
+                                    className={`inline-flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-semibold text-white ${savingCampaignEdit ? 'cursor-not-allowed bg-emerald-300' : 'bg-emerald-600 hover:bg-emerald-700'}`}
+                                >
+                                    <CheckCircleIcon className="w-4 h-4" />
+                                    {savingCampaignEdit ? 'Salvando...' : 'Salvar campanha'}
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>

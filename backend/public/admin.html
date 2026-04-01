@@ -1,1843 +1,705 @@
 <!DOCTYPE html>
-<html lang="pt-br">
+<html lang="pt-br" class="dark">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Admin Console | EmidiaWhats</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <title>EmidiaWhats Control Center</title>
+    <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <script nonce="__CSP_NONCE__">
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        dark: {
+                            900: '#0f172a',
+                            800: '#1e293b',
+                            700: '#334155',
+                            600: '#475569',
+                        },
+                        brand: {
+                            500: '#6366f1',
+                            600: '#4f46e5',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
     <style>
-        :root {
-            --primary: #6366f1;
-            --primary-dark: #4f46e5;
-            --success: #10b981;
-            --warning: #f59e0b;
-            --danger: #ef4444;
-            --bg-dark: #0f172a;
-            --bg-card: #1e293b;
-            --bg-hover: #334155;
-            --text-primary: #f8fafc;
-            --text-secondary: #94a3b8;
-            --border: #334155;
-        }
-
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
-        body {
-            font-family: 'Inter', sans-serif;
-            background: var(--bg-dark);
-            color: var(--text-primary);
-            min-height: 100vh;
-        }
-
-        /* Header */
-        .header {
-            background: var(--bg-card);
-            border-bottom: 1px solid var(--border);
-            padding: 1rem 2rem;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            position: sticky;
-            top: 0;
-            z-index: 100;
-        }
-
-        .header h1 {
-            font-size: 1.5rem;
-            font-weight: 600;
-            background: linear-gradient(135deg, #6366f1, #8b5cf6);
-            background-clip: text;
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-        }
-
-        .header-actions {
-            display: flex;
-            gap: 1rem;
-            align-items: center;
-        }
-
-        .connection-status {
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-            padding: 0.5rem 1rem;
-            border-radius: 9999px;
-            font-size: 0.875rem;
-            font-weight: 500;
-        }
-
-        .connection-status.connected {
-            background: rgba(16, 185, 129, 0.1);
-            color: var(--success);
-        }
-
-        .connection-status.disconnected {
-            background: rgba(239, 68, 68, 0.1);
-            color: var(--danger);
-        }
-
-        .status-dot {
-            width: 8px;
-            height: 8px;
-            border-radius: 50%;
-            background: currentColor;
-            animation: pulse 2s infinite;
-        }
-
-        @keyframes pulse {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.5; }
-        }
-
-        .btn {
-            padding: 0.5rem 1rem;
-            border-radius: 0.5rem;
-            font-size: 0.875rem;
-            font-weight: 500;
-            cursor: pointer;
-            border: none;
-            transition: all 0.2s;
-        }
-
-        .btn-primary {
-            background: var(--primary);
-            color: white;
-        }
-
-        .btn-primary:hover {
-            background: var(--primary-dark);
-        }
-
-        .btn-danger {
-            background: var(--danger);
-            color: white;
-        }
-
-        .btn-danger:hover {
-            background: #dc2626;
-        }
-
-        .btn-secondary {
-            background: var(--bg-hover);
-            color: var(--text-primary);
-        }
-
-        .btn-secondary:hover {
-            background: #475569;
-        }
-
-        /* Main Layout */
-        .main {
-            padding: 2rem;
-            max-width: 1600px;
-            margin: 0 auto;
-        }
-
-        /* Tabs */
-        .tabs {
-            display: flex;
-            gap: 0.5rem;
-            margin-bottom: 2rem;
-            border-bottom: 1px solid var(--border);
-            padding-bottom: 1rem;
-            overflow-x: auto;
-        }
-
-        .tab {
-            padding: 0.75rem 1.5rem;
-            border-radius: 0.5rem;
-            font-size: 0.875rem;
-            font-weight: 500;
-            cursor: pointer;
-            border: none;
-            background: transparent;
-            color: var(--text-secondary);
-            transition: all 0.2s;
-            white-space: nowrap;
-        }
-
-        .tab:hover {
-            background: var(--bg-hover);
-            color: var(--text-primary);
-        }
-
-        .tab.active {
-            background: var(--primary);
-            color: white;
-        }
-
-        /* Tab Content */
-        .tab-content {
-            display: none;
-        }
-
-        .tab-content.active {
-            display: block;
-        }
-
-        /* Grid */
-        .grid {
-            display: grid;
-            gap: 1.5rem;
-        }
-
-        .grid-4 {
-            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-        }
-
-        .grid-2 {
-            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
-        }
-
-        /* Cards */
-        .card {
-            background: var(--bg-card);
-            border-radius: 1rem;
-            border: 1px solid var(--border);
-            overflow: hidden;
-        }
-
-        .card-header {
-            padding: 1rem 1.5rem;
-            border-bottom: 1px solid var(--border);
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-
-        .card-header h3 {
-            font-size: 1rem;
-            font-weight: 600;
-        }
-
-        .card-body {
-            padding: 1.5rem;
-        }
-
-        /* Stat Cards */
-        .stat-card {
-            background: var(--bg-card);
-            border-radius: 1rem;
-            padding: 1.5rem;
-            border: 1px solid var(--border);
-        }
-
-        .stat-label {
-            font-size: 0.875rem;
-            color: var(--text-secondary);
-            margin-bottom: 0.5rem;
-        }
-
-        .stat-value {
-            font-size: 2rem;
-            font-weight: 700;
-        }
-
-        .stat-value.success { color: var(--success); }
-        .stat-value.warning { color: var(--warning); }
-        .stat-value.danger { color: var(--danger); }
-        .stat-value.primary { color: var(--primary); }
-
-        .stat-change {
-            font-size: 0.75rem;
-            margin-top: 0.5rem;
-            color: var(--text-secondary);
-        }
-
-        /* Progress Bar */
-        .progress-bar {
-            height: 8px;
-            background: var(--bg-hover);
-            border-radius: 4px;
-            overflow: hidden;
-            margin-top: 0.5rem;
-        }
-
-        .progress-fill {
-            height: 100%;
-            border-radius: 4px;
-            transition: width 0.3s;
-        }
-
-        .progress-fill.success { background: var(--success); }
-        .progress-fill.warning { background: var(--warning); }
-        .progress-fill.danger { background: var(--danger); }
-
-        /* Table */
-        .table-container {
-            overflow-x: auto;
-        }
-
-        table {
-            width: 100%;
-            border-collapse: collapse;
-        }
-
-        th, td {
-            padding: 0.75rem 1rem;
-            text-align: left;
-            border-bottom: 1px solid var(--border);
-        }
-
-        th {
-            font-size: 0.75rem;
-            font-weight: 600;
-            color: var(--text-secondary);
-            text-transform: uppercase;
-            letter-spacing: 0.05em;
-        }
-
-        td {
-            font-size: 0.875rem;
-        }
-
-        tr:hover {
-            background: var(--bg-hover);
-        }
-
-        /* Badge */
-        .badge {
-            display: inline-block;
-            padding: 0.25rem 0.75rem;
-            border-radius: 9999px;
-            font-size: 0.75rem;
-            font-weight: 500;
-        }
-
-        .badge-success {
-            background: rgba(16, 185, 129, 0.1);
-            color: var(--success);
-        }
-
-        .badge-warning {
-            background: rgba(245, 158, 11, 0.1);
-            color: var(--warning);
-        }
-
-        .badge-danger {
-            background: rgba(239, 68, 68, 0.1);
-            color: var(--danger);
-        }
-
-        .badge-primary {
-            background: rgba(99, 102, 241, 0.1);
-            color: var(--primary);
-        }
-
-        /* Log Entry */
-        .log-entry {
-            padding: 1rem;
-            border-bottom: 1px solid var(--border);
-            font-family: 'Monaco', 'Menlo', monospace;
-            font-size: 0.8rem;
-        }
-
-        .log-entry:last-child {
-            border-bottom: none;
-        }
-
-        .log-time {
-            color: var(--text-secondary);
-            margin-right: 1rem;
-        }
-
-        .log-type {
-            font-weight: 600;
-            margin-right: 1rem;
-        }
-
-        .log-type.error { color: var(--danger); }
-        .log-type.warning { color: var(--warning); }
-        .log-type.info { color: var(--primary); }
-        .log-type.success { color: var(--success); }
-
-        /* Live Console */
-        .live-console {
-            background: #0d1117;
-            border-radius: 0.5rem;
-            height: 400px;
-            overflow-y: auto;
-            font-family: 'Monaco', 'Menlo', monospace;
-            font-size: 0.8rem;
-            padding: 1rem;
-        }
-
-        .console-line {
-            padding: 0.25rem 0;
-            border-bottom: 1px solid rgba(255,255,255,0.05);
-        }
-
-        .console-line .time {
-            color: #6e7681;
-        }
-
-        .console-line .event {
-            color: #58a6ff;
-        }
-
-        .console-line .data {
-            color: #8b949e;
-        }
-
-        /* Extension Card */
-        .extension-card {
-            text-align: center;
-            padding: 3rem;
-        }
-
-        .extension-icon {
-            width: 80px;
-            height: 80px;
-            background: linear-gradient(135deg, #6366f1, #8b5cf6);
-            border-radius: 1rem;
-            margin: 0 auto 1.5rem;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 2rem;
-        }
-
-        .extension-title {
-            font-size: 1.5rem;
-            font-weight: 600;
-            margin-bottom: 0.5rem;
-        }
-
-        .extension-version {
-            color: var(--text-secondary);
-            margin-bottom: 2rem;
-        }
-
-        .extension-actions {
-            display: flex;
-            gap: 1rem;
-            justify-content: center;
-            flex-wrap: wrap;
-        }
-
-        /* Form */
-        .form-group {
-            margin-bottom: 1rem;
-        }
-
-        .form-label {
-            display: block;
-            font-size: 0.875rem;
-            font-weight: 500;
-            margin-bottom: 0.5rem;
-        }
-
-        .form-input {
-            width: 100%;
-            padding: 0.75rem 1rem;
-            background: var(--bg-dark);
-            border: 1px solid var(--border);
-            border-radius: 0.5rem;
-            color: var(--text-primary);
-            font-size: 0.875rem;
-        }
-
-        .form-input:focus {
-            outline: none;
-            border-color: var(--primary);
-        }
-
-        /* Modal */
-        .modal-overlay {
-            position: fixed;
-            inset: 0;
-            background: rgba(0, 0, 0, 0.7);
-            display: none;
-            align-items: center;
-            justify-content: center;
-            z-index: 1000;
-        }
-
-        .modal-overlay.active {
-            display: flex;
-        }
-
-        .modal {
-            background: var(--bg-card);
-            border-radius: 1rem;
-            width: 100%;
-            max-width: 500px;
-            max-height: 90vh;
-            overflow-y: auto;
-        }
-
-        .modal-header {
-            padding: 1.5rem;
-            border-bottom: 1px solid var(--border);
-        }
-
-        .modal-body {
-            padding: 1.5rem;
-        }
-
-        .modal-footer {
-            padding: 1rem 1.5rem;
-            border-top: 1px solid var(--border);
-            display: flex;
-            justify-content: flex-end;
-            gap: 1rem;
-        }
-
-        /* Toast */
-        .toast-container {
-            position: fixed;
-            top: 1rem;
-            right: 1rem;
-            z-index: 1001;
-            display: flex;
-            flex-direction: column;
-            gap: 0.5rem;
-        }
-
-        .toast {
-            padding: 1rem 1.5rem;
-            border-radius: 0.5rem;
-            background: var(--bg-card);
-            border: 1px solid var(--border);
-            animation: slideIn 0.3s ease;
-        }
-
-        @keyframes slideIn {
-            from { transform: translateX(100%); opacity: 0; }
-            to { transform: translateX(0); opacity: 1; }
-        }
-
-        .toast.success { border-left: 4px solid var(--success); }
-        .toast.error { border-left: 4px solid var(--danger); }
-        .toast.warning { border-left: 4px solid var(--warning); }
-
-        /* Responsive */
-        @media (max-width: 768px) {
-            .header {
-                padding: 1rem;
-                flex-direction: column;
-                gap: 1rem;
-            }
-
-            .main {
-                padding: 1rem;
-            }
-
-            .grid-2 {
-                grid-template-columns: 1fr;
-            }
-
-            .tabs {
-                flex-wrap: nowrap;
-            }
-        }
+        body { font-family: 'Inter', system-ui, -apple-system, sans-serif; background-color: #0f172a; color: #f8fafc; }
+        .glass-panel { background: rgba(30, 41, 59, 0.7); backdrop-filter: blur(12px); border: 1px solid rgba(255,255,255,0.05); }
+        .gradient-text { background: linear-gradient(135deg, #818cf8, #c084fc); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+        
+        .tab-content { display: none; animation: fadeIn 0.3s ease; }
+        .tab-content.active { display: block; }
+        
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+        
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: #0f172a; }
+        ::-webkit-scrollbar-thumb { background: #334155; border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: #475569; }
+
+        .live-console { font-family: 'Monaco', 'Consolas', monospace; font-size: 0.8rem; }
+        .badge { @apply px-2 py-1 text-xs font-medium rounded-full; }
+        .badge-success { @apply bg-green-500/20 text-green-400; }
+        .badge-danger { @apply bg-red-500/20 text-red-400; }
+        .badge-warning { @apply bg-yellow-500/20 text-yellow-400; }
+        .input-field { @apply w-full bg-dark-900 border border-dark-700 rounded-lg px-4 py-2 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500 outline-none transition-all; }
+        .btn-modern { @apply px-4 py-2 rounded-lg text-sm font-medium transition-all shadow-sm hover:shadow-md flex items-center justify-center gap-2; }
+        .btn-primary { @apply bg-brand-600 hover:bg-brand-500 text-white border border-brand-500/30; }
+        .btn-secondary { @apply bg-dark-700 hover:bg-dark-600 text-slate-200 border border-dark-600; }
+        .btn-danger { @apply bg-red-600/90 hover:bg-red-500 text-white border border-red-500/30; }
     </style>
 </head>
-<body>
-    <header class="header">
-        <h1>🛡️ Admin Console</h1>
-        <div class="header-actions">
-            <div id="connection-status" class="connection-status disconnected">
-                <span class="status-dot"></span>
-                <span id="connection-text">Desconectado</span>
+<body class="min-h-screen flex flex-col">
+
+    <!-- Navbar -->
+    <nav class="glass-panel sticky top-0 z-50 px-6 py-4 flex justify-between items-center border-b border-dark-700">
+        <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-brand-600 to-purple-600 flex items-center justify-center shadow-lg shadow-brand-500/20">
+                <i class="fa-solid fa-satellite-dish text-white"></i>
             </div>
-            <button onclick="clearAllCache()" class="btn btn-secondary">🗑️ Limpar Cache</button>
-            <button onclick="location.href='/dashboard.html'" class="btn btn-secondary">← Dashboard</button>
-            <button onclick="logout()" class="btn btn-danger">Sair</button>
-        </div>
-    </header>
-
-    <main class="main">
-        <div class="tabs">
-            <button class="tab active" data-tab="overview">📊 Visão Geral</button>
-            <button class="tab" data-tab="users">👥 Usuários</button>
-            <button class="tab" data-tab="security">🔒 Segurança</button>
-            <button class="tab" data-tab="bot">🤖 Bot Monitor</button>
-            <button class="tab" data-tab="extension">📦 Extensão</button>
-            <button class="tab" data-tab="console">💻 Console</button>
-        </div>
-
-        <!-- Overview Tab -->
-        <div id="tab-overview" class="tab-content active">
-            <div class="grid grid-4">
-                <div class="stat-card">
-                    <div class="stat-label">Usuários Ativos</div>
-                    <div class="stat-value primary" id="stat-users">0</div>
-                    <div class="stat-change">Conectados agora</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-label">CPU</div>
-                    <div class="stat-value" id="stat-cpu">0%</div>
-                    <div class="progress-bar">
-                        <div class="progress-fill success" id="cpu-bar" style="width: 0%"></div>
-                    </div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-label">Memória</div>
-                    <div class="stat-value" id="stat-memory">0%</div>
-                    <div class="progress-bar">
-                        <div class="progress-fill success" id="memory-bar" style="width: 0%"></div>
-                    </div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-label">Uptime</div>
-                    <div class="stat-value success" id="stat-uptime">0h</div>
-                    <div class="stat-change" id="stat-uptime-since">-</div>
-                </div>
-            </div>
-
-            <div class="grid grid-2" style="margin-top: 1.5rem;">
-                <div class="card">
-                    <div class="card-header">
-                        <h3>📈 Atividade Recente</h3>
-                        <button onclick="refreshDashboard()" class="btn btn-secondary">🔄</button>
-                    </div>
-                    <div class="card-body">
-                        <div id="recent-activity" class="table-container">
-                            <p style="color: var(--text-secondary)">Carregando...</p>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="card">
-                    <div class="card-header">
-                        <h3>⚠️ Alertas de Segurança</h3>
-                    </div>
-                    <div class="card-body">
-                        <div id="security-alerts">
-                            <p style="color: var(--text-secondary)">Nenhum alerta</p>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <div class="card" style="margin-top: 1.5rem;">
-                <div class="card-header">
-                    <h3>🖥️ Informações do Sistema</h3>
-                </div>
-                <div class="card-body">
-                    <div class="grid grid-4" id="system-info">
-                        <div>
-                            <div class="stat-label">Plataforma</div>
-                            <div id="sys-platform">-</div>
-                        </div>
-                        <div>
-                            <div class="stat-label">Node.js</div>
-                            <div id="sys-node">-</div>
-                        </div>
-                        <div>
-                            <div class="stat-label">Hostname</div>
-                            <div id="sys-hostname">-</div>
-                        </div>
-                        <div>
-                            <div class="stat-label">Arquitetura</div>
-                            <div id="sys-arch">-</div>
-                        </div>
-                    </div>
+            <div>
+                <h1 class="text-xl font-bold tracking-tight text-white m-0 leading-tight">EW <span class="gradient-text">Command Center</span></h1>
+                <div class="flex items-center gap-2 text-xs mt-0.5">
+                    <span class="relative flex h-2 w-2">
+                        <span id="ping-ping" class="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                        <span id="ping-dot" class="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
+                    </span>
+                    <span id="connection-text" class="text-red-400 font-medium tracking-wide">Disconnected</span>
                 </div>
             </div>
         </div>
+        
+        <div class="flex gap-3">
+            <button onclick="clearAllCache()" class="btn-modern btn-secondary text-xs"><i class="fa-solid fa-broom"></i> Purge Cache</button>
+            <button onclick="location.href='/dashboard.html'" class="btn-modern btn-secondary text-xs"><i class="fa-solid fa-arrow-left"></i> Webapp</button>
+            <button onclick="logout()" class="btn-modern btn-danger text-xs"><i class="fa-solid fa-power-off"></i> Logout</button>
+        </div>
+    </nav>
 
-        <!-- Users Tab -->
-        <div id="tab-users" class="tab-content">
-            <div class="card">
-                <div class="card-header">
-                    <h3>👥 Usuários Conectados</h3>
-                    <button onclick="refreshUsers()" class="btn btn-secondary">🔄 Atualizar</button>
+    <!-- Main Content -->
+    <div class="flex-1 flex overflow-hidden">
+        
+        <!-- Sidebar Navigation -->
+        <aside class="w-64 glass-panel border-r border-dark-700 p-4 flex flex-col gap-2 relative z-10">
+            <p class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2 px-2 mt-4">Navegação Principal</p>
+            
+            <button class="nav-btn w-full text-left px-4 py-3 rounded-lg text-sm font-medium transition-all text-slate-300 hover:bg-dark-700 hover:text-white flex items-center gap-3 active bg-brand-600/10 text-brand-400 border border-brand-500/20" data-tab="overview">
+                <i class="fa-solid fa-chart-line w-5 text-center"></i> Visão Geral
+            </button>
+            
+            <button class="nav-btn w-full text-left px-4 py-3 rounded-lg text-sm font-medium transition-all text-slate-300 hover:bg-dark-700 hover:text-white flex items-center gap-3" data-tab="saas">
+                <i class="fa-solid fa-users w-5 text-center"></i> Gerenciar SaaS
+            </button>
+            
+            <button class="nav-btn w-full text-left px-4 py-3 rounded-lg text-sm font-medium transition-all text-slate-300 hover:bg-dark-700 hover:text-white flex items-center gap-3" data-tab="bots">
+                <i class="fa-solid fa-robot w-5 text-center"></i> Instâncias & Bots
+            </button>
+            
+            <button class="nav-btn w-full text-left px-4 py-3 rounded-lg text-sm font-medium transition-all text-slate-300 hover:bg-dark-700 hover:text-white flex items-center gap-3" data-tab="security">
+                <i class="fa-solid fa-shield-halved w-5 text-center"></i> Segurança & Logs
+            </button>
+            
+            <div class="mt-auto">
+                <div class="p-4 rounded-xl bg-dark-900 border border-dark-700 shadow-inner">
+                    <p class="text-xs text-slate-400 mb-2 font-medium">Uptime Servidor</p>
+                    <p class="text-lg font-bold text-green-400 font-mono tracking-tight" id="stat-uptime">00:00:00</p>
+                    <p class="text-[10px] text-slate-500 mt-1" id="stat-uptime-since">-</p>
                 </div>
-                <div class="card-body">
-                    <div class="table-container">
-                        <table>
-                            <thead>
-                                <tr>
-                                    <th>Agent ID</th>
-                                    <th>IP</th>
-                                    <th>Última Atividade</th>
-                                    <th>Tempo de Sessão</th>
-                                    <th>Permissão</th>
-                                    <th>Ações</th>
-                                </tr>
-                            </thead>
-                            <tbody id="users-table">
-                                <tr><td colspan="6" style="text-align: center; color: var(--text-secondary)">Carregando...</td></tr>
-                            </tbody>
+            </div>
+        </aside>
+
+        <!-- Dynamic Content Area -->
+        <main class="flex-1 overflow-y-auto p-6 bg-dark-900">
+            
+            <!-- OVERVIEW TAB -->
+            <div id="tab-overview" class="tab-content active">
+                <div class="flex justify-between items-center mb-6">
+                    <h2 class="text-2xl font-bold text-white">Painel de Controle em Tempo Real</h2>
+                    <button onclick="refreshDashboard()" class="text-brand-400 hover:text-brand-300 transition-colors"><i class="fa-solid fa-arrows-rotate"></i> Atualizar Agora</button>
+                </div>
+                
+                <!-- Metrics Row -->
+                <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                    <div class="glass-panel p-5 rounded-xl border border-dark-700 relative overflow-hidden">
+                        <div class="absolute -right-4 -top-4 w-16 h-16 bg-brand-500/10 rounded-full blur-xl"></div>
+                        <p class="text-sm font-medium text-slate-400 mb-1">Usuários Ativos (SaaS)</p>
+                        <h3 class="text-3xl font-bold text-white mb-2" id="stat-users">0</h3>
+                        <p class="text-xs text-green-400 flex items-center gap-1"><i class="fa-solid fa-circle-check text-[8px]"></i> Conectados agora</p>
+                    </div>
+                    
+                    <div class="glass-panel p-5 rounded-xl border border-dark-700 relative overflow-hidden">
+                        <p class="text-sm font-medium text-slate-400 mb-1 flex justify-between">CPU Usage <span id="stat-cpu">0%</span></p>
+                        <div class="w-full bg-dark-900 rounded-full h-2 mt-4 mb-2 overflow-hidden border border-dark-800">
+                            <div class="bg-gradient-to-r from-green-400 to-green-500 h-2 rounded-full transition-all duration-500" id="cpu-bar" style="width: 0%"></div>
+                        </div>
+                        <p class="text-[10px] text-slate-500" id="sys-platform">-</p>
+                    </div>
+                    
+                    <div class="glass-panel p-5 rounded-xl border border-dark-700 relative overflow-hidden">
+                        <p class="text-sm font-medium text-slate-400 mb-1 flex justify-between">Memory <span id="stat-memory">0%</span></p>
+                        <div class="w-full bg-dark-900 rounded-full h-2 mt-4 mb-2 overflow-hidden border border-dark-800">
+                            <div class="bg-gradient-to-r from-blue-400 to-blue-500 h-2 rounded-full transition-all duration-500" id="memory-bar" style="width: 0%"></div>
+                        </div>
+                        <p class="text-[10px] text-slate-500">Host: <span id="sys-hostname">-</span></p>
+                    </div>
+                    
+                    <div class="glass-panel p-5 rounded-xl border border-dark-700 relative overflow-hidden">
+                        <p class="text-sm font-medium text-slate-400 mb-1">Fluxo Mensagens/H</p>
+                        <h3 class="text-3xl font-bold text-brand-400 mb-2" id="bot-messages-today">0</h3>
+                        <p class="text-xs text-slate-500">Taxa de falhas: <span id="bot-errors" class="text-red-400 font-medium">0</span></p>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <!-- Realtime Global Feed -->
+                    <div class="glass-panel rounded-xl border border-dark-700 flex flex-col h-[400px]">
+                        <div class="p-4 border-b border-dark-700 flex justify-between items-center bg-dark-800/50 rounded-t-xl">
+                            <h3 class="font-semibold text-white flex items-center gap-2"><i class="fa-solid fa-bolt text-brand-400"></i> Eventos Globais</h3>
+                            <button onclick="document.getElementById('bot-activity-log').innerHTML=''" class="text-xs text-slate-400 hover:text-white"><i class="fa-solid fa-eraser"></i></button>
+                        </div>
+                        <div class="flex-1 p-4 overflow-y-auto live-console space-y-1" id="bot-activity-log">
+                            <div class="text-slate-500 flex gap-3"><span class="w-16 opacity-50">[--:--]</span> <span>Iniciando escuta de barramento...</span></div>
+                        </div>
+                    </div>
+                    
+                    <!-- Atividade Recente (Do Banco) -->
+                    <div class="glass-panel rounded-xl border border-dark-700 flex flex-col h-[400px]">
+                        <div class="p-4 border-b border-dark-700 flex justify-between items-center bg-dark-800/50 rounded-t-xl">
+                            <h3 class="font-semibold text-white flex items-center gap-2"><i class="fa-solid fa-database text-purple-400"></i> Snapshot do Banco</h3>
+                        </div>
+                        <div class="flex-1 p-0 overflow-y-auto">
+                            <table class="w-full text-left border-collapse">
+                                <thead>
+                                    <tr class="bg-dark-900/50 text-xs uppercase text-slate-500 border-b border-dark-700">
+                                        <th class="p-3 font-medium">Horário</th>
+                                        <th class="p-3 font-medium">Ação</th>
+                                        <th class="p-3 font-medium">Dados</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="recent-activity" class="text-sm">
+                                    <tr><td colspan="3" class="p-4 text-center text-slate-500">Carregando dados...</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- SAAS TAB -->
+            <div id="tab-saas" class="tab-content">
+                <div class="flex justify-between items-center mb-6">
+                    <div>
+                        <h2 class="text-2xl font-bold text-white">Gestão Multitenant SaaS</h2>
+                        <p class="text-slate-400 text-sm mt-1">Aprove licenças, gerencie planos e controle acessos.</p>
+                    </div>
+                    <button onclick="refreshSaasUsers()" class="btn-modern btn-primary"><i class="fa-solid fa-arrows-rotate"></i> Recarregar Clientes</button>
+                </div>
+                
+                <!-- Cadastro e Edição -->
+                <div class="glass-panel border border-dark-700 rounded-xl p-5 mb-6">
+                    <h3 class="text-lg font-semibold text-white mb-4 border-b border-dark-700 pb-2"><i class="fa-solid fa-user-plus mr-2 text-brand-400"></i> Provisionar / Editar Cliente</h3>
+                    
+                    <div class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                        <div><label class="block text-xs font-medium text-slate-400 mb-1">Email Master</label><input id="saas-email" class="input-field" placeholder="cliente@empresa.com"></div>
+                        <div><label class="block text-xs font-medium text-slate-400 mb-1">Agent ID (Sessão)</label><input id="saas-agent-id" class="input-field" placeholder="ex: cliente_01"></div>
+                        <div><label class="block text-xs font-medium text-slate-400 mb-1">Razão/Nome</label><input id="saas-company-name" class="input-field" placeholder="Empresa LTDA"></div>
+                        <div><label class="block text-xs font-medium text-slate-400 mb-1">CNPJ/CPF</label><input id="saas-cpf-cnpj" class="input-field" placeholder="00.000.000/0001-00"></div>
+                        
+                        <div>
+                            <label class="block text-xs font-medium text-slate-400 mb-1">Status Licença</label>
+                            <select id="saas-status" class="input-field">
+                                <option value="active">🟢 Ativo</option>
+                                <option value="pending">🟡 Pendente (Aprovação)</option>
+                                <option value="suspended">🔴 Suspenso</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium text-slate-400 mb-1">Plano Base</label>
+                            <select id="saas-plan-term" class="input-field">
+                                <option value="demo">Trial (7 dias)</option>
+                                <option value="30d">Mensal</option>
+                                <option value="60d">Bimestral</option>
+                                <option value="12m">Anual</option>
+                                <option value="lifetime">Vitalício</option>
+                            </select>
+                        </div>
+                        <div><label class="block text-xs font-medium text-slate-400 mb-1">Limite Assentos</label><input id="saas-seats" type="number" class="input-field" value="1" min="1"></div>
+                        <div><label class="block text-xs font-medium text-slate-400 mb-1">Vencimento Manual</label><input id="saas-expires-at" type="datetime-local" class="input-field"></div>
+                        
+                        <!-- Campos ocultos mantidos por compatibilidade com api antiga -->
+                        <input type="hidden" id="saas-desired-plan" value="demo">
+                        <input type="hidden" id="saas-client-id" value="">
+                        <input type="hidden" id="saas-activation-code" value="">
+                    </div>
+                    
+                    <div class="flex gap-3 mt-5 pt-4 border-t border-dark-700">
+                        <button onclick="saveSaasUser()" class="btn-modern btn-primary px-6"><i class="fa-solid fa-save"></i> Gravar Alterações no Banco</button>
+                        <button onclick="clearSaasForm()" class="btn-modern btn-secondary"><i class="fa-solid fa-xmark"></i> Limpar Painel</button>
+                    </div>
+                </div>
+
+                <!-- Solicitações Pendentes -->
+                <div class="glass-panel border border-warning/30 rounded-xl mb-6 overflow-hidden">
+                    <div class="bg-yellow-500/10 p-4 border-b border-yellow-500/20 flex justify-between items-center">
+                        <h3 class="font-semibold text-yellow-500 flex items-center gap-2"><i class="fa-solid fa-clock"></i> Fila de Aprovação (<span id="pending-requests-count">0</span>)</h3>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left border-collapse">
+                            <thead><tr class="bg-dark-900/50 text-xs uppercase text-slate-500 border-b border-dark-700">
+                                <th class="p-3 font-medium">Email / Contato</th><th class="p-3 font-medium">Agent ID (Sessão)</th><th class="p-3 font-medium">Plano Requirido</th><th class="p-3 font-medium">Criado Em</th><th class="p-3 font-medium text-right">Ação Rápida</th>
+                            </tr></thead>
+                            <tbody id="pending-requests-table" class="text-sm"><tr><td colspan="5" class="p-4 text-center text-slate-500">Nenhuma solicitação em aguardo.</td></tr></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Tabela Principal SaaS -->
+                <div class="glass-panel border border-dark-700 rounded-xl overflow-hidden">
+                    <div class="p-4 border-b border-dark-700 bg-dark-800/50">
+                        <h3 class="font-semibold text-white">Diretório de Clientes</h3>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left border-collapse">
+                            <thead><tr class="bg-dark-900/50 text-xs uppercase text-slate-500 border-b border-dark-700">
+                                <th class="p-3 font-medium">Master Account</th><th class="p-3 font-medium">Agent Router</th><th class="p-3 font-medium">Doc</th><th class="p-3 font-medium">Situação</th><th class="p-3 font-medium">Ciclo</th><th class="p-3 font-medium">Término</th><th class="p-3 font-medium">Ferramentas</th>
+                            </tr></thead>
+                            <tbody id="saas-users-table" class="text-sm"><tr><td colspan="7" class="p-4 text-center text-slate-500">Carregando base de clientes...</td></tr></tbody>
                         </table>
                     </div>
                 </div>
             </div>
 
-            <div class="card" style="margin-top: 1.5rem;">
-                <div class="card-header">
-                    <h3>🛡️ Administradores autorizados</h3>
-                    <button onclick="loadAdminUsers()" class="btn btn-secondary">🔄 Atualizar</button>
-                </div>
-                <div class="card-body">
-                    <div style="display:flex; gap:0.5rem; margin-bottom: 1rem;">
-                        <input id="new-admin-email" class="form-input" placeholder="email@dominio.com" style="max-width: 340px;">
-                        <button onclick="addAdminUser()" class="btn btn-primary">Adicionar admin</button>
+            <!-- BOTS E INSTÂNCIAS TAB -->
+            <div id="tab-bots" class="tab-content">
+                <div class="flex justify-between items-center mb-6">
+                    <div>
+                        <h2 class="text-2xl font-bold text-white">Instâncias do Motor WhatsApp</h2>
+                        <p class="text-slate-400 text-sm mt-1">Status real das instâncias Python e roteamento de clientes.</p>
                     </div>
-                    <div class="table-container">
-                        <table>
-                            <thead>
-                                <tr>
-                                    <th>Email</th>
-                                    <th>Ações</th>
-                                </tr>
-                            </thead>
-                            <tbody id="admin-users-table">
-                                <tr><td colspan="2" style="text-align:center; color: var(--text-secondary)">Carregando...</td></tr>
-                            </tbody>
+                    <div class="flex gap-2">
+                        <button onclick="loadProvisioningData()" class="btn-modern btn-secondary"><i class="fa-solid fa-arrows-rotate"></i> Sincronizar Hub</button>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 xl:grid-cols-3 gap-6">
+                    <!-- Gerar Nova Instância -->
+                    <div class="glass-panel rounded-xl border border-dark-700 p-5 xl:col-span-1 border-t-4 border-t-purple-500">
+                        <h3 class="font-semibold text-white mb-4"><i class="fa-solid fa-microchip text-purple-400 mr-2"></i> Criar Endpoint P/ Bot</h3>
+                        <div class="space-y-3">
+                            <div><label class="block text-xs font-medium text-slate-400 mb-1">Nome de Identificação</label><input id="new-client-name" class="input-field" placeholder="Worker Node Alpha"></div>
+                            <div><label class="block text-xs font-medium text-slate-400 mb-1">Finalidade</label><input id="new-client-description" class="input-field" placeholder="Ex: Cluster dedicado cliente X"></div>
+                            <div class="grid grid-cols-2 gap-2 text-sm text-slate-300 bg-dark-900 p-3 rounded-lg border border-dark-800">
+                                <label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" id="perm-gemini" checked class="accent-brand-500"> IA Gemini</label>
+                                <label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" id="perm-realtime" checked class="accent-brand-500"> WSS Realtime</label>
+                                <label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" id="perm-campaigns" checked class="accent-brand-500"> Disparo Lote</label>
+                                <label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" id="perm-contacts" checked class="accent-brand-500"> Agenda</label>
+                            </div>
+                            <button onclick="createBotClient()" class="btn-modern btn-primary w-full mt-2"><i class="fa-solid fa-hammer"></i> Gerar API KEY do Bot</button>
+                            <span id="new-client-feedback" class="block text-xs text-center text-green-400 mt-2 font-mono"></span>
+                        </div>
+                    </div>
+
+                    <!-- Tabela de Instâncias Existentes -->
+                    <div class="glass-panel rounded-xl border border-dark-700 xl:col-span-2 overflow-hidden flex flex-col">
+                        <div class="p-4 border-b border-dark-700 bg-dark-800/50 flex justify-between items-center">
+                            <h3 class="font-semibold text-white">Workers Permitidos no Servidor</h3>
+                        </div>
+                        <div class="flex-1 overflow-x-auto min-h-[300px]">
+                            <table class="w-full text-left border-collapse">
+                                <thead><tr class="bg-dark-900/50 text-xs uppercase text-slate-500 border-b border-dark-700">
+                                    <th class="p-3 font-medium">Bot Agent ID</th>
+                                    <th class="p-3 font-medium">Label</th>
+                                    <th class="p-3 font-medium">Secret Key (Parcial)</th>
+                                    <th class="p-3 font-medium">IA/RT</th>
+                                    <th class="p-3 font-medium">Node State</th>
+                                    <th class="p-3 font-medium text-right">Comandos</th>
+                                </tr></thead>
+                                <tbody id="clients-table" class="text-sm"><tr><td colspan="6" class="p-4 text-center text-slate-500">Buscando do banco de autenticação...</td></tr></tbody>
+                            </table>
+                        </div>
+                        <div class="p-4 bg-dark-900 border-t border-dark-700 relative">
+                            <label class="block text-xs font-semibold text-brand-400 uppercase tracking-widest mb-2">Payload .ENV P/ o Servidor Python</label>
+                            <textarea id="provision-payload" class="w-full bg-black text-green-400 font-mono text-xs p-3 rounded-lg border border-dark-600 focus:border-brand-500 outline-none" rows="5" readonly placeholder="Selecione um bot acima em '📋 Payload' para gerar as variáveis de ambiente necessárias para o contêiner Python dele."></textarea>
+                        </div>
+                    </div>
+                </div>
+
+                 <!-- Users Tab inside Bots - To disconnect people -->
+                 <div class="glass-panel rounded-xl border border-dark-700 overflow-hidden mt-6">
+                    <div class="p-4 border-b border-dark-700 bg-dark-800/50 flex justify-between items-center">
+                        <h3 class="font-semibold text-white">Sessões Ativas no Backend Node.js (Web/App)</h3>
+                        <button onclick="refreshUsers()" class="text-xs text-slate-400 hover:text-white"><i class="fa-solid fa-arrows-rotate"></i></button>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left border-collapse">
+                            <thead><tr class="bg-dark-900/50 text-xs uppercase text-slate-500 border-b border-dark-700">
+                                <th class="p-3 font-medium">Roteador (Agent ID)</th><th class="p-3 font-medium">IP Origem</th><th class="p-3 font-medium">Tempo Con.</th><th class="p-3 font-medium">ACL</th><th class="p-3 font-medium text-right">Corte de Sinal</th>
+                            </tr></thead>
+                            <tbody id="users-table" class="text-sm"><tr><td colspan="5" class="p-4 text-center text-slate-500">Nenhum websocket pendurado.</td></tr></tbody>
                         </table>
                     </div>
                 </div>
             </div>
 
-            <div class="card" style="margin-top: 1.5rem;">
-                <div class="card-header">
-                    <h3>🪪 Usuários SaaS e Licenças</h3>
-                    <button onclick="refreshUsersAndLicenses()" class="btn btn-secondary">🔄 Atualizar</button>
+            <!-- SECURITY TAB -->
+            <div id="tab-security" class="tab-content">
+                <div class="flex justify-between items-center mb-6">
+                    <div>
+                        <h2 class="text-2xl font-bold text-white">Centro de Monitoramento e Segurança</h2>
+                        <p class="text-slate-400 text-sm mt-1">Logs de sistema, tentativas de invasão e métricas da API.</p>
+                    </div>
+                    <button onclick="refreshSecurityLogs()" class="btn-modern btn-secondary"><i class="fa-solid fa-arrows-rotate"></i> Puxar Logs</button>
                 </div>
-                <div class="card-body">
-                    <div class="table-container">
-                        <table>
-                            <thead>
-                                <tr>
-                                    <th>Código</th>
-                                    <th>Status</th>
-                                    <th>Plano</th>
-                                    <th>Expira</th>
-                                    <th>Última atividade</th>
-                                    <th>Ações</th>
-                                </tr>
-                            </thead>
-                            <tbody id="users-licenses-table">
-                                <tr><td colspan="6" style="text-align:center; color: var(--text-secondary)">Carregando...</td></tr>
-                            </tbody>
-                        </table>
+
+                <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                    <div class="glass-panel p-4 rounded-xl border border-dark-700">
+                        <p class="text-xs font-medium text-slate-400 mb-1">Falhas Auth API</p><h3 class="text-2xl font-bold text-red-400" id="stat-access-attempts">0</h3>
+                    </div>
+                    <div class="glass-panel p-4 rounded-xl border border-dark-700">
+                        <p class="text-xs font-medium text-slate-400 mb-1">Interrupções (Blocks)</p><h3 class="text-2xl font-bold text-orange-400" id="stat-blocks">0</h3>
+                    </div>
+                    <div class="glass-panel p-4 rounded-xl border border-dark-700">
+                        <p class="text-xs font-medium text-slate-400 mb-1">Endereços IP rastreados</p><h3 class="text-2xl font-bold text-blue-400" id="stat-unique-ips">0</h3>
+                    </div>
+                    <div class="glass-panel p-4 rounded-xl border border-dark-700">
+                        <p class="text-xs font-medium text-slate-400 mb-1">Alertas Disparados Hoje</p><h3 class="text-2xl font-bold text-white" id="stat-events-today">0</h3>
                     </div>
                 </div>
-            </div>
-        </div>
 
-        <!-- Security Tab -->
-        <div id="tab-security" class="tab-content">
-            <div class="grid grid-4" style="margin-bottom: 1.5rem;">
-                <div class="stat-card">
-                    <div class="stat-label">Tentativas de Acesso</div>
-                    <div class="stat-value warning" id="stat-access-attempts">0</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-label">Bloqueios</div>
-                    <div class="stat-value danger" id="stat-blocks">0</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-label">IPs Únicos</div>
-                    <div class="stat-value primary" id="stat-unique-ips">0</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-label">Eventos Hoje</div>
-                    <div class="stat-value" id="stat-events-today">0</div>
-                </div>
-            </div>
-
-            <div class="card">
-                <div class="card-header">
-                    <h3>🔒 Logs de Segurança</h3>
-                    <div style="display: flex; gap: 0.5rem;">
-                        <select id="security-filter" class="form-input" style="width: auto;" onchange="filterSecurityLogs()">
-                            <option value="">Todos</option>
-                            <option value="auth_failed">Auth Falhou</option>
-                            <option value="permission_change">Permissão</option>
-                            <option value="user_disconnected">Desconexão</option>
-                            <option value="intrusion_attempt">Tentativa Invasão</option>
+                <div class="glass-panel border border-dark-700 rounded-xl overflow-hidden mb-6 flex flex-col h-[500px]">
+                    <div class="p-4 border-b border-dark-700 bg-dark-800/50 flex justify-between items-center">
+                        <h3 class="font-semibold text-white flex items-center gap-2"><i class="fa-solid fa-shield text-red-400"></i> Eventos de Segurança Auditados</h3>
+                        <select id="security-filter" class="bg-dark-900 border border-dark-600 text-xs px-3 py-1.5 rounded-lg outline-none text-slate-300" onchange="filterSecurityLogs()">
+                            <option value="">TODOS OS EVENTOS</option>
+                            <option value="auth_failed">API KEYS RECUSADAS</option>
+                            <option value="user_disconnected">QUEDAS DE REDE</option>
+                            <option value="permission_change">ELEVAÇÃO PRIVILÉGIOS</option>
                         </select>
-                        <button onclick="refreshSecurityLogs()" class="btn btn-secondary">🔄</button>
                     </div>
-                </div>
-                <div class="card-body">
-                    <div id="security-logs">
-                        <p style="color: var(--text-secondary)">Carregando...</p>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Bot Tab -->
-        <div id="tab-bot" class="tab-content">
-            <div class="grid grid-4" style="margin-bottom: 1.5rem;">
-                <div class="stat-card">
-                    <div class="stat-label">Status do Bot</div>
-                    <div class="stat-value" id="bot-status-text">-</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-label">Mensagens Hoje</div>
-                    <div class="stat-value success" id="bot-messages-today">0</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-label">Erros</div>
-                    <div class="stat-value danger" id="bot-errors">0</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-label">Taxa de Sucesso</div>
-                    <div class="stat-value primary" id="bot-success-rate">-</div>
-                </div>
-            </div>
-
-            <div class="grid grid-2">
-                <div class="card">
-                    <div class="card-header">
-                        <h3>📤 Atividade do Bot (Tempo Real)</h3>
-                    </div>
-                    <div class="card-body">
-                        <div class="live-console" id="bot-activity-log">
-                            <div class="console-line">
-                                <span class="time">[--:--:--]</span>
-                                <span class="event">Aguardando eventos...</span>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="card">
-                    <div class="card-header">
-                        <h3>❌ Erros da Extensão</h3>
-                        <button onclick="refreshExtensionErrors()" class="btn btn-secondary">🔄</button>
-                    </div>
-                    <div class="card-body">
-                        <div class="live-console" id="extension-errors-log">
-                            <div class="console-line">
-                                <span class="time">[--:--:--]</span>
-                                <span class="event">Nenhum erro registrado</span>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Extension Tab -->
-        <div id="tab-extension" class="tab-content">
-            <div class="grid grid-2">
-                <div class="card extension-card">
-                    <div class="extension-icon">📦</div>
-                    <div class="extension-title">EmidiaWhats Extension</div>
-                    <div class="extension-version" id="ext-version">v2.0.0 PRO</div>
-                    <div class="extension-actions">
-                        <button onclick="downloadExtension()" class="btn btn-primary">⬇️ Download ZIP</button>
-                        <button onclick="showSendModal()" class="btn btn-secondary">📧 Enviar por Email</button>
-                    </div>
-                    <div style="margin-top: 2rem; text-align: left;">
-                        <h4 style="margin-bottom: 1rem;">📋 Instruções de Instalação:</h4>
-                        <ol id="install-instructions" style="color: var(--text-secondary); line-height: 2;">
-                            <li>Clique em Download para baixar a extensão</li>
-                            <li>Extraia o arquivo ZIP</li>
-                            <li>Abra chrome://extensions no Chrome</li>
-                            <li>Ative "Modo do desenvolvedor"</li>
-                            <li>Clique em "Carregar sem compactação"</li>
-                            <li>Selecione a pasta extraída</li>
-                        </ol>
-                    </div>
-                </div>
-
-                <div class="card">
-                    <div class="card-header">
-                        <h3>📊 Estatísticas da Extensão</h3>
-                    </div>
-                    <div class="card-body">
-                        <div class="grid grid-2">
-                            <div class="stat-card">
-                                <div class="stat-label">Instalações Ativas</div>
-                                <div class="stat-value primary" id="ext-installs">-</div>
-                            </div>
-                            <div class="stat-card">
-                                <div class="stat-label">Downloads</div>
-                                <div class="stat-value success" id="ext-downloads">-</div>
-                            </div>
-                        </div>
-                        <div style="margin-top: 1.5rem;">
-                            <h4 style="margin-bottom: 0.5rem;">Recursos:</h4>
-                            <ul style="color: var(--text-secondary); line-height: 2;">
-                                <li>✅ Envio de mensagens em massa</li>
-                                <li>✅ Anti-ban com comportamento humanizado</li>
-                                <li>✅ Importação de Excel/CSV</li>
-                                <li>✅ Envio de mídia (imagens)</li>
-                                <li>✅ Dashboard em tempo real</li>
-                                <li>✅ Variantes com IA (Gemini)</li>
-                            </ul>
+                    <div class="flex-1 overflow-y-auto p-0 bg-black/30">
+                        <div id="security-logs" class="divide-y divide-dark-800">
+                            <p class="p-4 text-center text-slate-500 text-sm">Nenhum evento registrado nessa sessão.</p>
                         </div>
                     </div>
                 </div>
             </div>
 
-            <div class="grid grid-2" style="margin-top: 1.5rem;">
-                <div class="card">
-                    <div class="card-header">
-                        <h3>🔧 Configuração distribuída</h3>
-                        <button onclick="loadProvisioningData()" class="btn btn-secondary">🔄</button>
-                    </div>
-                    <div class="card-body">
-                        <div class="form-group">
-                            <label class="form-label">URL da API</label>
-                            <input id="runtime-api-url" class="form-input" placeholder="https://tcgsolucoes.app/api">
-                        </div>
-                        <div class="form-group">
-                            <label class="form-label">URL do WebSocket</label>
-                            <input id="runtime-ws-url" class="form-input" placeholder="wss://tcgsolucoes.app/ws">
-                        </div>
-                        <button onclick="saveRuntimeConfig()" class="btn btn-primary">Salvar endpoints</button>
-                    </div>
-                </div>
-
-                <div class="card">
-                    <div class="card-header">
-                        <h3>🤖 Novo bot / cliente</h3>
-                    </div>
-                    <div class="card-body">
-                        <div class="form-group">
-                            <label class="form-label">Nome do bot</label>
-                            <input id="new-client-name" class="form-input" placeholder="Ex: Cliente Acme - Bot 01">
-                        </div>
-                        <div class="form-group">
-                            <label class="form-label">Descrição</label>
-                            <input id="new-client-description" class="form-input" placeholder="Opcional">
-                        </div>
-                        <div class="grid grid-2">
-                            <label><input type="checkbox" id="perm-gemini" checked> Permitir Gemini</label>
-                            <label><input type="checkbox" id="perm-realtime" checked> Permitir tempo real</label>
-                            <label><input type="checkbox" id="perm-campaigns" checked> Permitir campanhas</label>
-                            <label><input type="checkbox" id="perm-contacts" checked> Permitir contatos</label>
-                        </div>
-                        <div style="margin-top: 1rem; display:flex; gap: 0.75rem; flex-wrap: wrap;">
-                            <button onclick="createBotClient()" class="btn btn-primary">Criar bot</button>
-                            <span id="new-client-feedback" style="color: var(--text-secondary); font-size: 0.85rem;"></span>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <div class="card" style="margin-top: 1.5rem;">
-                <div class="card-header">
-                    <h3>📋 Bots provisionados</h3>
-                    <button onclick="loadProvisioningData()" class="btn btn-secondary">Atualizar</button>
-                </div>
-                <div class="card-body">
-                    <div class="table-container">
-                        <table>
-                            <thead>
-                                <tr>
-                                    <th>Bot ID</th>
-                                    <th>Nome</th>
-                                    <th>Chave</th>
-                                    <th>Gemini</th>
-                                    <th>Realtime</th>
-                                    <th>Status</th>
-                                    <th>Ações</th>
-                                </tr>
-                            </thead>
-                            <tbody id="clients-table">
-                                <tr><td colspan="7" style="text-align:center; color: var(--text-secondary)">Carregando...</td></tr>
-                            </tbody>
-                        </table>
-                    </div>
-                    <div class="form-group" style="margin-top: 1rem;">
-                        <label class="form-label">Payload para copiar na extensão</label>
-                        <textarea id="provision-payload" class="form-input" rows="8" readonly placeholder="Selecione um bot para gerar o payload"></textarea>
-                    </div>
-                </div>
-            </div>
-
-            <div class="card" style="margin-top: 1.5rem;">
-                <div class="card-header">
-                    <h3>🔐 Instalações da extensão</h3>
-                    <button onclick="loadProvisioningData()" class="btn btn-secondary">Atualizar</button>
-                </div>
-                <div class="card-body">
-                    <div class="table-container">
-                        <table>
-                            <thead>
-                                <tr>
-                                    <th>Código</th>
-                                    <th>Status</th>
-                                    <th>Plano</th>
-                                    <th>Expira em</th>
-                                    <th>Última atividade</th>
-                                    <th>Ações</th>
-                                </tr>
-                            </thead>
-                            <tbody id="installations-table">
-                                <tr><td colspan="6" style="text-align:center; color: var(--text-secondary)">Carregando...</td></tr>
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Console Tab -->
-        <div id="tab-console" class="tab-content">
-            <div class="card">
-                <div class="card-header">
-                    <h3>💻 Console em Tempo Real</h3>
-                    <div style="display: flex; gap: 0.5rem;">
-                        <button onclick="clearConsole()" class="btn btn-secondary">🗑️ Limpar</button>
-                        <button onclick="toggleAutoScroll()" class="btn btn-secondary" id="autoscroll-btn">📜 Auto-scroll: ON</button>
-                    </div>
-                </div>
-                <div class="card-body">
-                    <div class="live-console" id="realtime-console" style="height: 500px;">
-                        <div class="console-line">
-                            <span class="time">[--:--:--]</span>
-                            <span class="event">system</span>
-                            <span class="data">Console iniciado. Aguardando eventos...</span>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <div class="card" style="margin-top: 1.5rem;">
-                <div class="card-header">
-                    <h3>📢 Broadcast</h3>
-                </div>
-                <div class="card-body">
-                    <div style="display: flex; gap: 1rem;">
-                        <input type="text" id="broadcast-event" placeholder="Nome do evento" class="form-input" style="flex: 1;">
-                        <input type="text" id="broadcast-data" placeholder='{"key": "value"}' class="form-input" style="flex: 2;">
-                        <button onclick="sendBroadcast()" class="btn btn-primary">📤 Enviar</button>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </main>
-
-    <!-- Send Extension Modal -->
-    <div class="modal-overlay" id="send-modal">
-        <div class="modal">
-            <div class="modal-header">
-                <h3>📧 Enviar Extensão</h3>
-            </div>
-            <div class="modal-body">
-                <div class="form-group">
-                    <label class="form-label">Email do Cliente</label>
-                    <input type="email" id="send-email" class="form-input" placeholder="cliente@email.com">
-                </div>
-                <p style="color: var(--text-secondary); font-size: 0.875rem; margin-top: 1rem;">
-                    O cliente receberá um email com link para download e instruções de instalação.
-                </p>
-            </div>
-            <div class="modal-footer">
-                <button onclick="closeSendModal()" class="btn btn-secondary">Cancelar</button>
-                <button onclick="sendExtensionEmail()" class="btn btn-primary">Enviar</button>
-            </div>
-        </div>
+        </main>
     </div>
 
-    <!-- Toast Container -->
-    <div class="toast-container" id="toast-container"></div>
+    <!-- Notification Engine -->
+    <div id="toast-container" class="fixed bottom-6 right-6 z-[100] flex flex-col gap-3 pointer-events-none"></div>
 
-    <script>
+    <script nonce="__CSP_NONCE__">
+        // Core Config
         const API_URL = '/api';
         const WS_URL = location.protocol === 'https:' ? 'wss://' + location.host + '/ws' : 'ws://' + location.host + '/ws';
         const maintenanceBase = location.pathname.replace(/\/admin\/?$/, '');
-        
-        let supabaseClient = null;
-        let _supabaseInitPromise = null;
+        let supabaseClient = null; let _supabaseInitPromise = null;
 
+        // UI Interactions
+        document.querySelectorAll('.nav-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.nav-btn').forEach(b => {
+                    b.classList.remove('active', 'bg-brand-600/10', 'text-brand-400', 'border-brand-500/20');
+                    b.classList.add('text-slate-300', 'border-transparent');
+                });
+                btn.classList.remove('text-slate-300', 'border-transparent');
+                btn.classList.add('active', 'bg-brand-600/10', 'text-brand-400', 'border-brand-500/20');
+                
+                document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+                const target = document.getElementById('tab-' + btn.dataset.tab);
+                if (target) target.classList.add('active');
+            });
+        });
+
+        // Backend Bridge
         async function initSupabase() {
-            // Singleton: guarantee only one createClient call ever runs
             if (supabaseClient) return supabaseClient;
             if (_supabaseInitPromise) return _supabaseInitPromise;
             _supabaseInitPromise = (async () => {
-                const response = await fetch('/api/public/runtime-config');
-                const payload = await response.json();
-                const supabaseUrl = String(payload?.config?.supabase?.url || '').trim();
-                const supabaseAnonKey = String(payload?.config?.supabase?.anonKey || '').trim();
-                if (!supabaseUrl || !supabaseAnonKey) {
-                    throw new Error('Supabase não configurado no servidor.');
-                }
-                supabaseClient = supabase.createClient(supabaseUrl, supabaseAnonKey);
+                const res = await fetch('/api/public/runtime-config');
+                const p = await res.json();
+                supabaseClient = supabase.createClient(p.config.supabase.url, p.config.supabase.anonKey, { auth: { storageKey: 'emidia-admin-auth-token' }});
                 return supabaseClient;
             })();
             return _supabaseInitPromise;
         }
 
-        let ws = null;
-        let autoScroll = true;
-        let reconnectAttempts = 0;
-        let pythonAuthFailCount = 0;
-        let pythonAuthFailLastAt = 0;
-        let dashboardRefreshTimer = null;
-
-        // Auth check
         async function checkAuth() {
-            if (!supabaseClient) {
-                await initSupabase();
-            }
+            if (!supabaseClient) await initSupabase();
             const { data: { session } } = await supabaseClient.auth.getSession();
-            if (!session) {
-                window.location.href = maintenanceBase;
-                return null;
-            }
-            const accessResponse = await fetch('/api/admin/access/me', {
-                headers: {
-                    'Authorization': `Bearer ${session.access_token}`,
-                    'x-agent-id': 'admin-console',
-                }
-            });
-            const accessPayload = await accessResponse.json().catch(() => ({}));
-            if (!accessPayload?.allowed) {
-                await supabaseClient.auth.signOut();
-                window.location.href = '/usuarios';
-                return null;
-            }
+            if (!session) { window.location.href = maintenanceBase; return null; }
+            const authRes = await fetch('/api/admin/access/me', { headers: { 'Authorization': 'Bearer ' + session.access_token, 'x-agent-id': 'admin-console' }});
+            const p = await authRes.json().catch(() => ({}));
+            if (!p.allowed) { await supabaseClient.auth.signOut(); window.location.href = '/usuarios'; return null; }
             return session;
         }
 
-        async function logout() {
-            await supabaseClient.auth.signOut();
-            window.location.href = maintenanceBase;
-        }
-
-        // API Helper
         async function apiRequest(endpoint, options = {}) {
-            const session = await checkAuth();
-            if (!session?.access_token) {
-                throw new Error('Sessão inválida. Faça login novamente.');
-            }
-            const response = await fetch(`${API_URL}${endpoint}`, {
+            const s = await checkAuth();
+            if (!s) throw new Error('Auth fail');
+            const r = await fetch(API_URL + endpoint, {
                 ...options,
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${session.access_token}`,
-                    'x-agent-id': 'admin-console',
-                    ...options.headers,
-                },
+                headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + s.access_token, 'x-agent-id': 'admin-console', ...options.headers }
             });
-            if (response.status === 401) {
-                await logout();
-                throw new Error('Sessão expirada.');
-            }
-            return response.json();
+            if (r.status === 401) { await logout(); throw new Error('Sessão expirada'); }
+            return r.json();
         }
 
-        // Toast notifications
-        function showToast(message, type = 'success') {
-            const container = document.getElementById('toast-container');
-            const toast = document.createElement('div');
-            toast.className = `toast ${type}`;
-            toast.textContent = message;
-            container.appendChild(toast);
-            setTimeout(() => toast.remove(), 5000);
+        async function logout() { await supabaseClient.auth.signOut(); window.location.href = maintenanceBase; }
+
+        function showToast(msg, type = 'success') {
+            const c = document.getElementById('toast-container');
+            const t = document.createElement('div');
+            
+            const color = type === 'success' ? 'border-green-500 bg-green-500/10 text-green-400' 
+                        : type === 'error' ? 'border-red-500 bg-red-500/10 text-red-400' 
+                        : 'border-yellow-500 bg-yellow-500/10 text-yellow-400';
+            const icon = type === 'success' ? 'fa-check' : type === 'error' ? 'fa-triangle-exclamation' : 'fa-circle-info';
+            
+            t.className = 'glass-panel px-4 py-3 rounded-lg border-l-4 ' + color + ' text-sm shadow-xl flex items-center gap-3 backdrop-blur-xl max-w-sm pointer-events-auto transform translate-x-full transition-transform duration-300';
+            t.innerHTML = '<i class="fa-solid ' + icon + ' text-lg"></i> <div>' + msg + '</div>';
+            c.appendChild(t);
+            requestAnimationFrame(() => t.classList.remove('translate-x-full'));
+            setTimeout(() => {
+                t.classList.add('opacity-0', 'translate-x-full');
+                setTimeout(() => t.remove(), 300);
+            }, 4000);
         }
 
-        // Tab switching
-        document.querySelectorAll('.tab').forEach(tab => {
-            tab.addEventListener('click', () => {
-                document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-                document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-                tab.classList.add('active');
-                document.getElementById(`tab-${tab.dataset.tab}`).classList.add('active');
-            });
-        });
-
-        // WebSocket connection
+        // WebSockets
+        let ws=null; let reconnect=0; let dashTmr=null;
         async function connectWebSocket() {
-            const session = await checkAuth();
-            if (!session?.access_token) return;
-            const url = new URL(WS_URL);
-            url.searchParams.set('access_token', session.access_token);
-            url.searchParams.set('agentId', 'admin-console');
-            ws = new WebSocket(url.toString());
+            const s = await checkAuth(); if (!s) return;
+            ws = new WebSocket(WS_URL + '?access_token=' + s.access_token + '&agentId=admin-console');
             
             ws.onopen = () => {
-                reconnectAttempts = 0;
-                document.getElementById('connection-status').className = 'connection-status connected';
-                document.getElementById('connection-text').textContent = 'Conectado';
-                logToConsole('system', 'WebSocket conectado');
+                reconnect = 0;
+                document.getElementById('connection-text').textContent = 'Link Estabelecido';
+                document.getElementById('connection-text').className = 'text-green-400 font-medium tracking-wide';
+                document.getElementById('ping-ping').className = 'animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75';
+                document.getElementById('ping-dot').className = 'relative inline-flex rounded-full h-2 w-2 bg-green-500';
+                appendWSEvent('SYSTEM', 'Link com barramento principal estabelecido. Escutando via WSS.', 'success');
             };
-
             ws.onclose = () => {
-                document.getElementById('connection-status').className = 'connection-status disconnected';
-                document.getElementById('connection-text').textContent = 'Desconectado';
-                logToConsole('system', 'WebSocket desconectado. Reconectando...');
-                
-                const delay = Math.min(30000, 1000 * Math.pow(2, reconnectAttempts));
-                reconnectAttempts++;
-                setTimeout(connectWebSocket, delay);
+                document.getElementById('connection-text').textContent = 'Sinal Perdido';
+                document.getElementById('connection-text').className = 'text-red-400 font-medium tracking-wide';
+                document.getElementById('ping-ping').className = 'animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75';
+                document.getElementById('ping-dot').className = 'relative inline-flex rounded-full h-2 w-2 bg-red-500';
+                setTimeout(connectWebSocket, Math.min(30000, 1000 * Math.pow(2, reconnect++)));
             };
-
-            ws.onmessage = (event) => {
+            ws.onmessage = (e) => {
                 try {
-                    const data = JSON.parse(event.data);
-                    handleRealtimeEvent(data);
-                } catch (e) {
-                    console.error('WS parse error:', e);
-                }
+                    const data = JSON.parse(e.data);
+                    if (data.type === 'hello' || data.type === 'pong') return;
+                    const eventName = data.event || data.type || 'event';
+                    
+                    if (eventName === 'admin.saas_signup_requested') refreshSaasUsers();
+                    
+                    // Logs visual no painel
+                    const payloadStr = typeof data.data === 'object' ? JSON.stringify(data.data) : (data.data || '-');
+                    appendWSEvent(eventName, payloadStr, eventName.includes('error') || eventName.includes('failed') ? 'error' : 'info');
+
+                    // If it's a message flow event, refresh dashboard data
+                    if (['messages.status.updated', 'message.sent', 'campaign.progress'].includes(eventName)) scheduleDashRefresh();
+
+                } catch (err) {}
             };
         }
 
-        function scheduleDashboardRefresh(delay = 800) {
-            if (dashboardRefreshTimer) {
-                clearTimeout(dashboardRefreshTimer);
-            }
-            dashboardRefreshTimer = setTimeout(() => {
-                dashboardRefreshTimer = null;
-                refreshDashboard();
-            }, delay);
+        function appendWSEvent(evt, data, type='info') {
+            const feed = document.getElementById('bot-activity-log');
+            const d = document.createElement('div');
+            const time = new Date().toLocaleTimeString('pt-BR', {hour12:false});
+            const c = type==='error'?'text-red-400':type==='success'?'text-green-400':'text-brand-400';
+            d.className = 'py-1 border-b border-dark-800/50 flex gap-3 text-[11px] leading-tight hover:bg-dark-800/50 transition-colors';
+            d.innerHTML = '<span class="text-slate-500 w-16 opacity-70 shrink-0">['+time+']</span> <span class="font-bold '+c+' shrink-0">['+evt.toUpperCase()+']</span> <span class="text-slate-300 break-all overflow-hidden">'+data+'</span>';
+            feed.prepend(d);
+            while(feed.children.length > 200) feed.removeChild(feed.lastChild);
         }
 
-        function handleRealtimeEvent(data) {
-            const envelopeType = String(data?.type || '').trim();
-            if (envelopeType === 'hello' || envelopeType === 'pong') {
-                return;
-            }
-            const event = String(data?.event || envelopeType || 'event');
-            const payload = data?.data || data || {};
-
-            if (
-                event === 'admin.security' &&
-                payload?.reason === 'invalid_token' &&
-                String(payload?.userAgent || '').toLowerCase().includes('python-requests') &&
-                String(payload?.endpoint || '').includes('/api/messages/next')
-            ) {
-                pythonAuthFailCount += 1;
-                const now = Date.now();
-                if (now - pythonAuthFailLastAt > 15000) {
-                    pythonAuthFailLastAt = now;
-                    logToConsole('python_bot.auth_failed', `Falha de token em /messages/next (${pythonAuthFailCount}x). Verifique API_SECRET_KEY/BOT_API_KEY do python_bot.`);
-                }
-                return;
-            }
-
-            logToConsole(event, typeof payload === 'string' ? payload : JSON.stringify(payload));
-
-            const isMessageLifecycleEvent = [
-                'messages.queue.reserved',
-                'messages.status.updated',
-                'messages.retried',
-                'messages.edited',
-                'messages.inbound.received',
-                'messages.outbound.manual_sent'
-            ].includes(event);
-
-            if (isMessageLifecycleEvent || event.startsWith('campaign.')) {
-                scheduleDashboardRefresh();
-            }
-
-            // Handle specific events
-            if (event === 'bot.status') {
-                document.getElementById('bot-status-text').textContent = payload.status || 'Desconectado';
-            }
-
-            if (
-                event === 'message.sent'
-                || event === 'message.failed'
-                || event === 'messages.queue.reserved'
-                || (event === 'messages.status.updated' && ['sent', 'failed', 'processing'].includes(String(payload?.status || '').toLowerCase()))
-            ) {
-                addBotActivity(event, payload);
-            }
-
-            if (event === 'admin.security') {
-                refreshSecurityLogs();
-            }
-
-            if (event === 'admin.extension_error') {
-                addExtensionError(payload);
-            }
+        function scheduleDashRefresh() {
+            if(dashTmr) clearTimeout(dashTmr);
+            dashTmr = setTimeout(() => { dashTmr=null; refreshDashboard(); }, 1500);
         }
 
-        function logToConsole(event, data) {
-            const console = document.getElementById('realtime-console');
-            const time = new Date().toLocaleTimeString();
-            const line = document.createElement('div');
-            line.className = 'console-line';
-            line.innerHTML = `<span class="time">[${time}]</span> <span class="event">${event}</span> <span class="data">${data}</span>`;
-            console.appendChild(line);
-            
-            if (autoScroll) {
-                console.scrollTop = console.scrollHeight;
-            }
-
-            // Limit console lines
-            while (console.children.length > 500) {
-                console.removeChild(console.firstChild);
-            }
-        }
-
-        function addBotActivity(event, payload) {
-            const log = document.getElementById('bot-activity-log');
-            const time = new Date().toLocaleTimeString();
-            const normalizedStatus = String(payload?.status || '').toLowerCase();
-            const status = event === 'message.sent' || normalizedStatus === 'sent'
-                ? '✅'
-                : event === 'messages.queue.reserved' || normalizedStatus === 'processing'
-                    ? '⏳'
-                    : '❌';
-            const label = payload?.status || event;
-            const line = document.createElement('div');
-            line.className = 'console-line';
-            line.innerHTML = `<span class="time">[${time}]</span> ${status} <span class="data">${payload.phone || '-'} - ${label}</span>`;
-            log.insertBefore(line, log.firstChild);
-            
-            while (log.children.length > 100) {
-                log.removeChild(log.lastChild);
-            }
-        }
-
-        function addExtensionError(error) {
-            const log = document.getElementById('extension-errors-log');
-            const time = new Date().toLocaleTimeString();
-            const line = document.createElement('div');
-            line.className = 'console-line';
-            line.innerHTML = `<span class="time">[${time}]</span> <span style="color: var(--danger)">❌ ${error.error || 'Unknown error'}</span>`;
-            log.insertBefore(line, log.firstChild);
-        }
-
-        // Dashboard
+        // Functions from old Admin mapping to new UI
         async function refreshDashboard() {
             try {
                 const data = await apiRequest('/admin/dashboard');
-                
                 document.getElementById('stat-users').textContent = data.totalActiveUsers || 0;
                 
                 if (data.systemMetrics) {
                     const cpu = parseFloat(data.systemMetrics.cpu.usage);
                     const mem = parseFloat(data.systemMetrics.memory.usagePercent);
-                    
                     document.getElementById('stat-cpu').textContent = cpu.toFixed(1) + '%';
                     document.getElementById('cpu-bar').style.width = cpu + '%';
-                    document.getElementById('cpu-bar').className = `progress-fill ${cpu > 80 ? 'danger' : cpu > 50 ? 'warning' : 'success'}`;
+                    document.getElementById('cpu-bar').className = cpu > 80 ? 'bg-red-500 h-2 rounded-full' : 'bg-gradient-to-r from-green-400 to-green-500 h-2 rounded-full';
                     
                     document.getElementById('stat-memory').textContent = mem.toFixed(1) + '%';
                     document.getElementById('memory-bar').style.width = mem + '%';
-                    document.getElementById('memory-bar').className = `progress-fill ${mem > 80 ? 'danger' : mem > 50 ? 'warning' : 'success'}`;
-                    
-                    const uptimeHours = Math.floor(data.systemMetrics.uptime.process / 3600);
-                    document.getElementById('stat-uptime').textContent = uptimeHours + 'h';
-                    document.getElementById('stat-uptime-since').textContent = 'Desde ' + new Date(Date.now() - data.systemMetrics.uptime.process * 1000).toLocaleString();
-                    
+                    document.getElementById('memory-bar').className = mem > 80 ? 'bg-red-500 h-2 rounded-full' : 'bg-gradient-to-r from-blue-400 to-blue-500 h-2 rounded-full';
+
+                    const uptime = data.systemMetrics.uptime.process;
+                    const h = Math.floor(uptime / 3600); const m = Math.floor((uptime % 3600)/60); const s = Math.floor(uptime % 60);
+                    document.getElementById('stat-uptime').textContent = String(h).padStart(2,'0')+':'+String(m).padStart(2,'0')+':'+String(s).padStart(2,'0');
+                    document.getElementById('stat-uptime-since').textContent = 'Node.js v' + data.systemMetrics.process.nodeVersion;
+
                     document.getElementById('sys-platform').textContent = data.systemMetrics.platform.type + ' ' + data.systemMetrics.platform.release;
-                    document.getElementById('sys-node').textContent = data.systemMetrics.process.nodeVersion;
-                    document.getElementById('sys-hostname').textContent = data.systemMetrics.platform.hostname;
-                    document.getElementById('sys-arch').textContent = data.systemMetrics.platform.arch;
+                    document.getElementById('sys-hostname').textContent = data.systemMetrics.platform.hostname + ' / ' + data.systemMetrics.platform.arch;
                 }
 
-                // Recent activity
-                if (data.recentBotActivity && data.recentBotActivity.length > 0) {
-                    document.getElementById('recent-activity').innerHTML = data.recentBotActivity.map(a => `
-                        <div class="log-entry">
-                            <span class="log-time">${new Date(a.timestamp).toLocaleTimeString()}</span>
-                            <span class="log-type info">${a.action}</span>
-                            ${JSON.stringify(a.data || {})}
-                        </div>
-                    `).join('');
+                if (data.recentBotActivity) {
+                    let failCount=0; let successCount=0;
+                    document.getElementById('recent-activity').innerHTML = data.recentBotActivity.map(a => {
+                        if(a.action.includes('error')) failCount++; else successCount++;
+                        return '<tr class="border-b border-dark-800 hover:bg-dark-800/30 transition-colors"><td class="p-3 whitespace-nowrap text-slate-400">'+new Date(a.timestamp).toLocaleTimeString()+'</td><td class="p-3"><span class="badge '+(a.action.includes('error')||a.action.includes('fail')?'badge-danger':a.action.includes('process')?'badge-warning':'badge-success')+'">'+a.action+'</span></td><td class="p-3 truncate max-w-[200px] text-slate-300">'+JSON.stringify(a.data)+'</td></tr>';
+                    }).join('');
+                    document.getElementById('bot-messages-today').textContent = String(data.recentBotActivity.length);
+                    document.getElementById('bot-errors').textContent = String(failCount);
                 }
-
-                // Security alerts
-                if (data.recentSecurityLogs && data.recentSecurityLogs.length > 0) {
-                    document.getElementById('security-alerts').innerHTML = data.recentSecurityLogs.slice(0, 5).map(l => `
-                        <div class="log-entry">
-                            <span class="log-time">${new Date(l.timestamp).toLocaleTimeString()}</span>
-                            <span class="log-type ${l.type.includes('failed') ? 'error' : 'warning'}">${l.type}</span>
-                            ${l.ip || ''} ${l.agentId || ''}
-                        </div>
-                    `).join('');
-                }
-            } catch (e) {
-                console.error('Dashboard refresh error:', e);
-            }
+            } catch (e) {}
         }
 
-        // Users
-        async function refreshUsers() {
-            try {
-                const data = await apiRequest('/admin/users');
-                const tbody = document.getElementById('users-table');
-                
-                if (!data.users || data.users.length === 0) {
-                    tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: var(--text-secondary)">Nenhum usuário ativo</td></tr>';
-                    return;
-                }
-
-                tbody.innerHTML = data.users.map(user => `
-                    <tr>
-                        <td><code>${user.agentId}</code></td>
-                        <td>${user.ip || '-'}</td>
-                        <td>${new Date(user.lastActivity).toLocaleTimeString()}</td>
-                        <td>${Math.floor(user.sessionDuration / 60000)}min</td>
-                        <td>
-                            <span class="badge ${user.permission ? 'badge-success' : 'badge-danger'}">
-                                ${user.permission ? 'Permitido' : 'Bloqueado'}
-                            </span>
-                        </td>
-                        <td>
-                            <button onclick="togglePermission('${user.agentId}', ${!user.permission})" class="btn btn-secondary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;">
-                                ${user.permission ? '🚫 Bloquear' : '✅ Permitir'}
-                            </button>
-                            <button onclick="disconnectUser('${user.agentId}')" class="btn btn-danger" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;">
-                                🔌 Desconectar
-                            </button>
-                        </td>
-                    </tr>
-                `).join('');
-            } catch (e) {
-                console.error('Users refresh error:', e);
-            }
-        }
-
-        function renderInstallationsRows(targetId, installations = []) {
-            const tbody = document.getElementById(targetId);
-            if (!tbody) return;
-            if (!installations.length) {
-                tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; color: var(--text-secondary)">Nenhuma instalação registrada</td></tr>';
-                return;
-            }
-
-            tbody.innerHTML = installations.map((installation) => {
-                const status = String(installation.status || 'pending').toLowerCase();
-                const badgeClass = status === 'active'
-                    ? 'badge-success'
-                    : status === 'pending'
-                        ? 'badge-warning'
-                        : 'badge-danger';
-                return `
-                    <tr>
-                        <td><code>${installation.activationCode}</code></td>
-                        <td><span class="badge ${badgeClass}">${status.toUpperCase()}</span></td>
-                        <td>${installation.planTerm || '-'}</td>
-                        <td>${installation.expiresAt ? new Date(installation.expiresAt).toLocaleString() : 'Vitalício / -'}</td>
-                        <td>${installation.lastSeenAt ? new Date(installation.lastSeenAt).toLocaleString() : '-'}</td>
-                        <td>
-                            <button onclick="approveInstallation('${installation.activationCode}', 'demo')" class="btn btn-primary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;">Demo</button>
-                            <button onclick="approveInstallation('${installation.activationCode}', '30d')" class="btn btn-primary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;">30d</button>
-                            <button onclick="approveInstallation('${installation.activationCode}', '60d')" class="btn btn-primary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;">60d</button>
-                            <button onclick="approveInstallation('${installation.activationCode}', '12m')" class="btn btn-primary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;">12m</button>
-                            <button onclick="approveInstallation('${installation.activationCode}', 'lifetime')" class="btn btn-secondary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;">Vitalício</button>
-                            <button onclick="blockInstallation('${installation.activationCode}')" class="btn btn-secondary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;">Bloquear</button>
-                            <button onclick="revokeInstallation('${installation.activationCode}')" class="btn btn-danger" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;">Revogar</button>
-                            <button onclick="deleteInstallation('${installation.activationCode}')" class="btn btn-danger" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;">Excluir</button>
-                        </td>
-                    </tr>
-                `;
-            }).join('');
-        }
-
-        async function refreshUsersAndLicenses() {
-            await refreshUsers();
-            const installationsResponse = await apiRequest('/admin/installations');
-            const installations = installationsResponse.installations || [];
-            renderInstallationsRows('users-licenses-table', installations);
-            await loadAdminUsers();
-        }
-
-        async function loadAdminUsers() {
-            const result = await apiRequest('/admin/admin-users');
-            const list = result.adminUsers || [];
-            const tbody = document.getElementById('admin-users-table');
-            if (!list.length) {
-                tbody.innerHTML = '<tr><td colspan="2" style="text-align:center; color: var(--text-secondary)">Nenhum administrador cadastrado</td></tr>';
-                return;
-            }
-            tbody.innerHTML = list.map((email) => `
-                <tr>
-                    <td><code>${email}</code></td>
-                    <td>
-                        <button onclick="removeAdminUser('${email}')" class="btn btn-danger" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;">Remover</button>
-                    </td>
-                </tr>
-            `).join('');
-        }
-
-        async function addAdminUser() {
-            const input = document.getElementById('new-admin-email');
-            const email = String(input?.value || '').trim().toLowerCase();
-            if (!email) {
-                showToast('Digite o email do administrador', 'error');
-                return;
-            }
-            await apiRequest('/admin/admin-users', {
-                method: 'POST',
-                body: JSON.stringify({ email })
-            });
-            input.value = '';
-            showToast(`Administrador ${email} adicionado.`);
-            await loadAdminUsers();
-        }
-
-        async function removeAdminUser(email) {
-            if (!confirm(`Remover acesso admin de ${email}?`)) return;
-            await apiRequest(`/admin/admin-users/${encodeURIComponent(email)}`, {
-                method: 'DELETE'
-            });
-            showToast(`Administrador ${email} removido.`, 'warning');
-            await loadAdminUsers();
-        }
-
-        async function togglePermission(agentId, allowed) {
-            await apiRequest('/admin/users/permission', {
-                method: 'POST',
-                body: JSON.stringify({ agentId, allowed })
-            });
-            showToast(`Permissão ${allowed ? 'concedida' : 'revogada'} para ${agentId}`);
-            refreshUsers();
-        }
-
-        async function disconnectUser(agentId) {
-            if (!confirm(`Desconectar usuário ${agentId}?`)) return;
-            await apiRequest('/admin/users/disconnect', {
-                method: 'POST',
-                body: JSON.stringify({ agentId })
-            });
-            showToast(`Usuário ${agentId} desconectado`, 'warning');
-            refreshUsers();
-        }
-
-        // Security
         async function refreshSecurityLogs() {
             try {
                 const filter = document.getElementById('security-filter')?.value || '';
-                const data = await apiRequest(`/admin/security?type=${filter}&limit=50`);
+                const data = await apiRequest('/admin/security?type='+filter+'&limit=100');
                 
                 document.getElementById('stat-events-today').textContent = data.total || 0;
-                
-                const uniqueIps = new Set(data.logs.map(l => l.ip).filter(Boolean));
-                document.getElementById('stat-unique-ips').textContent = uniqueIps.size;
-                
-                const authFailed = data.logs.filter(l => l.type === 'auth_failed').length;
-                document.getElementById('stat-access-attempts').textContent = authFailed;
-                
-                const blocks = data.logs.filter(l => l.type === 'user_disconnected' || l.type === 'permission_change').length;
-                document.getElementById('stat-blocks').textContent = blocks;
+                document.getElementById('stat-unique-ips').textContent = new Set(data.logs.map(l => l.ip).filter(Boolean)).size;
+                document.getElementById('stat-access-attempts').textContent = data.logs.filter(l => l.type === 'auth_failed').length;
+                document.getElementById('stat-blocks').textContent = data.logs.filter(l => l.type === 'user_disconnected' || l.type === 'permission_change').length;
 
-                if (!data.logs || data.logs.length === 0) {
-                    document.getElementById('security-logs').innerHTML = '<p style="color: var(--text-secondary)">Nenhum log de segurança</p>';
-                    return;
+                const c = document.getElementById('security-logs');
+                if (!data.logs.length) { c.innerHTML = '<p class="p-4 text-center text-slate-500 text-sm">Sem anomalias detectadas.</p>'; return; }
+                c.innerHTML = data.logs.map(l => {
+                    const d = l.type.includes('failed') || l.type.includes('intrusion') ? 'text-red-400 bg-red-400/10' : 'text-yellow-400 bg-yellow-400/10';
+                    return '<div class="p-4 flex flex-col md:flex-row md:items-center justify-between gap-2 hover:bg-dark-800/50"><div class="flex items-center gap-3"><span class="px-2 py-1 rounded text-[10px] font-bold tracking-wider '+d+'">'+l.type.toUpperCase()+'</span><span class="text-slate-300 text-sm">'+(l.agentId||'No Agent')+'</span></div><div class="text-right text-xs text-slate-500 font-mono">'+(l.ip||'0.0.0.0')+' &bull; '+new Date(l.timestamp).toLocaleString()+'</div></div>';
+                }).join('');
+            } catch (e) {}
+        }
+
+        /* ----- SaaS ----- */
+        function toDateTimeLocalValue(value) { if (!value) return ''; const date = new Date(value); if (Number.isNaN(date.getTime())) return ''; const local = new Date(date.getTime() - date.getTimezoneOffset() * 60000); return local.toISOString().slice(0, 16); }
+
+        function clearSaasForm() {
+            ['saas-email','saas-agent-id','saas-company-name','saas-cpf-cnpj','saas-client-id','saas-activation-code','saas-expires-at'].forEach(i => document.getElementById(i).value = '');
+            document.getElementById('saas-seats').value = 1; document.getElementById('saas-plan-term').value = 'demo'; document.getElementById('saas-status').value = 'active';
+        }
+
+        function fillSaasForm(u) {
+            document.getElementById('saas-email').value = u.email||''; document.getElementById('saas-agent-id').value = u.agentId||''; document.getElementById('saas-company-name').value = u?.metadata?.companyName||''; document.getElementById('saas-cpf-cnpj').value = u?.metadata?.cpfCnpj||''; document.getElementById('saas-status').value = u.status||'active'; document.getElementById('saas-plan-term').value = u.planTerm||'demo'; document.getElementById('saas-seats').value = Number(u?.metadata?.seats||1); document.getElementById('saas-expires-at').value = toDateTimeLocalValue(u.expiresAt);
+            window.scrollTo({top:0, behavior:'smooth'});
+        }
+
+        async function saveSaasUser() {
+            const payload = {
+                email: document.getElementById('saas-email').value.trim().toLowerCase(),
+                agentId: document.getElementById('saas-agent-id').value.trim(),
+                status: document.getElementById('saas-status').value,
+                planTerm: document.getElementById('saas-plan-term').value,
+                expiresAt: document.getElementById('saas-expires-at').value ? new Date(document.getElementById('saas-expires-at').value).toISOString() : null,
+                metadata: {
+                    companyName: document.getElementById('saas-company-name').value.trim() || null,
+                    cpfCnpj: document.getElementById('saas-cpf-cnpj').value.replace(/\D/g, '') || null,
+                    seats: Math.max(1, Number(document.getElementById('saas-seats').value)||1)
                 }
-
-                document.getElementById('security-logs').innerHTML = data.logs.map(log => `
-                    <div class="log-entry">
-                        <span class="log-time">${new Date(log.timestamp).toLocaleString()}</span>
-                        <span class="log-type ${log.type.includes('failed') || log.type.includes('intrusion') ? 'error' : 'warning'}">${log.type}</span>
-                        <span style="color: var(--text-secondary)">IP: ${log.ip || '-'} | Agent: ${log.agentId || '-'}</span>
-                    </div>
-                `).join('');
-            } catch (e) {
-                console.error('Security logs refresh error:', e);
-            }
+            };
+            if(!payload.email) return showToast('Email master é obrigatório', 'error');
+            await apiRequest('/admin/saas-users', { method: 'POST', body: JSON.stringify(payload) });
+            showToast('Arquitetura SaaS gravada para '+payload.email);
+            refreshSaasUsers(); clearSaasForm();
         }
 
-        function filterSecurityLogs() {
-            refreshSecurityLogs();
+        async function setSaasUserStatus(email, status) {
+            await apiRequest('/admin/saas-users', { method: 'POST', body: JSON.stringify({ email, status }) });
+            showToast('Situação atualizada.', status==='active'?'success':'warning'); refreshSaasUsers();
+        }
+        async function removeSaasUser(email) {
+            if(!confirm('Exterminar root folder deste cliente SaaS?')) return;
+            await apiRequest('/admin/saas-users/'+encodeURIComponent(email), { method: 'DELETE' });
+            showToast('Conta incinerada do banco de dados.', 'success'); refreshSaasUsers();
         }
 
-        // Extension errors
-        async function refreshExtensionErrors() {
+        async function refreshSaasUsers() {
             try {
-                const data = await apiRequest('/admin/extension/errors?limit=50');
-                document.getElementById('bot-errors').textContent = data.total || 0;
+                const data = await apiRequest('/admin/saas-users');
+                const users = data.users || [];
+                const tb = document.getElementById('saas-users-table'); const pTb = document.getElementById('pending-requests-table');
                 
-                const log = document.getElementById('extension-errors-log');
-                if (!data.errors || data.errors.length === 0) {
-                    log.innerHTML = '<div class="console-line"><span class="event">Nenhum erro registrado</span></div>';
-                    return;
-                }
+                const pending = users.filter(u => String(u.status).toLowerCase()==='pending');
+                document.getElementById('pending-requests-count').textContent = pending.length;
+                if(!pending.length) pTb.innerHTML = '<tr><td colspan="5" class="p-4 text-center text-slate-500">Fluxo limpo. Sem cadastros parados.</td></tr>';
+                else pTb.innerHTML = pending.map(u => '<tr class="border-b border-dark-700 bg-yellow-500/5"><td class="p-3 whitespace-nowrap text-white font-medium">'+(u.email||'-')+'</td><td class="p-3 font-mono text-xs text-slate-300">'+(u.agentId||'-')+'</td><td class="p-3 text-slate-300 uppercase text-xs font-bold">'+(u?.metadata?.desiredPlan||u.planTerm||'DEMO')+'</td><td class="p-3 text-slate-400 text-xs">'+new Date(u.createdAt).toLocaleString()+'</td><td class="p-3 text-right"><button onclick="setSaasUserStatus(\''+u.email+'\',\'active\')" class="bg-green-500 text-black text-xs font-bold px-3 py-1 rounded hover:bg-green-400 transition-colors shadow shadow-green-500/20 mr-1">TORNAR ATIVO</button><button onclick="setSaasUserStatus(\''+u.email+'\',\'suspended\')" class="bg-dark-700 text-white text-xs px-3 py-1 rounded hover:bg-dark-600 transition-colors">RECUSAR</button></td></tr>').join('');
 
-                log.innerHTML = data.errors.map(err => `
-                    <div class="console-line">
-                        <span class="time">[${new Date(err.timestamp).toLocaleTimeString()}]</span>
-                        <span style="color: var(--danger)">❌ ${err.error || 'Unknown'}</span>
-                        <br><span class="data" style="font-size: 0.7rem;">${err.stack || ''}</span>
-                    </div>
-                `).join('');
-            } catch (e) {
-                console.error('Extension errors refresh error:', e);
-            }
+                if(!users.length) { tb.innerHTML='<tr><td colspan="7" class="p-4 text-center text-slate-500">Banco de clientes vazio.</td></tr>'; return; }
+                tb.innerHTML = users.map(u => {
+                    const st = String(u.status||'active').toLowerCase();
+                    const bCls = st==='active'?'badge-success':st==='pending'?'badge-warning':'badge-danger';
+                    const exp = u.expiresAt ? new Date(u.expiresAt).toLocaleDateString() : 'INF';
+                    return '<tr class="border-b border-dark-800 hover:bg-dark-800/30 transition-colors"><td class="p-3 font-medium text-white">'+(u.email||'-')+'<br><span class="text-[10px] text-slate-500 font-normal">'+(u?.metadata?.companyName||'Sem nome')+'</span></td><td class="p-3 font-mono text-xs text-brand-400">'+(u.agentId||'-')+'</td><td class="p-3 text-slate-400 text-xs">'+(u.metadata?.cpfCnpj||'-')+'</td><td class="p-3"><span class="badge '+bCls+'">'+st.toUpperCase()+'</span></td><td class="p-3 text-slate-300 text-xs uppercase">'+(u.planTerm||'-')+'<br><span class="text-[10px] text-slate-500">'+(u.metadata?.seats||1)+' Slots</span></td><td class="p-3 text-slate-300 text-xs">'+exp+'</td><td class="p-3"><div class="flex gap-1 flex-wrap"><button onclick=\'fillSaasForm('+JSON.stringify(u).replace(/'/g, "&#39;")+')\' class="bg-dark-700 text-slate-300 px-2 py-1 rounded text-xs hover:bg-dark-600 border border-dark-600"><i class="fa-solid fa-pen"></i></button><button onclick="setSaasUserStatus(\''+u.email+'\',\''+(st==='active'?'suspended':'active')+'\')" class="bg-dark-700 text-slate-300 px-2 py-1 rounded text-xs hover:bg-dark-600 border border-dark-600" title="Altera Status"><i class="fa-solid '+(st==='active'?'fa-pause':'fa-play')+'"></i></button><button onclick="apiRequest(\'/admin/bot/disconnect\',{method:\'POST\',body:JSON.stringify({agentId:\''+u.agentId+'\',reason:\'admin_manual_disconnect\'})});showToast(\'Forçando engine do zap a cair...\',\'warning\')" class="bg-dark-700 text-yellow-400 px-2 py-1 rounded text-xs hover:bg-dark-600 border border-dark-600" title="Apagar Sessão WhatsApp Motor Python"><i class="fa-brands fa-whatsapp"></i></button><button onclick="removeSaasUser(\''+u.email+'\')" class="bg-red-900/50 text-red-300 px-2 py-1 rounded text-xs hover:bg-red-500 border border-red-800" title="Deletar SaaS"><i class="fa-solid fa-trash"></i></button></div></td></tr>';
+                }).join('');
+            } catch (e) {}
         }
 
+        /* ----- Bots & Nodes ----- */
         async function loadProvisioningData() {
             try {
-                const [runtimeResponse, clientsResponse, installationsResponse] = await Promise.all([
-                    apiRequest('/admin/runtime-config'),
-                    apiRequest('/admin/clients'),
-                    apiRequest('/admin/installations'),
-                ]);
-
-                const config = runtimeResponse.config || {};
-                document.getElementById('runtime-api-url').value = config.backendApiUrl || '';
-                document.getElementById('runtime-ws-url').value = config.backendWsUrl || '';
-
-                const clients = clientsResponse.clients || [];
-                const tbody = document.getElementById('clients-table');
-                if (!clients.length) {
-                    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; color: var(--text-secondary)">Nenhum bot provisionado</td></tr>';
-                    return;
-                }
-
-                tbody.innerHTML = clients.map((client) => `
-                    <tr>
-                        <td><code>${client.clientId}</code></td>
-                        <td>${client.name || '-'}</td>
-                        <td>${client.apiKeyMasked || '-'}</td>
-                        <td><span class="badge ${client.permissions?.allowGemini ? 'badge-success' : 'badge-danger'}">${client.permissions?.allowGemini ? 'SIM' : 'NÃO'}</span></td>
-                        <td><span class="badge ${client.permissions?.allowRealtime ? 'badge-success' : 'badge-danger'}">${client.permissions?.allowRealtime ? 'SIM' : 'NÃO'}</span></td>
-                        <td><span class="badge ${client.active ? 'badge-success' : 'badge-danger'}">${client.active ? 'Ativo' : 'Inativo'}</span></td>
-                        <td>
-                            <button onclick="copyProvisionPayload('${client.clientId}')" class="btn btn-secondary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;">📋 Payload</button>
-                            <button onclick="rotateBotKey('${client.clientId}')" class="btn btn-secondary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;">🔁 Girar chave</button>
-                            <button onclick="toggleBotClient('${client.clientId}', ${!client.active})" class="btn ${client.active ? 'btn-danger' : 'btn-primary'}" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;">${client.active ? 'Desativar' : 'Ativar'}</button>
-                        </td>
-                    </tr>
-                `).join('');
-
-                const installations = installationsResponse.installations || [];
-                renderInstallationsRows('installations-table', installations);
-                renderInstallationsRows('users-licenses-table', installations);
-            } catch (error) {
-                console.error('Provisioning load error:', error);
-            }
-        }
-
-        async function approveInstallation(activationCode, planTerm) {
-            await apiRequest(`/admin/installations/${encodeURIComponent(activationCode)}/activate`, {
-                method: 'POST',
-                body: JSON.stringify({ planTerm })
-            });
-            showToast(`Instalação ${activationCode} ativada (${planTerm}).`);
-            await loadProvisioningData();
-        }
-
-        async function revokeInstallation(activationCode) {
-            if (!confirm(`Revogar instalação ${activationCode}?`)) return;
-            await apiRequest(`/admin/installations/${encodeURIComponent(activationCode)}/revoke`, {
-                method: 'POST',
-                body: JSON.stringify({ status: 'revoked' })
-            });
-            showToast(`Instalação ${activationCode} revogada.`, 'warning');
-            await loadProvisioningData();
-        }
-
-        async function blockInstallation(activationCode) {
-            if (!confirm(`Bloquear temporariamente instalação ${activationCode}?`)) return;
-            await apiRequest(`/admin/installations/${encodeURIComponent(activationCode)}/revoke`, {
-                method: 'POST',
-                body: JSON.stringify({ status: 'suspended' })
-            });
-            showToast(`Instalação ${activationCode} bloqueada.`, 'warning');
-            await loadProvisioningData();
-        }
-
-        async function deleteInstallation(activationCode) {
-            if (!confirm(`Excluir definitivamente instalação ${activationCode}?`)) return;
-            await apiRequest(`/admin/installations/${encodeURIComponent(activationCode)}`, {
-                method: 'DELETE'
-            });
-            showToast(`Instalação ${activationCode} excluída.`, 'warning');
-            await loadProvisioningData();
-        }
-
-        async function saveRuntimeConfig() {
-            const backendApiUrl = document.getElementById('runtime-api-url').value.trim();
-            const backendWsUrl = document.getElementById('runtime-ws-url').value.trim();
-            await apiRequest('/admin/runtime-config', {
-                method: 'PUT',
-                body: JSON.stringify({ backendApiUrl, backendWsUrl })
-            });
-            showToast('Endpoints salvos com sucesso');
-            loadProvisioningData();
+                const cRes = await apiRequest('/admin/clients');
+                const t = document.getElementById('clients-table');
+                if(!cRes.clients || !cRes.clients.length) { t.innerHTML='<tr><td colspan="6" class="p-4 text-center text-slate-500">Nenhum endpoint / API KEY gerada para worker Python.</td></tr>'; return; }
+                
+                t.innerHTML = cRes.clients.map(c => {
+                    const st = c.active ? '<span class="badge badge-success"><i class="fa-solid fa-link text-[8px] mr-1"></i> ACEITANDO CHAMADAS</span>' : '<span class="badge badge-danger">LOCKED FORMAÇÃO</span>';
+                    const btns = '<div class="flex justify-end gap-1"><button onclick="copyProvisionPayload(\''+c.clientId+'\')" class="bg-dark-700 text-brand-400 px-3 py-1 rounded text-xs hover:bg-dark-600 border border-brand-500/30 shadow-sm"><i class="fa-solid fa-file-code"></i> Payload</button><button onclick="toggleBotClient(\''+c.clientId+'\', '+!c.active+')" class="bg-dark-700 text-slate-300 px-3 py-1 rounded text-xs hover:bg-dark-600 border border-dark-600 shadow-sm"><i class="fa-solid '+(c.active?'fa-lock text-red-400':'fa-unlock-keyhole text-green-400')+'"></i></button></div>';
+                    return '<tr class="border-b border-dark-800 hover:bg-dark-800/30"><td class="p-3 font-mono text-white text-sm">'+c.clientId+'</td><td class="p-3 text-slate-300 text-xs">'+(c.name||'-')+'</td><td class="p-3 font-mono text-slate-500 text-xs">'+c.apiKeyMasked+'</td><td class="p-3"><div class="flex gap-1">'+(c.permissions?.allowGemini?'<span class="badge bg-purple-500/20 text-purple-400">IA</span>':'')+(c.permissions?.allowRealtime?'<span class="badge bg-blue-500/20 text-blue-400">WSS</span>':'')+'</div></td><td class="p-3">'+st+'</td><td class="p-3">'+btns+'</td></tr>';
+                }).join('');
+            } catch(e){}
         }
 
         async function createBotClient() {
-            const name = document.getElementById('new-client-name').value.trim();
-            const description = document.getElementById('new-client-description').value.trim();
-            const permissions = {
-                allowGemini: document.getElementById('perm-gemini').checked,
-                allowRealtime: document.getElementById('perm-realtime').checked,
-                allowCampaigns: document.getElementById('perm-campaigns').checked,
-                allowContacts: document.getElementById('perm-contacts').checked,
-            };
-            const result = await apiRequest('/admin/clients', {
-                method: 'POST',
-                body: JSON.stringify({ name, description, permissions })
-            });
-            if (result?.client?.apiKey) {
-                document.getElementById('new-client-feedback').textContent = `Criado: ${result.client.clientId}`;
-                document.getElementById('provision-payload').value = JSON.stringify({
-                    backendApiUrl: document.getElementById('runtime-api-url').value.trim(),
-                    backendWsUrl: document.getElementById('runtime-ws-url').value.trim(),
-                    backendApiKey: result.client.apiKey,
-                    agentId: result.client.clientId,
-                }, null, 2);
-                showToast('Bot criado. Copie o payload para a extensão.');
+            const n = document.getElementById('new-client-name').value, d = document.getElementById('new-client-description').value;
+            const p = { allowGemini:document.getElementById('perm-gemini').checked, allowRealtime:document.getElementById('perm-realtime').checked, allowCampaigns:document.getElementById('perm-campaigns').checked, allowContacts:document.getElementById('perm-contacts').checked };
+            const r = await apiRequest('/admin/clients', { method:'POST', body:JSON.stringify({name:n,description:d,permissions:p})});
+            if(r.client) {
+                document.getElementById('new-client-feedback').textContent = '✅ Chave Root Criada! Gerando Env...';
+                document.getElementById('provision-payload').value = 'E_WHATSAPP_BOT_API_KEY='+r.client.apiKey+'\nE_WHATSAPP_BOT_AGENT_ID='+r.client.clientId+'\nE_WHATSAPP_BACKEND_URL='+window.location.origin+'/api\nE_WHATSAPP_BACKEND_WS_URL='+(window.location.protocol==='https:'?'wss':'ws')+'://'+window.location.host+'/ws';
+                loadProvisioningData(); document.getElementById('new-client-name').value=''; document.getElementById('new-client-description').value='';
+                showToast('Chave de API gerada. Guarde no contêiner docker e o recrie.', 'success');
             }
-            document.getElementById('new-client-name').value = '';
-            document.getElementById('new-client-description').value = '';
-            await loadProvisioningData();
         }
 
         async function copyProvisionPayload(clientId) {
-            const result = await apiRequest(`/admin/clients/${encodeURIComponent(clientId)}/provision`);
-            const payload = JSON.stringify(result.provision || {}, null, 2);
-            const textarea = document.getElementById('provision-payload');
-            textarea.value = payload;
-            textarea.select();
-            document.execCommand('copy');
-            showToast(`Payload de ${clientId} copiado.`);
+            const r = await apiRequest('/admin/clients/'+encodeURIComponent(clientId)+'/provision');
+            const str = 'E_WHATSAPP_BOT_API_KEY='+r.provision.backendApiKey+'\nE_WHATSAPP_BOT_AGENT_ID='+r.provision.agentId+'\nE_WHATSAPP_BACKEND_URL='+window.location.origin+'/api\nE_WHATSAPP_BACKEND_WS_URL='+(window.location.protocol==='https:'?'wss':'ws')+'://'+window.location.host+'/ws';
+            const el = document.getElementById('provision-payload');
+            el.value = str; el.select(); document.execCommand('copy');
+            showToast('Payload do contêiner copiado para área de transferência.');
         }
 
-        async function rotateBotKey(clientId) {
-            if (!confirm(`Girar a chave do bot ${clientId}? A extensão antiga perderá acesso.`)) return;
-            const result = await apiRequest(`/admin/clients/${encodeURIComponent(clientId)}/rotate-key`, {
-                method: 'POST'
-            });
-            document.getElementById('provision-payload').value = JSON.stringify({
-                backendApiUrl: document.getElementById('runtime-api-url').value.trim(),
-                backendWsUrl: document.getElementById('runtime-ws-url').value.trim(),
-                backendApiKey: result.client.apiKey,
-                agentId: result.client.clientId,
-            }, null, 2);
-            showToast(`Chave de ${clientId} rotacionada.`);
-            await loadProvisioningData();
+        async function toggleBotClient(cId, act) { await apiRequest('/admin/clients/'+encodeURIComponent(cId), { method:'PATCH', body:JSON.stringify({active:act}) }); loadProvisioningData(); }
+
+        /* Websocket Sessions */
+        async function refreshUsers() {
+            const d = await apiRequest('/admin/users'); const t = document.getElementById('users-table');
+            if(!d.users||!d.users.length) { t.innerHTML='<tr><td colspan="5" class="p-4 text-center text-slate-500">Sem sessões front-end plugadas ao Node.</td></tr>'; return; }
+            t.innerHTML = d.users.map(u => '<tr class="border-b border-dark-800"><td class="p-3 text-brand-400 font-mono text-xs">'+u.agentId+'</td><td class="p-3 text-slate-400 text-xs font-mono">'+(u.ip||'-')+'</td><td class="p-3 text-slate-400 text-xs">'+Math.floor(u.sessionDuration/60000)+'m uptime</td><td class="p-3">'+(u.permission?'<span class="badge badge-success">OK</span>':'<span class="badge badge-danger">BLOCK</span>')+'</td><td class="p-3 text-right"><button onclick="apiRequest(\'/admin/users/disconnect\',{method:\'POST\',body:JSON.stringify({agentId:\''+u.agentId+'\'})});setTimeout(refreshUsers,1000);" class="text-xs bg-dark-700 hover:bg-dark-600 px-3 py-1 rounded text-red-400 border border-dark-600 shadow-sm"><i class="fa-solid fa-scissors"></i> Drop Socket</button></td></tr>').join('');
         }
 
-        async function toggleBotClient(clientId, active) {
-            await apiRequest(`/admin/clients/${encodeURIComponent(clientId)}`, {
-                method: 'PATCH',
-                body: JSON.stringify({ active })
-            });
-            showToast(`Bot ${active ? 'ativado' : 'desativado'} com sucesso.`);
-            await loadProvisioningData();
-        }
+        async function clearAllCache() { if(confirm('Esvaziar chaves redis e memoria RAM?')){ await apiRequest('/admin/cache/clear', { method:'POST', body:JSON.stringify({type:'all'})}); showToast('Memória limpa'); } }
 
-        // Cache
-        async function clearAllCache() {
-            if (!confirm('Limpar todo o cache do sistema?')) return;
-            await apiRequest('/admin/cache/clear', {
-                method: 'POST',
-                body: JSON.stringify({ type: 'all' })
-            });
-            showToast('Cache limpo com sucesso');
-            refreshDashboard();
-        }
+        /* Boot Run */
+        checkAuth(); connectWebSocket(); refreshDashboard(); refreshSaasUsers(); loadProvisioningData(); refreshUsers(); refreshSecurityLogs();
+        setInterval(refreshDashboard, 30000); setInterval(refreshSaasUsers, 45000); setInterval(refreshUsers, 60000);
 
-        // Extension
-        async function downloadExtension() {
-            const session = await checkAuth();
-            if (!session?.access_token) return;
-            const response = await fetch('/api/admin/extension/download', {
-                headers: {
-                    'Authorization': `Bearer ${session.access_token}`,
-                    'x-agent-id': 'admin-console',
-                }
-            });
-            if (!response.ok) {
-                const payload = await response.json().catch(() => ({}));
-                showToast(payload.msg || 'Falha ao baixar extensão', 'error');
-                return;
-            }
-            const blob = await response.blob();
-            const link = document.createElement('a');
-            link.href = URL.createObjectURL(blob);
-            link.download = 'EmidiaWhats-Extension.zip';
-            link.click();
-            URL.revokeObjectURL(link.href);
-        }
-
-        function showSendModal() {
-            document.getElementById('send-modal').classList.add('active');
-        }
-
-        function closeSendModal() {
-            document.getElementById('send-modal').classList.remove('active');
-        }
-
-        async function sendExtensionEmail() {
-            const email = document.getElementById('send-email').value;
-            if (!email) {
-                showToast('Digite um email válido', 'error');
-                return;
-            }
-            
-            const result = await apiRequest('/admin/extension/send-email', {
-                method: 'POST',
-                body: JSON.stringify({ email })
-            });
-            
-            if (result.success) {
-                showToast('Email enviado com sucesso!');
-                closeSendModal();
-            } else {
-                showToast(result.msg || 'Erro ao enviar email', 'error');
-            }
-        }
-
-        // Console
-        function clearConsole() {
-            const console = document.getElementById('realtime-console');
-            console.innerHTML = '<div class="console-line"><span class="time">[' + new Date().toLocaleTimeString() + ']</span> <span class="event">system</span> <span class="data">Console limpo</span></div>';
-        }
-
-        function toggleAutoScroll() {
-            autoScroll = !autoScroll;
-            document.getElementById('autoscroll-btn').textContent = `📜 Auto-scroll: ${autoScroll ? 'ON' : 'OFF'}`;
-        }
-
-        async function sendBroadcast() {
-            const event = document.getElementById('broadcast-event').value;
-            let data = document.getElementById('broadcast-data').value;
-            
-            if (!event) {
-                showToast('Digite o nome do evento', 'error');
-                return;
-            }
-
-            try {
-                data = data ? JSON.parse(data) : {};
-            } catch (e) {
-                showToast('JSON inválido', 'error');
-                return;
-            }
-
-            await apiRequest('/admin/broadcast', {
-                method: 'POST',
-                body: JSON.stringify({ event, data })
-            });
-            
-            showToast('Broadcast enviado!');
-            document.getElementById('broadcast-event').value = '';
-            document.getElementById('broadcast-data').value = '';
-        }
-
-        // Bot status
-        async function fetchBotStatus() {
-            try {
-                const data = await apiRequest('/bot/status');
-                const statusText = document.getElementById('bot-status-text');
-                statusText.textContent = data.status || 'Desconectado';
-                statusText.className = `stat-value ${data.status === 'CONNECTED' ? 'success' : data.status === 'SCANNING' ? 'warning' : 'danger'}`;
-            } catch (e) {
-                document.getElementById('bot-status-text').textContent = 'Erro';
-            }
-        }
-
-        // Initialize
-        checkAuth();
-        connectWebSocket();
-        refreshDashboard();
-        fetchBotStatus();
-        loadProvisioningData();
-        loadAdminUsers();
-
-        // Refresh intervals
-        setInterval(refreshDashboard, 30000);
-        setInterval(fetchBotStatus, 5000);
     </script>
 </body>
 </html>

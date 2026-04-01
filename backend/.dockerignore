@@ -1,0 +1,10 @@
+node_modules
+uploads
+data/*.json
+.env
+*.log
+.git
+.github
+*.tar.gz
+*.zip
+*.bak

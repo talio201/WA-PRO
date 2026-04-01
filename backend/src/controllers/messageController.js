@@ -1,5 +1,6 @@
 const Message = require("../models/Message");
 const Campaign = require("../models/Campaign");
+const { isWithinDeliveryWindow } = require("../utils/time");
 const ConversationAssignment = require("../models/ConversationAssignment");
 const SupportProtocol = require("../models/SupportProtocol");
 const { normalizePhone } = require("../utils/phone");
@@ -333,23 +334,15 @@ async function resolveRelatedCampaignId({
       )?.campaign || null;
   if (fromHistory) return fromHistory;
   if (!normalizedPhone || normalizedPhone.length < 8) return null;
-  const allMessages = await Message.find({});
-  const allList = Array.isArray(allMessages) ? allMessages : [];
   const targetTail = normalizedPhone.slice(-10);
-  const fuzzyMatch = allList
-    .filter(
-      (item) =>
-        String(item.direction || "outbound") !== "inbound" && item.campaign,
-    )
-    .sort((a, b) => getMessageDateMs(b) - getMessageDateMs(a))
-    .find((item) => {
-      const messagePhone = toSafePhone(item.phone || item.phoneOriginal);
-      if (!messagePhone) return false;
-      if (messagePhone === normalizedPhone) return true;
-      if (messagePhone.endsWith(targetTail)) return true;
-      if (normalizedPhone.endsWith(messagePhone.slice(-10))) return true;
-      return false;
-    });
+  const fuzzyMatch = await Message.findOne({
+    $or: [
+      { phone: normalizedPhone },
+      { phone: new RegExp(targetTail + "$") }
+    ],
+    direction: { $ne: "inbound" },
+    campaign: { $exists: true, $ne: null }
+  }).sort({ createdAt: -1 });
   if (fuzzyMatch?.campaign) return fuzzyMatch.campaign;
   // Fallback requires agentId to create system campaign properly
   const queryAgentId = (history.length > 0 && history[0].campaign && history[0].campaign.agentId) || 'system';
@@ -364,19 +357,18 @@ exports.getMessages = async (req, res) => {
       ? Math.max(1, Math.min(parsedLimit, maxLimit))
       : 200;
     
-    // Filtro inicial pegando campanhas do agente
-    const agentCampaigns = await Campaign.find({ agentId: req.agentId });
-    const agentCampaignIds = agentCampaigns.map(c => c._id);
-
-    // Listando todas e filtrando após, se for DB Local JSON (otimizavel se for SQL real)
-    const allMessages = await Message.find({});
-    let filtered = Array.isArray(allMessages) ? allMessages : [];
-    
-    // Só deixa passar mensagens que pertençam a campanhas do agente atual 
-    // ou se agentId == bot (permite tudo pra fila)
-    if (req.agentId !== 'bot') {
-        filtered = filtered.filter(item => agentCampaignIds.includes(item.campaign));
+    let query = {};
+    if (req.agentId && req.agentId !== 'bot' && req.agentId !== 'system') {
+      const safeAgentId = String(req.agentId);
+      const agentCampaigns = await Campaign.find({ agentId: safeAgentId }).select('_id');
+      const agentCampaignIds = agentCampaigns.map(c => String(c._id));
+      query.campaign = { $in: agentCampaignIds };
     }
+
+    // Listando todas e filtrando apÃ³s, se for DB Local JSON (otimizavel se for SQL real)
+    let filtered = await Message.find(query).limit(safeLimit * 5);
+    filtered = Array.isArray(filtered) ? filtered : [];
+    
     if (status) {
       filtered = filtered.filter((item) => item.status === status);
     }
@@ -416,13 +408,16 @@ exports.getConversations = async (req, res) => {
   try {
     const { search = "", onlyWithReplies, onlyAssigned, limit } = req.query;
     
-    const agentCampaigns = await Campaign.find({ agentId: req.agentId });
-    const agentCampaignIds = agentCampaigns.map(c => c._id);
-
-    let allMessages = await Message.find({});
-    if (req.agentId && req.agentId !== 'bot') {
-        allMessages = allMessages.filter(item => agentCampaignIds.includes(item.campaign));
+    let query = {};
+    if (req.agentId && req.agentId !== 'bot' && req.agentId !== 'system') {
+      const safeAgentId = String(req.agentId);
+      const agentCampaigns = await Campaign.find({ agentId: safeAgentId }).select('_id');
+      const agentCampaignIds = agentCampaigns.map(c => String(c._id));
+      query.campaign = { $in: agentCampaignIds };
     }
+
+    let allMessages = await Message.find(query).sort({createdAt:-1}).limit(2000);
+    allMessages = Array.isArray(allMessages) ? allMessages : [];
     let activeAssignments = [];
     try {
       activeAssignments = await ConversationAssignment.find({
@@ -498,7 +493,7 @@ exports.getConversations = async (req, res) => {
     });
     const onlyReplies = parseBooleanFlag(onlyWithReplies);
     const assignedOnly = parseBooleanFlag(onlyAssigned);
-    const query = String(search || "")
+    const searchQuery = String(search || "")
       .trim()
       .toLowerCase();
     const parsedLimit = Number(limit);
@@ -528,17 +523,17 @@ exports.getConversations = async (req, res) => {
       .filter((conversation) => {
         if (onlyReplies && !conversation.hasResponse) return false;
         if (assignedOnly && !conversation.assignment) return false;
-        if (!query) return true;
+        if (!searchQuery) return true;
         return (
           String(conversation.phone || "")
             .toLowerCase()
-            .includes(query) ||
+            .includes(searchQuery) ||
           String(conversation.name || "")
             .toLowerCase()
-            .includes(query) ||
+            .includes(searchQuery) ||
           String(conversation.assignment?.assignedTo || "")
             .toLowerCase()
-            .includes(query)
+            .includes(searchQuery)
         );
       })
       .sort(
@@ -560,15 +555,16 @@ exports.getHelpdeskQueues = async (req, res) => {
       .trim()
       .toLowerCase();
 
-    const agentCampaigns = await Campaign.find({ agentId: req.agentId });
-    const agentCampaignIds = agentCampaigns.map((campaign) => campaign._id);
-
-    let allMessages = await Message.find({});
-    if (req.agentId && req.agentId !== "bot") {
-      allMessages = allMessages.filter((item) =>
-        agentCampaignIds.includes(item.campaign),
-      );
+    let queryMsg = {};
+    if (req.agentId && req.agentId !== 'bot' && req.agentId !== 'system') {
+      const safeAgentId = String(req.agentId);
+      const agentCampaigns = await Campaign.find({ agentId: safeAgentId }).select('_id');
+      const agentCampaignIds = agentCampaigns.map(c => String(c._id));
+      queryMsg.campaign = { $in: agentCampaignIds };
     }
+
+    let allMessages = await Message.find(queryMsg).sort({createdAt:-1}).limit(2000);
+    allMessages = Array.isArray(allMessages) ? allMessages : [];
 
     let activeAssignments = [];
     try {
@@ -766,13 +762,17 @@ exports.getConversationHistory = async (req, res) => {
     const safeLimit = Number.isFinite(parsedLimit)
       ? Math.max(1, Math.min(parsedLimit, 5000))
       : 2000;
-    const agentCampaigns = await Campaign.find({ agentId });
-    const agentCampaignIds = agentCampaigns.map(c => c._id);
-
-    let history = await Message.find({ phone: normalizedPhone });
-    if (agentId && agentId !== 'bot') {
-       history = history.filter(item => agentCampaignIds.includes(item.campaign));
+    
+    let query = { phone: normalizedPhone };
+    if (agentId && agentId !== 'bot' && agentId !== 'system') {
+      const safeAgentId = String(agentId);
+      const agentCampaigns = await Campaign.find({ agentId: safeAgentId }).select('_id');
+      const agentCampaignIds = agentCampaigns.map(c => String(c._id));
+      query.campaign = { $in: agentCampaignIds };
     }
+
+    let history = await Message.find(query).sort({ createdAt: -1 }).limit(safeLimit);
+    
     const ordered = (Array.isArray(history) ? history : []).sort(
       (a, b) => getMessageDateMs(a) - getMessageDateMs(b),
     );
@@ -817,7 +817,7 @@ exports.syncConversationHistory = async (req, res) => {
         totalReceived: 0,
       });
     }
-    const existingMessages = await Message.find({ phone: normalizedPhone });
+    const existingMessages = await Message.find({ phone: normalizedPhone }).sort({ createdAt: -1 }).limit(100);
     const existingList = Array.isArray(existingMessages)
       ? existingMessages
       : [];
@@ -1201,7 +1201,7 @@ exports.openConversationProtocol = async (req, res) => {
       return res.status(400).json({ msg: "subject is required." });
     }
 
-    const history = await Message.find({ phone: normalizedPhone });
+    const history = await Message.find({ phone: normalizedPhone }).sort({ createdAt: -1 }).limit(100);
     const relatedMessages = Array.isArray(history) ? history : [];
     const campaignId = await resolveRelatedCampaignId({
       normalizedPhone,
@@ -1312,7 +1312,7 @@ exports.registerInboundMessage = async (req, res) => {
     }
     const isCandidateDateValid = !Number.isNaN(candidateDate.getTime());
     const messageDate = isCandidateDateValid ? candidateDate : new Date();
-    const history = await Message.find({ phone: normalizedPhone });
+    const history = await Message.find({ phone: normalizedPhone }).sort({ createdAt: -1 }).limit(100);
     const relatedMessages = Array.isArray(history) ? history : [];
     const relatedCampaignId = await resolveRelatedCampaignId({
       normalizedPhone,
@@ -1337,9 +1337,11 @@ exports.registerInboundMessage = async (req, res) => {
       return delta <= 2 * 60 * 1000;
     });
     if (duplicate) {
+      const campaign = await Campaign.findById(relatedCampaignId);
       emitRealtimeEvent("messages.inbound.duplicate", {
         phone: normalizedPhone,
         campaignId: relatedCampaignId,
+        agentId: campaign?.agentId || null,
         messageId: duplicate._id,
       });
       return res.json({ duplicate: true, message: duplicate });
@@ -1378,9 +1380,11 @@ exports.registerInboundMessage = async (req, res) => {
       lastInboundAt: messageDate,
       stage: 'qualified',
     });
+    const campaign = await Campaign.findById(relatedCampaignId);
     emitRealtimeEvent("messages.inbound.received", {
       phone: normalizedPhone,
       campaignId: relatedCampaignId,
+      agentId: campaign?.agentId || null,
       message: createdMessage,
     });
     try {
@@ -1448,7 +1452,7 @@ exports.registerManualOutbound = async (req, res) => {
     }
     const isCandidateDateValid = !Number.isNaN(candidateDate.getTime());
     const messageDate = isCandidateDateValid ? candidateDate : new Date();
-    const history = await Message.find({ phone: normalizedPhone });
+    const history = await Message.find({ phone: normalizedPhone }).sort({ createdAt: -1 }).limit(100);
     const relatedMessages = Array.isArray(history) ? history : [];
     const relatedCampaignId = await resolveRelatedCampaignId({
       normalizedPhone,
@@ -1546,11 +1550,11 @@ exports.getNextJob = async (req, res) => {
         ? configuredStaleTimeoutMs
         : 90 * 1000;
     const query = { status: "running" };
-    // Se não for bot, filtra pra puxar as campaigns rodando do agente atual
-    if (req.agentId && req.agentId !== "bot") {
+    if (req.agentId) {
       query.agentId = req.agentId;
     }
-    const activeCampaigns = await Campaign.find(query).select("_id");
+    const allActive = await Campaign.find(query);
+    const activeCampaigns = allActive.filter(c => isWithinDeliveryWindow(c));
     const activeCampaignIds = activeCampaigns.map((c) => c._id);
     const activeCampaignIdSet = new Set(
       activeCampaignIds.map((id) => String(id)),
@@ -1570,7 +1574,7 @@ exports.getNextJob = async (req, res) => {
       const processingMessages = await Message.find({
         status: "processing",
         campaign: { $in: eligibleCampaignIds },
-      });
+      }).limit(1000);
       const now = Date.now();
       const staleCandidates = (
         Array.isArray(processingMessages) ? processingMessages : []
@@ -1618,6 +1622,7 @@ exports.getNextJob = async (req, res) => {
       {
         status: "pending",
         attemptCount: -1,
+        campaign: { $in: eligibleCampaignIds },
       },
       { status: "processing" },
       { sort: { _id: 1 }, new: true },
@@ -1811,22 +1816,24 @@ exports.updateJobStatus = async (req, res) => {
         campaignId: message.campaign,
       },
     });
+    const campaign = await Campaign.findById(message.campaign);
     emitRealtimeEvent("messages.status.updated", {
       messageId: message._id,
       campaignId: message.campaign || null,
+      agentId: campaign?.agentId || null,
       phone: message.phone || "",
       previousStatus,
       status: message.status,
       direction: message.direction || "outbound",
       updatedAt: message.updatedAt,
     });
-    const campaign = await Campaign.findById(message.campaign);
     if (campaign) {
       applyCampaignStatTransition(campaign, previousStatus, status);
       campaign.updatedAt = new Date();
       await campaign.save();
       emitRealtimeEvent("campaign.stats.updated", {
         campaignId: campaign._id,
+        agentId: campaign.agentId || null,
         stats: campaign.stats,
         updatedAt: campaign.updatedAt,
       });
@@ -1869,9 +1876,11 @@ exports.updateMessage = async (req, res) => {
     message.updatedAt = new Date();
     appendAudit(message, "edited", "Message edited by user", { changedFields });
     await message.save();
+    const campaign = await Campaign.findById(message.campaign);
     emitRealtimeEvent("messages.edited", {
       messageId: message._id,
       campaignId: message.campaign || null,
+      agentId: campaign?.agentId || null,
       phone: message.phone || "",
       changedFields,
       updatedAt: message.updatedAt,
@@ -1901,22 +1910,24 @@ exports.retryMessage = async (req, res) => {
       changedFields,
     });
     await message.save();
+    const campaign = await Campaign.findById(message.campaign);
     emitRealtimeEvent("messages.retried", {
       messageId: message._id,
       campaignId: message.campaign || null,
+      agentId: campaign?.agentId || null,
       phone: message.phone || "",
       previousStatus,
       status: message.status,
       changedFields,
       updatedAt: message.updatedAt,
     });
-    const campaign = await Campaign.findById(message.campaign);
     if (campaign) {
       applyCampaignStatTransition(campaign, previousStatus, "pending");
       campaign.updatedAt = new Date();
       await campaign.save();
       emitRealtimeEvent("campaign.stats.updated", {
         campaignId: campaign._id,
+        agentId: campaign.agentId || null,
         stats: campaign.stats,
         updatedAt: campaign.updatedAt,
       });
@@ -1927,4 +1938,45 @@ exports.retryMessage = async (req, res) => {
     const errorResponse = buildServerErrorResponse(err);
     res.status(errorResponse.statusCode).json(errorResponse.body);
   }
+};
+
+exports.getBotInstancesForSupervisor = async (req, res) => {
+  // Somente a Chave Mestra base (cujo auth resulta em agentId = 'bot') tem poder pra isso
+  if (req.agentId !== "bot") {
+    return res.status(403).json({ msg: "Acesso Negado. Credencial nÃ£o Ã© raiz." });
+  }
+  try {
+    const { readStore } = require('../config/adminStore');
+    const store = typeof readStore === 'function' ? readStore() : { clients: [], saasUsers: [] };
+    
+    // Bots for old clients array
+    const clients = (store.clients || [])
+      .filter(c => c.active) // somente ativos
+      .map(c => ({
+        agentId: c.clientId,
+        apiKey: c.apiKey, // envia raw api key
+        name: c.name
+      }));
+
+    // Bots for new SaaS users
+    const validApiKey = String(process.env.API_SECRET_KEY || '').trim();
+    const saasBots = (store.saasUsers || [])
+      .filter(u => u.status === 'active' && u.agentId)
+      .map(u => ({
+        agentId: u.agentId,
+        apiKey: validApiKey, // uses the master backend key to authenticate as bot
+        name: `SaaS User - ${u.email}`
+      }));
+
+      const adminInstance = {
+        agentId: 'admin',
+        apiKey: validApiKey,
+        name: 'System Admin Bot'
+      };
+
+      return res.json({ instances: [...clients, ...saasBots, adminInstance] });
+    } catch (err) {
+      console.error(err.message);
+      res.status(500).json({ msg: "Erro interno", error: err.message });
+    }
 };

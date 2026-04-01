@@ -1,0 +1,11 @@
+venv/
+whatsapp_session/
+__pycache__/
+*.pyc
+.env
+*.log
+.git
+.github
+*.tar.gz
+*.zip
+*.bak

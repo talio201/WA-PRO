@@ -3,6 +3,7 @@ const Message = require("../models/Message");
 const { normalizePhone } = require("../utils/phone");
 const { buildServerErrorResponse } = require("../utils/httpError");
 const { emitRealtimeEvent } = require("../realtime/realtime");
+const { enqueueBotCommand } = require("../config/botControlStore");
 const DEFAULT_MIN_DELAY_SECONDS = 0;
 const DEFAULT_MAX_DELAY_SECONDS = 120;
 const MAX_ALLOWED_DELAY_SECONDS = 3600;
@@ -119,8 +120,7 @@ exports.createCampaign = async (req, res) => {
       messageVariants,
       messageTemplate,
     );
-    const shouldRotateVariants =
-      Boolean(turboMode) && sanitizedVariants.length > 1;
+    const shouldRotateVariants = sanitizedVariants.length > 1;
     const campaign = new Campaign({
       name,
       agentId: req.agentId,
@@ -137,7 +137,19 @@ exports.createCampaign = async (req, res) => {
       media,
     });
     await campaign.save();
-    const allMessages = await Message.find({});
+    
+    const targetPhones = contacts.map(c => {
+      const phoneNorm = normalizePhone(c.phone);
+      return phoneNorm.normalized || String(c.phone || "").replace(/\D/g, "");
+    }).filter(Boolean);
+    
+    const allMessages = await Message.find({
+      $or: [
+        { phone: { $in: targetPhones } },
+        { phoneOriginal: { $in: targetPhones } }
+      ]
+    });
+    
     const messagesByPhone = new Map();
     (Array.isArray(allMessages) ? allMessages : []).forEach((item) => {
       const phone = normalizePhone(item.phone || item.phoneOriginal).normalized;
@@ -173,11 +185,7 @@ exports.createCampaign = async (req, res) => {
         && withinRecentWindow
         && (!lastInboundAt || lastInboundAt <= lastOutboundAt),
       );
-      const template = shouldRotateVariants
-        ? sanitizedVariants[
-            Math.floor(Math.random() * sanitizedVariants.length)
-          ]
-        : messageTemplate || sanitizedVariants[0] || "";
+      const template = shouldRotateVariants ? sanitizedVariants[index % sanitizedVariants.length] : messageTemplate || sanitizedVariants[0] || "";
       return {
         campaign: campaign._id,
         phone: normalizedPhone,
@@ -276,6 +284,256 @@ exports.getCampaignFailures = async (req, res) => {
     res.status(errorResponse.statusCode).json(errorResponse.body);
   }
 };
+
+exports.updateCampaign = async (req, res) => {
+  try {
+    const campaigns = await Campaign.find({ _id: req.params.id, agentId: req.agentId });
+    const campaign = campaigns && campaigns.length > 0 ? campaigns[0] : null;
+    if (!campaign) {
+      return res.status(404).json({ msg: "Campaign not found or unauthorized" });
+    }
+
+    const hasName = Object.prototype.hasOwnProperty.call(req.body || {}, "name");
+    const hasMessage = Object.prototype.hasOwnProperty.call(req.body || {}, "messageTemplate");
+    const hasVariants = Object.prototype.hasOwnProperty.call(req.body || {}, "messageVariants");
+    const hasAntiBan = Object.prototype.hasOwnProperty.call(req.body || {}, "antiBan");
+    const hasMedia = Object.prototype.hasOwnProperty.call(req.body || {}, "media");
+
+    if (hasName) {
+      const nextName = String(req.body.name || "").trim();
+      if (!nextName) {
+        return res.status(400).json({ msg: "Campaign name is required" });
+      }
+      campaign.name = nextName;
+    }
+
+    let nextTemplate = String(campaign.messageTemplate || "");
+    if (hasMessage) {
+      nextTemplate = String(req.body.messageTemplate || "").trim();
+      campaign.messageTemplate = nextTemplate;
+    }
+
+    let nextVariants = campaign.messageVariants || [];
+    if (hasVariants) {
+       nextVariants = sanitizeMessageVariants(req.body.messageVariants, nextTemplate);
+       campaign.messageVariants = nextVariants;
+       if (nextVariants.length > 1) {
+           campaign.turboMode = true;
+       }
+    }
+
+    if (hasAntiBan) {
+      const existing = campaign.antiBan || {};
+      const incoming = req.body.antiBan || {};
+      campaign.antiBan = sanitizeAntiBanSettings({
+        ...existing,
+        ...incoming,
+        deliveryWindow: incoming.deliveryWindow || existing.deliveryWindow || {},
+        resendPolicy: incoming.resendPolicy || existing.resendPolicy || {},
+      });
+    }
+
+    if (hasMedia) {
+      campaign.media = req.body.media || null;
+    }
+
+    campaign.updatedAt = new Date();
+    const updatedCampaign = await Campaign.findByIdAndUpdate(campaign._id, campaign);
+
+    if (hasMessage || hasVariants) {
+      const pendingMessages = await Message.find({ campaign: campaign._id, status: "pending" });
+      const toUpdate = Array.isArray(pendingMessages) ? pendingMessages : [];
+      let i = 0;
+      for (const item of toUpdate) {
+        const messageDoc = await Message.findById(item._id);
+        if (!messageDoc || messageDoc.status !== "pending") continue;
+        let templateToUse = nextTemplate;
+        if (campaign.turboMode && nextVariants.length > 0) {
+            templateToUse = nextVariants[i % nextVariants.length];
+        }
+        i++;
+        messageDoc.processedMessage = String(templateToUse || "").replace(
+          /{name}/g,
+          String(messageDoc.name || ""),
+        );
+        messageDoc.updatedAt = new Date();
+        messageDoc.audit = Array.isArray(messageDoc.audit) ? messageDoc.audit : [];
+        messageDoc.audit.push({
+          at: new Date(),
+          action: "campaign_updated",
+          details: "Message template/variants refreshed after campaign update.",
+        });
+        await messageDoc.save();
+      }
+    }
+
+    emitRealtimeEvent("campaign.updated", {
+      campaignId: campaign._id,
+      name: updatedCampaign?.name || campaign.name,
+      updatedAt: new Date().toISOString(),
+    });
+
+    return res.json(updatedCampaign || campaign);
+  } catch (err) {
+    console.error(err.message);
+    const errorResponse = buildServerErrorResponse(err);
+    return res.status(errorResponse.statusCode).json(errorResponse.body);
+  }
+};
+
+exports.dispatchNextCampaignContact = async (req, res) => {
+  try {
+    const campaigns = await Campaign.find({ _id: req.params.id, agentId: req.agentId });
+    const campaign = campaigns && campaigns.length > 0 ? campaigns[0] : null;
+    if (!campaign) {
+      return res.status(404).json({ msg: "Campaign not found or unauthorized" });
+    }
+
+    const pendingMessages = await Message.find({
+      campaign: campaign._id,
+      status: "pending",
+    });
+    const ordered = (Array.isArray(pendingMessages) ? pendingMessages : []).sort((a, b) => {
+      const aDate = new Date(a.createdAt || a.updatedAt || 0).getTime();
+      const bDate = new Date(b.createdAt || b.updatedAt || 0).getTime();
+      return aDate - bDate;
+    });
+
+    const nextMessage = ordered[0] || null;
+    if (!nextMessage) {
+      return res.status(400).json({ msg: "No pending contacts in queue." });
+    }
+
+    const messageDoc = await Message.findById(nextMessage._id);
+    if (!messageDoc || messageDoc.status !== "pending") {
+      return res.status(409).json({ msg: "Pending message no longer available." });
+    }
+
+    messageDoc.attemptCount = -1;
+    messageDoc.updatedAt = new Date();
+    messageDoc.audit = Array.isArray(messageDoc.audit) ? messageDoc.audit : [];
+    messageDoc.audit.push({
+      at: new Date(),
+      action: "expedite_next",
+      details: "Message promoted to immediate dispatch by user action.",
+      meta: {
+        requestedBy: req.agentId || "unknown",
+      },
+    });
+    await messageDoc.save();
+
+    const botCommand = enqueueBotCommand(req.agentId, {
+      type: "skip_delay_once",
+      payload: {
+        reason: "dispatch_next_contact_now",
+        campaignId: String(campaign._id || ""),
+        messageId: String(messageDoc._id || ""),
+      },
+      requestedBy: req.agentId || "system",
+    });
+
+    emitRealtimeEvent("messages.queue.expedited", {
+      messageId: messageDoc._id,
+      campaignId: campaign._id,
+      phone: messageDoc.phone || "",
+      requestedBy: req.agentId || "unknown",
+      commandId: botCommand?.id || null,
+      updatedAt: messageDoc.updatedAt,
+    });
+
+    return res.json({
+      success: true,
+      campaignId: campaign._id,
+      messageId: messageDoc._id,
+      commandId: botCommand?.id || null,
+    });
+  } catch (err) {
+    console.error(err.message);
+    const errorResponse = buildServerErrorResponse(err);
+    return res.status(errorResponse.statusCode).json(errorResponse.body);
+  }
+};
+
+exports.retryCampaignFailures = async (req, res) => {
+  try {
+    const campaigns = await Campaign.find({ _id: req.params.id, agentId: req.agentId });
+    const campaign = campaigns && campaigns.length > 0 ? campaigns[0] : null;
+    if (!campaign) {
+      return res.status(404).json({ msg: "Campaign not found or unauthorized" });
+    }
+
+    const failedMessages = await Message.find({
+      campaign: campaign._id,
+      status: "failed",
+    });
+    const failedList = Array.isArray(failedMessages) ? failedMessages : [];
+    if (failedList.length === 0) {
+      return res.json({ success: true, campaignId: campaign._id, retriedCount: 0 });
+    }
+
+    const now = new Date();
+    const requestedBy = req.agentId || "unknown";
+    const bulkOps = failedList.map((item) => ({
+      updateOne: {
+        filter: { _id: item._id, status: "failed" },
+        update: {
+          $set: {
+            status: "pending",
+            error: null,
+            lastError: null,
+            sentAt: null,
+            updatedAt: now,
+          },
+          $push: {
+            audit: {
+              at: now,
+              action: "retried_bulk",
+              details: "Message moved back to queue by bulk retry action.",
+              meta: { requestedBy },
+            },
+          },
+        },
+      },
+    }));
+
+    const bulkResult = await Message.bulkWrite(bulkOps, { ordered: false });
+    const retriedCount = Number(
+      bulkResult?.modifiedCount
+      ?? bulkResult?.nModified
+      ?? 0,
+    );
+
+    if (!campaign.stats || typeof campaign.stats !== "object") {
+      campaign.stats = { total: 0, sent: 0, failed: 0 };
+    }
+    campaign.stats.failed = Math.max(0, Number(campaign.stats.failed || 0) - retriedCount);
+    campaign.updatedAt = now;
+    await campaign.save();
+
+    emitRealtimeEvent("messages.retried.bulk", {
+      campaignId: campaign._id,
+      retriedCount,
+      requestedBy,
+      updatedAt: now,
+    });
+    emitRealtimeEvent("campaign.stats.updated", {
+      campaignId: campaign._id,
+      stats: campaign.stats,
+      updatedAt: campaign.updatedAt,
+    });
+
+    return res.json({
+      success: true,
+      campaignId: campaign._id,
+      retriedCount,
+    });
+  } catch (err) {
+    console.error(err.message);
+    const errorResponse = buildServerErrorResponse(err);
+    return res.status(errorResponse.statusCode).json(errorResponse.body);
+  }
+};
+
 exports.deleteCampaign = async (req, res) => {
   try {
     const campaigns = await Campaign.find({ _id: req.params.id, agentId: req.agentId });

@@ -32,6 +32,7 @@ const activationSessionLimiter = createRateLimiter({
 });
 
 router.post('/installations/register', activationWriteLimiter, publicActivationController.registerInstallation);
+router.post('/saas/signup-request', activationWriteLimiter, publicActivationController.requestSaasSignupApproval);
 router.get('/installations/:activationCode/status', publicReadLimiter, publicActivationController.getActivationStatus);
 router.post('/installations/session', activationSessionLimiter, publicActivationController.createSession);
 router.post('/installations/heartbeat', activationWriteLimiter, publicActivationController.heartbeat);

@@ -29,11 +29,36 @@ function buildEnvelope(event, data = {}) {
 function broadcastEnvelope(envelope) {
   if (!wsServer) return;
   const payload = JSON.stringify(envelope);
+  
+  // Strict multi-tenant filtering:
+  // If the envelope has an agentId, only send to clients with that same agentId.
+  // Admins with agentId "admin" can receive everything.
+  const targetAgentId = String(envelope.data?.agentId || envelope.data?.clientId || "").trim();
+
   wsServer.clients.forEach((client) => {
-    if (client.readyState === 1 && client.isAuthorized) {
-      try {
-        client.send(payload);
-      } catch (error) {}
+    if (client.readyState === 1) {
+      const clientAuth = client.auth || {};
+      const clientAgentId = String(clientAuth.agentId || "").trim();
+      const isClientAdmin = clientAuth.isAdmin === true;
+
+      // Logic:
+      // 1. If the client is an admin, they get everything.
+      // 2. If the event has NO target agentId, it's a global system event (broadcast to all).
+      // 3. If the event HAS a target agentId, only send if it matches the client's agentId.
+      let shouldSend = false;
+      if (isClientAdmin) {
+        shouldSend = true;
+      } else if (!targetAgentId) {
+        shouldSend = true; 
+      } else if (clientAgentId === targetAgentId) {
+        shouldSend = true;
+      }
+
+      if (shouldSend) {
+        try {
+          client.send(payload);
+        } catch (error) {}
+      }
     }
   });
 }

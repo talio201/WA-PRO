@@ -15,7 +15,11 @@ async function loadSupabase() {
       const url = String(payload?.config?.supabase?.url || '').trim();
       const key = String(payload?.config?.supabase?.anonKey || '').trim();
       if (!url || !key) throw new Error('Supabase não configurado no servidor.');
-      _supabase = createClient(url, key);
+      _supabase = createClient(url, key, {
+        auth: {
+          storageKey: 'emidia-users-auth-token',
+        },
+      });
       return _supabase;
     });
   return _loadPromise;
@@ -40,11 +44,16 @@ export function AuthProvider({ children }) {
       sb.auth.getSession().then(({ data }) => {
         setSession(data.session);
         setLoading(false);
-        if (data.session) syncAgentId(data.session);
+        if (data.session) resolveAndSyncAgentId(data.session);
       });
       sb.auth.onAuthStateChange((_event, nextSession) => {
         setSession(nextSession);
-        if (nextSession) syncAgentId(nextSession);
+        if (nextSession) {
+          resolveAndSyncAgentId(nextSession);
+        } else {
+          localStorage.removeItem('emidia_agent_id');
+          localStorage.removeItem('wa-manager-agent-name');
+        }
       });
     }).catch(() => setLoading(false));
   }, []);
@@ -56,13 +65,43 @@ export function AuthProvider({ children }) {
   );
 }
 
-function syncAgentId(session) {
+function deriveAgentIdFromUser(user) {
+  const metadataAgentId = String(user?.user_metadata?.agentId || '').trim();
+  if (metadataAgentId) return metadataAgentId;
+  const userIdPrefix = String(user?.id || '').replace(/[^a-z0-9_-]/gi, '').slice(0, 12);
+  if (userIdPrefix) return `user_${userIdPrefix}`;
+  return '';
+}
+
+async function resolveAndSyncAgentId(session) {
   if (!session?.user) return;
-  const agentId =
-    session.user.user_metadata?.agentId ||
-    'admin';
-  localStorage.setItem('emidia_agent_id', agentId);
-  localStorage.setItem('wa-manager-agent-name', agentId);
+  const token = String(session?.access_token || '').trim();
+  let resolvedAgentId = '';
+
+  if (token) {
+    try {
+      const response = await fetch('/api/account/status', {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      if (response.ok) {
+        const payload = await response.json();
+        const accountAgentId = String(payload?.account?.agentId || '').trim();
+        if (accountAgentId) {
+          resolvedAgentId = accountAgentId;
+        }
+      }
+    } catch (_error) {}
+  }
+
+  if (!resolvedAgentId) {
+    resolvedAgentId = deriveAgentIdFromUser(session.user);
+  }
+
+  if (!resolvedAgentId) return;
+  localStorage.setItem('emidia_agent_id', resolvedAgentId);
+  localStorage.setItem('wa-manager-agent-name', resolvedAgentId);
 }
 
 export function useAuth() {

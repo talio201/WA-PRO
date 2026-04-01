@@ -14,6 +14,8 @@ const DEFAULT_STORE = {
   },
   clients: [],
   installations: [],
+  saasUsers: [],
+  trialGuards: [],
   adminUsers: DEFAULT_ADMIN_USERS,
 };
 
@@ -39,7 +41,7 @@ function readStore() {
   try {
     const raw = fs.readFileSync(STORE_PATH, 'utf8');
     const parsed = JSON.parse(raw || '{}');
-    return {
+    const store = {
       appConfig: {
         ...DEFAULT_STORE.appConfig,
         ...(parsed.appConfig || {}),
@@ -48,13 +50,57 @@ function readStore() {
       installations: Array.isArray(parsed.installations)
         ? parsed.installations
         : [],
+      saasUsers: Array.isArray(parsed.saasUsers)
+        ? parsed.saasUsers
+        : [],
+      trialGuards: Array.isArray(parsed.trialGuards)
+        ? parsed.trialGuards
+        : [],
       adminUsers: Array.isArray(parsed.adminUsers)
         ? parsed.adminUsers.map((item) => String(item || '').trim().toLowerCase()).filter(Boolean)
         : [...DEFAULT_ADMIN_USERS],
     };
+    const sanitized = sanitizeStore(store);
+    if (sanitized.changed) {
+      writeStore(sanitized.store);
+    }
+    return sanitized.store;
   } catch (error) {
     return JSON.parse(JSON.stringify(DEFAULT_STORE));
   }
+}
+
+function sanitizeStore(store = {}) {
+  let changed = false;
+  const nextStore = {
+    ...store,
+    saasUsers: Array.isArray(store.saasUsers) ? store.saasUsers.slice() : [],
+  };
+
+  nextStore.saasUsers = nextStore.saasUsers.map((item) => {
+    const safeItem = item && typeof item === 'object' ? { ...item } : {};
+    const status = normalizeSaasUserStatus(safeItem.status);
+    const metadata = safeItem.metadata && typeof safeItem.metadata === 'object'
+      ? { ...safeItem.metadata }
+      : {};
+
+    if (status === 'pending' && !metadata.requestedAt) {
+      metadata.requestedAt = safeItem.createdAt || safeItem.updatedAt || new Date().toISOString();
+      changed = true;
+    }
+
+    if (safeItem.metadata !== metadata) {
+      changed = true;
+    }
+
+    return {
+      ...safeItem,
+      status,
+      metadata,
+    };
+  });
+
+  return { store: nextStore, changed };
 }
 
 function listAdminUsers() {
@@ -92,6 +138,216 @@ function removeAdminUser(email = '') {
   store.adminUsers = next;
   writeStore(store);
   return true;
+}
+
+function normalizeSaasUserStatus(value = '') {
+  const safe = String(value || '').trim().toLowerCase();
+  if (safe === 'pending' || safe === 'awaiting_approval' || safe === 'aguardando') return 'pending';
+  if (safe === 'suspended' || safe === 'blocked') return 'suspended';
+  if (safe === 'deleted' || safe === 'removed') return 'deleted';
+  return 'active';
+}
+
+function normalizeSaasUser(entry = {}) {
+  const email = String(entry.email || '').trim().toLowerCase();
+  if (!email) return null;
+  return {
+    email,
+    agentId: String(entry.agentId || entry.clientId || '').trim(),
+    status: normalizeSaasUserStatus(entry.status),
+    clientId: String(entry.clientId || '').trim() || null,
+    activationCode: String(entry.activationCode || '').trim().toUpperCase() || null,
+    planTerm: entry.planTerm ? normalizePlanTerm(entry.planTerm) : null,
+    expiresAt: entry.expiresAt || null,
+    activatedAt: entry.activatedAt || null,
+    createdAt: entry.createdAt || null,
+    updatedAt: entry.updatedAt || null,
+    lastLoginAt: entry.lastLoginAt || null,
+    metadata: entry.metadata || {},
+  };
+}
+
+function normalizeIpAddress(value = '') {
+  const safe = String(value || '').trim();
+  if (!safe) return '';
+  return safe.replace(/^::ffff:/, '');
+}
+
+function canStartDemoForIp(ip = '') {
+  const safeIp = normalizeIpAddress(ip);
+  if (!safeIp) return { allowed: true };
+  const store = readStore();
+  const guard = (store.trialGuards || []).find((item) => normalizeIpAddress(item.ip) === safeIp);
+  if (guard && guard.blocked === true) {
+    return {
+      allowed: false,
+      reason: 'demo_already_used',
+      msg: 'Período DEMO já utilizado neste IP. Para continuar, selecione um plano pago de teste.',
+    };
+  }
+  return { allowed: true };
+}
+
+function markDemoAsConsumedByIp(ip = '', email = '') {
+  const safeIp = normalizeIpAddress(ip);
+  if (!safeIp) return;
+  const store = readStore();
+  store.trialGuards = Array.isArray(store.trialGuards) ? store.trialGuards : [];
+  const index = store.trialGuards.findIndex((item) => normalizeIpAddress(item.ip) === safeIp);
+  const now = new Date().toISOString();
+  const next = {
+    ip: safeIp,
+    email: String(email || '').trim().toLowerCase() || null,
+    blocked: true,
+    blockedAt: now,
+    reason: 'demo_already_used',
+  };
+  if (index >= 0) {
+    store.trialGuards[index] = {
+      ...(store.trialGuards[index] || {}),
+      ...next,
+    };
+  } else {
+    store.trialGuards.unshift(next);
+  }
+  writeStore(store);
+}
+
+function getSaasUserByEmail(email = '') {
+  const safeEmail = String(email || '').trim().toLowerCase();
+  if (!safeEmail) return null;
+  const store = readStore();
+  const match = (store.saasUsers || []).find((item) => String(item.email || '').trim().toLowerCase() === safeEmail);
+  if (!match) return null;
+  return normalizeSaasUser(match);
+}
+
+function listSaasUsers(filters = {}) {
+  const store = readStore();
+  const statusFilter = String(filters.status || '').trim().toLowerCase();
+  const items = (store.saasUsers || [])
+    .map(normalizeSaasUser)
+    .filter(Boolean)
+    .sort((a, b) => new Date(b.updatedAt || b.createdAt || 0).getTime() - new Date(a.updatedAt || a.createdAt || 0).getTime());
+  if (!statusFilter) return items;
+  return items.filter((item) => item.status === statusFilter);
+}
+
+function upsertSaasUser(payload = {}) {
+  const store = readStore();
+  const email = String(payload.email || '').trim().toLowerCase();
+  if (!email) {
+    throw new Error('email is required');
+  }
+
+  const now = new Date().toISOString();
+  const normalizedStatus = normalizeSaasUserStatus(payload.status);
+  const activationCode = String(payload.activationCode || '').trim().toUpperCase();
+  let clientId = String(payload.clientId || '').trim();
+  let inferredPlanTerm = payload.planTerm ? normalizePlanTerm(payload.planTerm) : null;
+  let inferredExpiresAt = payload.expiresAt || null;
+
+  if (activationCode) {
+    const installation = findInstallationByCode(store, activationCode);
+    if (installation) {
+      clientId = clientId || String(installation.clientId || '').trim();
+      inferredPlanTerm = inferredPlanTerm || normalizePlanTerm(installation.planTerm || 'demo');
+      inferredExpiresAt = inferredExpiresAt || installation.expiresAt || null;
+    }
+  }
+
+  const index = (store.saasUsers || []).findIndex((item) => String(item.email || '').trim().toLowerCase() === email);
+  const base = index >= 0 ? store.saasUsers[index] : null;
+
+  // Criptografia extra implementada: ID único indestrutível bot_ XXX
+  let finalAgentId = base?.agentId;
+  if (!finalAgentId) {
+    if (payload.agentId && String(payload.agentId).startsWith('bot_')) {
+      finalAgentId = payload.agentId; // Aceita de origens server-side seguras 
+    } else {
+      const crypto = require('crypto');
+      finalAgentId = `bot_${crypto.randomBytes(4).toString('hex')}_${Date.now().toString(36).slice(-4)}`;
+    }
+  }
+
+  const nextItem = {
+    email,
+    agentId: finalAgentId,
+    status: normalizedStatus,
+    clientId: clientId || base?.clientId || null,
+    activationCode: activationCode || base?.activationCode || null,
+    planTerm: inferredPlanTerm || base?.planTerm || null,
+    expiresAt: inferredExpiresAt || base?.expiresAt || null,
+    activatedAt: base?.activatedAt || null,
+    createdAt: base?.createdAt || now,
+    updatedAt: now,
+    lastLoginAt: base?.lastLoginAt || null,
+    metadata: {
+      ...(base?.metadata || {}),
+      ...(payload.metadata || {}),
+    },
+  };
+
+  if (nextItem.status === 'active') {
+    const requestedPlan = normalizePlanTerm(nextItem.planTerm || nextItem.metadata?.desiredPlan || '30d');
+    nextItem.planTerm = requestedPlan;
+    nextItem.activatedAt = nextItem.activatedAt || now;
+    if (requestedPlan === 'demo') {
+      nextItem.expiresAt = buildExpiration('demo', now);
+      nextItem.metadata = {
+        ...(nextItem.metadata || {}),
+        demoLimit: {
+          maxMessages: 10,
+          mode: 'single-flight',
+        },
+        demoConsumedAt: now,
+      };
+      markDemoAsConsumedByIp(nextItem.metadata?.requestIp || nextItem.metadata?.ip || '', email);
+    } else {
+      nextItem.expiresAt = buildExpiration('30d', now);
+      nextItem.metadata = {
+        ...(nextItem.metadata || {}),
+        activationPolicy: 'sandbox_30d',
+      };
+    }
+  }
+
+  if (index >= 0) {
+    store.saasUsers[index] = nextItem;
+  } else {
+    store.saasUsers = Array.isArray(store.saasUsers) ? store.saasUsers : [];
+    store.saasUsers.unshift(nextItem);
+  }
+
+  writeStore(store);
+  return normalizeSaasUser(nextItem);
+}
+
+function deleteSaasUser(email = '') {
+  const safeEmail = String(email || '').trim().toLowerCase();
+  if (!safeEmail) return false;
+  const store = readStore();
+  const before = (store.saasUsers || []).length;
+  store.saasUsers = (store.saasUsers || []).filter((item) => String(item.email || '').trim().toLowerCase() !== safeEmail);
+  if (store.saasUsers.length === before) return false;
+  writeStore(store);
+  return true;
+}
+
+function touchSaasUserLogin(email = '', metadata = {}) {
+  const safeEmail = String(email || '').trim().toLowerCase();
+  if (!safeEmail) return null;
+  const store = readStore();
+  const entry = (store.saasUsers || []).find((item) => String(item.email || '').trim().toLowerCase() === safeEmail);
+  if (!entry) return null;
+  entry.lastLoginAt = new Date().toISOString();
+  entry.updatedAt = entry.lastLoginAt;
+  entry.metadata = {
+    ...(entry.metadata || {}),
+    ...(metadata || {}),
+  };
+  writeStore(store);
+  return normalizeSaasUser(entry);
 }
 
 function writeStore(store) {
@@ -535,7 +791,7 @@ function touchInstallation(activationCode, metadata = {}) {
   return getPublicInstallation(installation);
 }
 
-module.exports = {
+module.exports = { readStore,
   listClients,
   createClient,
   updateClient,
@@ -560,4 +816,10 @@ module.exports = {
   isAdminEmail,
   addAdminUser,
   removeAdminUser,
+  listSaasUsers,
+  getSaasUserByEmail,
+  upsertSaasUser,
+  deleteSaasUser,
+  touchSaasUserLogin,
+  canStartDemoForIp,
 };

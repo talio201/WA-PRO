@@ -2,31 +2,55 @@ import os
 import time
 import random
 import logging
+import shutil
 import requests
+import argparse
 from dotenv import load_dotenv
 from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeoutError
+
+parser = argparse.ArgumentParser(description="WhatsApp Bot Worker")
+parser.add_argument("--agent-id", type=str, help="Agent ID for this bot instance", default=None)
+parser.add_argument("--api-key", type=str, help="API Key for auth", default=None)
+parser.add_argument("--api-url", type=str, help="Backend API URL", default=None)
+args, _ = parser.parse_known_args()
+
 load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '..', 'backend', '.env'))
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 def normalize_secret(value):
     return str(value or "").strip().strip('"').strip("'")
 
-API_BASE_URL = str(os.getenv("API_BASE_URL", "http://localhost:3000/api") or "").strip().rstrip('/')
-API_SECRET_KEY = normalize_secret(os.getenv("BOT_API_KEY") or os.getenv("API_SECRET_KEY", ""))
-BOT_AGENT_ID = str(os.getenv("BOT_AGENT_ID", "bot") or "bot").strip() or "bot"
+API_BASE_URL = args.api_url or str(os.getenv("API_BASE_URL", "http://localhost:3000/api") or "").strip().rstrip('/')
+API_SECRET_KEY = args.api_key or normalize_secret(os.getenv("BOT_API_KEY") or os.getenv("API_SECRET_KEY", ""))
+BOT_AGENT_ID = args.agent_id or str(os.getenv("BOT_AGENT_ID", "bot") or "bot").strip() or "bot"
 API_HEADERS = { 
     "Authorization": f"Bearer {API_SECRET_KEY}",
     "x-agent-id": BOT_AGENT_ID
 }
 WHATSAPP_URL = "https://web.whatsapp.com"
-MAX_WAIT_TIME = 60000
+MAX_WAIT_TIME = 120000  # 120 segundos para aguardar página carregar
 
 if not API_SECRET_KEY:
     logging.critical("API_SECRET_KEY/BOT_API_KEY não definida. O bot não conseguirá autenticar na API.")
 else:
     masked = f"{API_SECRET_KEY[:4]}...{API_SECRET_KEY[-4:]}" if len(API_SECRET_KEY) > 8 else "***"
     logging.info(f"Bot autenticando com x-agent-id={BOT_AGENT_ID} | key={masked} | api={API_BASE_URL}")
+if BOT_AGENT_ID == "bot":
+    logging.warning("BOT_AGENT_ID está como 'bot' (compartilhado). Para multiusuario real, execute uma instância do python_bot por agentId.")
+
+def send_live_activity(activity, data=None):
+    try:
+        payload = {
+            "activity": activity,
+            "data": data or {},
+            "agentId": BOT_AGENT_ID
+        }
+        requests.post(f"{API_BASE_URL}/bot/live-activity", json=payload, headers=API_HEADERS, timeout=2)
+    except Exception:
+        pass
+
 def type_like_human(page, text, is_priority=False):
     logging.info("Iniciando digitação...")
+    send_live_activity("typing", {"text": text[:20] + "..." if len(text) > 20 else text})
     if text:
         page.keyboard.type(text[0])
         time.sleep(random.uniform(0.6, 1.2))
@@ -67,139 +91,143 @@ def download_file(url, target_path):
         return False
 
 def send_message(page, phone, message, is_priority=False, media=None):
-    logging.info(f"Tentando iniciar conversa silenciosa com: {phone}")
-    dom_success = False
     try:
-        new_chat_btn = page.locator('div[title="Nova conversa"], span[data-icon="chat"]').first
-        new_chat_btn.click(timeout=5000)
-        page.wait_for_timeout(1000) 
-        page.keyboard.type(phone)
-        page.wait_for_timeout(3000) 
-        page.keyboard.press("Enter")
-        page.wait_for_timeout(1500)
-        chat_box = page.locator('#main div[role="textbox"]').last
-        if not chat_box.is_visible():
-            first_contact = page.locator('div[role="listitem"]').first
-            if first_contact.is_visible():
-                first_contact.click(timeout=2000)
-                page.wait_for_timeout(1500)
+        logging.info(f"Tentando iniciar conversa silenciosa com: {phone}")
+        dom_success = False
+        try:
+            new_chat_btn = page.locator('div[title="Nova conversa"], span[data-icon="chat"], span[data-icon="new-chat-outline"], span[data-icon="plus"]').first
+            new_chat_btn.click(timeout=5000)
+            page.wait_for_timeout(1000)
+            page.keyboard.type(phone)
+            page.wait_for_timeout(4000)
+            page.keyboard.press("Enter")
+            page.wait_for_timeout(2500)
+            chat_box = page.locator('#main div[role="textbox"]').last
+            if not chat_box.is_visible():
+                first_contact = page.locator('div[role="listitem"]').first
+                if first_contact.is_visible():
+                    first_contact.click(timeout=2000)
+                    page.wait_for_timeout(1500)
+                else:
+                    page.keyboard.press("Escape")
+                    raise Exception("Sem resultados.")
+            if chat_box.is_visible():
+                dom_success = True
+                logging.info("Aberto silenciosamente via DOM com sucesso!")
             else:
                 page.keyboard.press("Escape")
-                raise Exception("Sem resultados.")
-        if chat_box.is_visible():
-            dom_success = True
-            logging.info("Aberto silenciosamente via DOM com sucesso!")
-        else:
-            page.keyboard.press("Escape")
-            raise Exception("Caixa de chat indetectável.")
-    except Exception as e:
-        logging.warning(f"Busca silenciosa DOM falhou. Recorrendo a URL e recarregamento...")
-
-    if not dom_success:
-        chat_url = f"{WHATSAPP_URL}/send/?phone={phone}"
-        page.goto(chat_url)
-        try:
-            page.wait_for_selector('#main', timeout=MAX_WAIT_TIME)
-            if check_invalid_number_modal(page):
-                return False, "Número inválido ou sem WhatsApp."
-        except PlaywrightTimeoutError:
-            if check_invalid_number_modal(page):
-                return False, "Número inválido ou sem WhatsApp."
-            logging.error("Tempo esgotado aguardando o chat carregar.")
-            return False, "Timeout ao abrir o chat via URL."
-
-    logging.info("Chat aberto. Preparando envio...")
-
-    # 1. Enviar Texto Primeiro (Mensagem Independente)
-    if message:
-        try:
-            chat_box = page.locator('#main div[role="textbox"]').last
-            chat_box.click(timeout=3000)
-            if not is_priority:
-                time.sleep(random.uniform(0.5, 1.2))
-            type_like_human(page, message, is_priority)
-            page.wait_for_timeout(400)
-            page.keyboard.press("Enter")
-            logging.info("Texto enviado com sucesso.")
-            page.wait_for_timeout(1500)
+                raise Exception("Caixa de chat indetectável.")
         except Exception as e:
-            logging.error(f"Erro ao enviar texto: {e}")
+            logging.warning(f"Busca silenciosa DOM falhou: {e}. Recorrendo a URL e recarregamento...")
 
-    # 2. Enviar Mídia via Simulação de 'Ctrl+V' (Paste) Universal
-    if media and media.get('fileUrl'):
-        file_url = media['fileUrl']
-        file_name = media.get('fileName', 'arquivo.bin')
-        mimetype = media.get('mimetype', 'application/octet-stream')
-        
-        temp_dir = os.path.join(os.getcwd(), 'tmp_media')
-        os.makedirs(temp_dir, exist_ok=True)
-        # Preservar o nome do arquivo se possível para o SO baixar corretamente
-        ext = os.path.splitext(file_name)[1]
-        safe_name = f"paste_{int(time.time())}{ext}"
-        temp_path = os.path.join(temp_dir, safe_name)
-
-        if download_file(file_url, temp_path):
+        if not dom_success:
+            chat_url = f"{WHATSAPP_URL}/send/?phone={phone}"
+            page.goto(chat_url, timeout=MAX_WAIT_TIME)
             try:
-                logging.info(f"Simulando Ctrl+V para arquivo: {file_name} ({mimetype})")
-                import base64
-                with open(temp_path, "rb") as f:
-                    base64_data = base64.b64encode(f.read()).decode('utf-8')
+                page.wait_for_selector('#main', timeout=MAX_WAIT_TIME)
+                if check_invalid_number_modal(page):
+                    return False, "Número inválido ou sem WhatsApp."
+            except PlaywrightTimeoutError:
+                if check_invalid_number_modal(page):
+                    return False, "Número inválido ou sem WhatsApp."
+                logging.error("Tempo esgotado aguardando o chat carregar.")
+                return False, "Timeout ao abrir o chat via URL."
 
-                # Script JS Universal para injetar QUALQUER arquivo no Clipboard e disparar o Paste
-                paste_script = """
-                async (params) => {
-                    const { base64Data, mimeType, fileName } = params;
-                    const res = await fetch(`data:${mimeType};base64,${base64Data}`);
-                    const blob = await res.blob();
-                    
-                    // Criamos o arquivo com o nome original para o WhatsApp reconhecer
-                    const file = new File([blob], fileName, { type: mimeType });
-                    
-                    const dataTransfer = new DataTransfer();
-                    dataTransfer.items.add(file);
-                    
-                    const chatBox = document.querySelector('#main div[role="textbox"]');
-                    if (chatBox) {
-                        chatBox.focus();
-                        const pasteEvent = new ClipboardEvent('paste', {
-                            clipboardData: dataTransfer,
-                            bubbles: true,
-                            cancelable: true
-                        });
-                        chatBox.dispatchEvent(pasteEvent);
-                        return true;
-                    }
-                    return false;
-                }
-                """
-                
-                success = page.evaluate(paste_script, {
-                    "base64Data": base64_data, 
-                    "mimeType": mimetype,
-                    "fileName": file_name
-                })
-                
-                if success:
-                    logging.info(f"Evento 'Paste' para {file_name} disparado.")
-                    # Aguarda o preview aparecer. Documentos e Vídeos podem demorar mais para carregar.
-                    page.wait_for_timeout(6000)
-                    page.keyboard.press("Enter")
-                    logging.info("Mídia confirmada via Ctrl+V.")
-                else:
-                    logging.error("Falha ao localizar chatbox para o Paste.")
+        logging.info("Chat aberto. Preparando envio...")
 
-                page.wait_for_timeout(2000)
-                if os.path.exists(temp_path):
-                    os.remove(temp_path)
-                
+        # 1. Enviar Texto Primeiro (Mensagem Independente)
+        if message:
+            try:
+                chat_box = page.locator('#main div[role="textbox"]').last
+                chat_box.click(timeout=3000)
+                if not is_priority:
+                    time.sleep(random.uniform(0.5, 1.2))
+                type_like_human(page, message, is_priority)
+                page.wait_for_timeout(400)
+                send_live_activity("sending")
+                page.keyboard.press("Enter")
+                logging.info("Texto enviado com sucesso.")
+                page.wait_for_timeout(1500)
             except Exception as e:
-                logging.error(f"Erro no Paste universal: {e}")
-                if os.path.exists(temp_path):
-                    os.remove(temp_path)
-        else:
-            logging.warning("Download falhou.")
+                logging.error(f"Erro ao enviar texto: {e}")
 
-    return True, "Processo concluido."
+        # 2. Enviar Mídia via Simulação de 'Ctrl+V' (Paste) Universal
+        if media and media.get('fileUrl'):
+            file_url = media['fileUrl']
+            file_name = media.get('fileName', 'arquivo.bin')
+            mimetype = media.get('mimetype', 'application/octet-stream')
+
+            temp_dir = os.path.join(os.getcwd(), 'tmp_media')
+            os.makedirs(temp_dir, exist_ok=True)
+            ext = os.path.splitext(file_name)[1]
+            safe_name = f"paste_{int(time.time())}{ext}"
+            temp_path = os.path.join(temp_dir, safe_name)
+
+            if download_file(file_url, temp_path):
+                try:
+                    logging.info(f"Simulando Ctrl+V para arquivo: {file_name} ({mimetype})")
+                    import base64
+                    with open(temp_path, "rb") as f:
+                        base64_data = base64.b64encode(f.read()).decode('utf-8')
+
+                    paste_script = """
+                    async (params) => {
+                        const { base64Data, mimeType, fileName } = params;
+                        const res = await fetch(`data:${mimeType};base64,${base64Data}`);
+                        const blob = await res.blob();
+
+                        const file = new File([blob], fileName, { type: mimeType });
+
+                        const dataTransfer = new DataTransfer();
+                        dataTransfer.items.add(file);
+
+                        const chatBox = document.querySelector('#main div[role="textbox"]');
+                        if (chatBox) {
+                            chatBox.focus();
+                            const pasteEvent = new ClipboardEvent('paste', {
+                                clipboardData: dataTransfer,
+                                bubbles: true,
+                                cancelable: true
+                            });
+                            chatBox.dispatchEvent(pasteEvent);
+                            return true;
+                        }
+                        return false;
+                    }
+                    """
+
+                    success = page.evaluate(paste_script, {
+                        "base64Data": base64_data,
+                        "mimeType": mimetype,
+                        "fileName": file_name
+                    })
+
+                    if success:
+                        logging.info(f"Evento 'Paste' para {file_name} disparado.")
+                        page.wait_for_timeout(6000)
+                        page.keyboard.press("Enter")
+                        logging.info("Mídia confirmada via Ctrl+V.")
+                    else:
+                        logging.error("Falha ao localizar chatbox para o Paste.")
+
+                    page.wait_for_timeout(2000)
+                    if os.path.exists(temp_path):
+                        os.remove(temp_path)
+
+                except Exception as e:
+                    logging.error(f"Erro no Paste universal: {e}")
+                    if os.path.exists(temp_path):
+                        os.remove(temp_path)
+            else:
+                logging.warning("Download falhou.")
+
+        return True, "Processo concluido."
+    except PlaywrightTimeoutError as e:
+        logging.error(f"Timeout Playwright no envio para {phone}: {e}")
+        return False, "Timeout ao manipular o WhatsApp Web durante o envio."
+    except Exception as e:
+        logging.error(f"Falha inesperada ao enviar para {phone}: {e}")
+        return False, f"Falha inesperada no envio: {str(e)}"
 def update_job_status(job_id, status, error=None):
     data = {"status": status}
     if error:
@@ -212,6 +240,104 @@ def update_job_status(job_id, status, error=None):
         logging.error(f"Erro ao atualizar status do job {job_id}: {e}")
 def stop_campaign(campaign_id, reason):
     logging.critical(f"ALERTA: A campanha {campaign_id} falhou devido a: {reason}")
+
+def fetch_next_command():
+    try:
+        response = requests.get(f"{API_BASE_URL}/bot/commands/next", headers=API_HEADERS, timeout=5)
+        if response.status_code != 200:
+            if response.status_code == 401:
+                logging.critical("Falha de autenticação ao consultar comandos do bot.")
+            return None
+        payload = response.json() or {}
+        return payload.get("command")
+    except Exception:
+        return None
+
+def execute_control_command(command, browser, user_data_dir):
+    if not isinstance(command, dict):
+        return None
+    cmd_type = str(command.get("type") or "").strip().lower()
+    if cmd_type == "skip_delay_once":
+        reason = str((command.get("payload") or {}).get("reason") or "manual_skip_delay")
+        logging.info(f"Comando recebido: pular espera anti-ban uma vez ({reason}).")
+        return "skip_delay_once"
+
+    if cmd_type != "disconnect_whatsapp":
+        return None
+
+    reason = str((command.get("payload") or {}).get("reason") or "manual_disconnect")
+    logging.warning(f"Comando recebido: desconectar WhatsApp ({reason}).")
+
+    try:
+        requests.post(
+            f"{API_BASE_URL}/bot/status",
+            json={"status": "DISCONNECTED", "qrCodeBase64": None, "agentId": BOT_AGENT_ID},
+            headers=API_HEADERS,
+            timeout=5,
+        )
+    except Exception:
+        pass
+
+    try:
+        browser.close()
+    except Exception:
+        pass
+
+    try:
+        shutil.rmtree(user_data_dir, ignore_errors=True)
+    except Exception as e:
+        logging.error(f"Falha ao limpar sessao local: {e}")
+
+    logging.critical("Sessão removida por comando administrativo. Encerrando processo para reiniciar limpo.")
+    raise SystemExit(0)
+
+
+def get_campaign_delay_seconds(job):
+    campaign_payload = job.get("campaign") if isinstance(job, dict) else None
+    anti_ban = {}
+    if isinstance(campaign_payload, dict):
+        anti_ban = campaign_payload.get("antiBan") or {}
+
+    min_delay = anti_ban.get("minDelaySeconds", 0)
+    max_delay = anti_ban.get("maxDelaySeconds", 120)
+
+    try:
+        min_delay = int(float(min_delay))
+    except Exception:
+        min_delay = 0
+    try:
+        max_delay = int(float(max_delay))
+    except Exception:
+        max_delay = 120
+
+    # Regra operacional: não exceder 120s de espera entre disparos
+    min_delay = max(0, min(min_delay, 120))
+    max_delay = max(0, min(max_delay, 120))
+    if max_delay < min_delay:
+        min_delay, max_delay = max_delay, min_delay
+
+    if max_delay == min_delay:
+        return min_delay
+
+    preferred_mode = min_delay + int((max_delay - min_delay) * 0.25)
+    delay_seconds = int(round(random.triangular(min_delay, max_delay, preferred_mode)))
+    return max(0, delay_seconds)
+
+
+def wait_with_command_poll(seconds, browser, user_data_dir):
+    safe_seconds = max(0, int(seconds or 0))
+    if safe_seconds <= 0:
+        return False
+
+    for _ in range(safe_seconds):
+        time.sleep(1)
+        command = fetch_next_command()
+        if not command:
+            continue
+        cmd_result = execute_control_command(command, browser, user_data_dir)
+        if cmd_result == "skip_delay_once":
+            return True
+    return False
 def check_inbound_messages(page):
     try:
         inbound_elements = page.query_selector_all('div.message-in')[-5:]
@@ -246,13 +372,13 @@ def scrape_history_for_job(page, phone):
     logging.info(f"Iniciando raspagem de historico para o numero {phone}")
     dom_success = False
     try:
-        new_chat_btn = page.locator('div[title="Nova conversa"], span[data-icon="chat"]').first
+        new_chat_btn = page.locator('div[title="Nova conversa"], span[data-icon="chat"], span[data-icon="new-chat-outline"], span[data-icon="plus"]').first
         new_chat_btn.click(timeout=5000)
         page.wait_for_timeout(1000)
         page.keyboard.type(phone)
-        page.wait_for_timeout(3000)
+        page.wait_for_timeout(4000)
         page.keyboard.press("Enter")
-        page.wait_for_timeout(1500)
+        page.wait_for_timeout(2500)
         chat_box = page.locator('div[role="textbox"]').last
         if not chat_box.is_visible():
             first_contact = page.locator('div[role="listitem"]').first
@@ -265,7 +391,7 @@ def scrape_history_for_job(page, phone):
         if chat_box.is_visible():
             dom_success = True
     except Exception as e:
-        logging.warning("Nao conseguiu abrir o chat pra historico via DOM. Tentando Fallback URL...")
+        logging.warning(f"Nao conseguiu abrir o chat pra historico via DOM: {e}. Tentando Fallback URL...")
     if not dom_success:
         chat_url = f"{WHATSAPP_URL}/send/?phone={phone}"
         page.goto(chat_url)
@@ -328,8 +454,9 @@ def main():
     with sync_playwright() as p:
         # Dinamic user data dir based on agent id for multi-session support
         session_folder = f"session_{BOT_AGENT_ID}"
-        user_data_dir = os.path.join(os.getcwd(), "sessions", session_folder)
-        os.makedirs(os.path.dirname(user_data_dir), exist_ok=True)
+        sessions_root = os.path.join(os.getcwd(), "whatsapp_session", "sessions")
+        os.makedirs(sessions_root, exist_ok=True)
+        user_data_dir = os.path.join(sessions_root, session_folder)
         browser = p.chromium.launch_persistent_context(
             user_data_dir=user_data_dir,
             headless=True, 
@@ -339,9 +466,32 @@ def main():
                 "--disable-blink-features=AutomationControlled", # Flag Crucial Anti-Ban: Oculta o navigator.webdriver
                 "--disable-web-security",
                 "--disable-features=IsolateOrigins,site-per-process",
+                "--disable-dev-shm-usage",
+                "--disable-gpu",
+                "--no-sandbox",
+                "--disable-software-rasterizer",
+                "--disable-extensions",
+                # "--disable-background-networking",
+                "--disable-default-apps",
+                "--disable-sync",
+                "--disable-translate",
+                "--mute-audio",
+                "--no-first-run",
+                "--safebrowsing-disable-auto-update",
+                "--js-flags=--max-old-space-size=1024"
             ]
         )
-        page = browser.new_page()
+        pages = browser.pages
+        page = pages[0] if pages else browser.new_page()
+        browser.set_default_timeout(MAX_WAIT_TIME)
+        browser.set_default_navigation_timeout(MAX_WAIT_TIME)
+        page.set_default_timeout(MAX_WAIT_TIME)
+        page.set_default_navigation_timeout(MAX_WAIT_TIME)
+        for extra_page in browser.pages[1:]:
+            try:
+                extra_page.close()
+            except Exception:
+                pass
         page.goto(WHATSAPP_URL, timeout=60000)
         logging.info("Aguardando carregamento da página e verificando estado de login...")
         
@@ -377,9 +527,22 @@ def main():
                 
         logging.info("WhatsApp pronto. Iniciando processamento da fila...")
         last_heartbeat = 0
+        last_control_poll = 0
         HEARTBEAT_INTERVAL = 30  # seconds
+        CONTROL_POLL_INTERVAL = 5
+        skip_delay_once = False
+        messages_sent_counter = 0
+
         while True:
             try:
+                # Se atingiu o limite, recarrega para liberar o DOM (Gargalo de RAM)
+                if messages_sent_counter >= 15:
+                    logging.info("Limite de envios sequenciais alcançado (15). Recarregando WApp para liberar memória (DOM)...")
+                    page.reload(timeout=120000)
+                    page.wait_for_selector('div#pane-side', timeout=120000)
+                    messages_sent_counter = 0
+
+                job_id = None
                 # Periodic heartbeat: re-post LOGGED_IN so backend restart doesn't show DISCONNECTED
                 now_ts = time.time()
                 if now_ts - last_heartbeat >= HEARTBEAT_INTERVAL:
@@ -388,6 +551,14 @@ def main():
                         last_heartbeat = now_ts
                     except Exception as hb_err:
                         logging.warning(f"Heartbeat falhou: {hb_err}")
+
+                if now_ts - last_control_poll >= CONTROL_POLL_INTERVAL:
+                    command = fetch_next_command()
+                    last_control_poll = now_ts
+                    if command:
+                        command_result = execute_control_command(command, browser, user_data_dir)
+                        if command_result == "skip_delay_once":
+                            skip_delay_once = True
 
                 response = requests.get(f"{API_BASE_URL}/messages/next", headers=API_HEADERS)
                 if response.status_code != 200:
@@ -422,20 +593,40 @@ def main():
                     media = job.get("media")
 
                 logging.info(f"Iniciando job {job_id} para {phone} | Prioridade: {is_priority} | Midia: {bool(media)} | fileUrl: {media.get('fileUrl') if isinstance(media, dict) else None}")
-
+                send_live_activity("processing", {"job_id": job_id, "phone": phone})
+                
                 action = job.get("action", "send_message")
                 if action == "history_sync":
                     success, error_reason = scrape_history_for_job(page, phone)
                     update_job_status(job_id, "sent" if success else "failed", error_reason if not success else None)
                     continue
 
+                dispatch_started_at = time.time()
                 success, error_reason = send_message(page, phone, message_text, is_priority, media)
+                messages_sent_counter += 1
+                
                 if success:
                     update_job_status(job_id, "sent")
                     if not is_priority:
-                        tempo_espera = random.randint(15, 45)
-                        logging.info(f"Aguardando {tempo_espera}s de respiro antes da próxima mensagem da Campanha...")
-                        time.sleep(tempo_espera)
+                        if skip_delay_once:
+                            logging.info("Envio imediato solicitado. Pulando espera anti-ban desta vez.")
+                            skip_delay_once = False
+                        else:
+                            tempo_sorteado = get_campaign_delay_seconds(job)
+                            tempo_processamento = max(0, int(round(time.time() - dispatch_started_at)))
+                            tempo_espera = max(0, tempo_sorteado - tempo_processamento)
+                            if tempo_sorteado > 0:
+                                logging.info(
+                                    f"Anti-ban sorteado: {tempo_sorteado}s | processamento: {tempo_processamento}s | espera restante: {tempo_espera}s"
+                                )
+                            if tempo_espera > 0:
+                                next_send_at = int((time.time() + tempo_espera) * 1000)
+                                send_live_activity("waiting", {"tempo_espera": tempo_espera, "nextSendAt": next_send_at})
+                                interrupted = wait_with_command_poll(tempo_espera, browser, user_data_dir)
+                                if interrupted:
+                                    logging.info("Espera anti-ban interrompida por comando de disparo imediato.")
+                            else:
+                                logging.info("Sem espera adicional: próxima mensagem pode disparar imediatamente.")
                     else:
                         logging.info("Atendimento despachado instantaneamente. Indo checar o próximo da fila...")
                 else:
@@ -447,7 +638,14 @@ def main():
                         logging.critical(f"Pausando a fila por alguns segundos devido a possível erro de conexão ou instabilidade ({error_reason}).")
                         time.sleep(30)
             except Exception as e:
-                logging.error(f"Erro inesperado no loop principal: {str(e)}")
+                error_msg = f"Erro inesperado no loop principal: {str(e)}"
+                logging.error(error_msg)
+                # Reportar falha se há job_id em processamento
+                try:
+                    if 'job_id' in locals() and job_id:
+                        update_job_status(job_id, "failed", error_msg)
+                except Exception as update_err:
+                    logging.error(f"Falha ao reportar erro para job {job_id}: {update_err}")
                 time.sleep(10)
 if __name__ == "__main__":
     main()
