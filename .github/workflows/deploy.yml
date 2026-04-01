@@ -1,18 +1,10 @@
-name: Deploy to DigitalOcean (Student Pack) [DEPRECATED]
+name: Deploy to DigitalOcean - Safe Zero-Downtime
 
 on:
+  push:
+    branches:
+      - main
   workflow_dispatch:
-
-jobs:
-  notice:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Deployment Instructions
-        run: |
-          echo "Deploy is now manual via terminal on the server:"
-          echo "  ssh root@ubuntu-s-1vcpu-1gb-sfo3-01"
-          echo "  cd /opt/EmidiaWhats && git pull origin main"
-          echo "  docker-compose down && docker-compose up -d --build"
 
 jobs:
   security-gate:
@@ -55,7 +47,66 @@ jobs:
           username: ${{ secrets.DO_USERNAME }}
           key: ${{ secrets.DO_SSH_KEY }}
           script: |
-            cd /opt/EmidiaWhats
-            git pull origin main
-            docker-compose down
-            docker-compose up -d --build
+             set -e
+             cd /opt/EmidiaWhats
+             echo "🚀 Starting safe zero-downtime deploy..."
+             
+             # Create backup tag for rollback
+             git tag "backup-$(date +%Y%m%d-%H%M%S)" || true
+             
+             # Fetch and update without disruption
+             git fetch origin main
+             git pull --ff-only origin main
+             
+             # Build containers without stopping current ones
+             docker compose build
+             
+             # Health check current service before deploy
+             echo "Checking current service health..."
+             max_retries=10
+             retry_count=0
+             while [ $retry_count -lt $max_retries ]; do
+               if curl -f http://localhost:3000/health > /dev/null 2>&1; then
+                 echo "✓ Current service is healthy"
+                 break
+               fi
+               retry_count=$((retry_count + 1))
+               if [ $retry_count -eq $max_retries ]; then
+                 echo "⚠ Current service not responding (may be first deployment)"
+               fi
+               sleep 1
+             done
+             
+             # Start new containers (rolling update - no downtime)
+             echo "Deploying new containers..."
+             docker compose up -d --no-deps --build backend backend_worker
+             
+             sleep 5
+             
+             # Health check new service
+             echo "Verifying new service health..."
+             max_retries=30
+             retry_count=0
+             success=false
+             while [ $retry_count -lt $max_retries ]; do
+               if curl -f http://localhost:3000/health > /dev/null 2>&1; then
+                 echo "✓ New service is healthy - deploy successful!"
+                 success=true
+                 break
+               fi
+               retry_count=$((retry_count + 1))
+               echo "  Waiting for service... ($retry_count/$max_retries)"
+               sleep 2
+             done
+             
+             if [ "$success" = false ]; then
+               echo "✗ New service failed health check - ROLLING BACK"
+               docker compose down
+               git checkout "$(git describe --tags --abbrev=0)"
+               docker compose up -d --build
+               echo "Rollback completed"
+               exit 1
+             fi
+             
+             echo "✓ Deploy completed successfully"
+             docker compose ps

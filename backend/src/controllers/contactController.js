@@ -26,9 +26,13 @@ function mergeContactWithLead(contact = {}, lead = null) {
   };
 }
 
+function resolveOwnerId(req) {
+  return String(req.user?.id || req.agentId || "").trim();
+}
+
 exports.getContacts = async (req, res) => {
   try {
-    const agentId = req.agentId;
+    const agentId = resolveOwnerId(req);
     if (!agentId || agentId === 'bot') {
        return res.status(403).json({ msg: "Bot cannot list contacts or agentId missing" });
     }
@@ -53,7 +57,7 @@ exports.getContacts = async (req, res) => {
 
 exports.addContact = async (req, res) => {
   try {
-    const agentId = req.agentId;
+    const agentId = resolveOwnerId(req);
     if (!agentId || agentId === 'bot') {
        return res.status(403).json({ msg: "Bot cannot create contacts or agentId missing" });
     }
@@ -88,7 +92,7 @@ exports.addContact = async (req, res) => {
 
 exports.importContacts = async (req, res) => {
   try {
-    const agentId = req.agentId;
+    const agentId = resolveOwnerId(req);
     if (!agentId || agentId === 'bot') {
        return res.status(403).json({ msg: "Bot cannot import contacts or agentId missing" });
     }
@@ -151,7 +155,7 @@ exports.importContacts = async (req, res) => {
 
 exports.updateContactCrm = async (req, res) => {
   try {
-    const agentId = req.agentId;
+    const agentId = resolveOwnerId(req);
     const { id } = req.params;
     if (!agentId || agentId === 'bot') {
       return res.status(403).json({ msg: 'Bot cannot update CRM lead.' });
@@ -183,7 +187,7 @@ exports.updateContactCrm = async (req, res) => {
 
 exports.getLeadAnalytics = async (req, res) => {
   try {
-    const agentId = req.agentId;
+    const agentId = resolveOwnerId(req);
     if (!agentId || agentId === 'bot') {
       return res.status(403).json({ msg: 'Bot cannot access lead analytics.' });
     }
@@ -198,7 +202,7 @@ exports.getLeadAnalytics = async (req, res) => {
 
 exports.deleteContact = async (req, res) => {
   try {
-    const agentId = req.agentId;
+    const agentId = resolveOwnerId(req);
     const { id } = req.params;
 
     const contact = await Contact.findById(id);

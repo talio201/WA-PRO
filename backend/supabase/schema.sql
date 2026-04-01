@@ -5,7 +5,7 @@ create extension if not exists pgcrypto;
 
 create or replace function public.set_updated_at()
 returns trigger
-language plpgsql
+language plpgsqla
 as $$
 begin
   new.updated_at = timezone('utc', now());
@@ -15,6 +15,7 @@ $$;
 
 create table if not exists public.campaigns (
   id uuid primary key default gen_random_uuid(),
+  agent_id text not null,
   name text not null,
   message_template text,
   message_variants jsonb not null default '[]'::jsonb,
@@ -35,6 +36,7 @@ for each row execute function public.set_updated_at();
 
 create table if not exists public.messages (
   id uuid primary key default gen_random_uuid(),
+  agent_id text not null,
   campaign_id uuid not null references public.campaigns(id) on delete cascade,
   phone text not null,
   phone_original text,
@@ -61,6 +63,21 @@ create trigger trg_messages_updated_at
 before update on public.messages
 for each row execute function public.set_updated_at();
 
+alter table public.campaigns
+  add column if not exists agent_id text;
+
+alter table public.messages
+  add column if not exists agent_id text;
+
+update public.campaigns set agent_id = coalesce(agent_id, '') where agent_id is null;
+update public.messages set agent_id = coalesce(agent_id, '') where agent_id is null;
+
+alter table public.campaigns
+  alter column agent_id set not null;
+
+alter table public.messages
+  alter column agent_id set not null;
+
 create table if not exists public.conversation_assignments (
   id uuid primary key default gen_random_uuid(),
   phone text not null unique,
@@ -81,14 +98,38 @@ create trigger trg_conversation_assignments_updated_at
 before update on public.conversation_assignments
 for each row execute function public.set_updated_at();
 
+create table if not exists public.contacts (
+  id uuid primary key default gen_random_uuid(),
+  agent_id text not null,
+  name text,
+  phone text not null,
+  created_at timestamptz not null default timezone('utc', now()),
+  updated_at timestamptz not null default timezone('utc', now())
+);
+
+drop trigger if exists trg_contacts_updated_at on public.contacts;
+create trigger trg_contacts_updated_at
+before update on public.contacts
+for each row execute function public.set_updated_at();
+
 create index if not exists idx_campaigns_status on public.campaigns (status);
+create index if not exists idx_campaigns_agent_id on public.campaigns (agent_id);
 create index if not exists idx_campaigns_created_at_desc on public.campaigns (created_at desc);
 create index if not exists idx_messages_campaign_status on public.messages (campaign_id, status);
+create index if not exists idx_messages_agent_id on public.messages (agent_id);
 create index if not exists idx_messages_status on public.messages (status);
 create index if not exists idx_messages_phone on public.messages (phone);
 create index if not exists idx_messages_updated_at_desc on public.messages (updated_at desc);
 create index if not exists idx_conversation_assignments_status on public.conversation_assignments (status);
 create index if not exists idx_conversation_assignments_phone on public.conversation_assignments (phone);
+create index if not exists idx_contacts_agent_id on public.contacts (agent_id);
+create index if not exists idx_contacts_phone on public.contacts (phone);
+
+alter table public.contacts
+  drop constraint if exists unique_agent_phone;
+
+alter table public.contacts
+  add constraint unique_agent_phone unique (agent_id, phone);
 
 grant usage on schema public to anon, authenticated, service_role;
 
@@ -97,10 +138,12 @@ grant all privileges on all sequences in schema public to service_role;
 grant all privileges on table public.campaigns to service_role;
 grant all privileges on table public.messages to service_role;
 grant all privileges on table public.conversation_assignments to service_role;
+grant all privileges on table public.contacts to service_role;
 
 grant select, insert, update, delete on table public.campaigns to anon, authenticated;
 grant select, insert, update, delete on table public.messages to anon, authenticated;
 grant select, insert, update, delete on table public.conversation_assignments to anon, authenticated;
+grant select, insert, update, delete on table public.contacts to anon, authenticated;
 
 alter default privileges in schema public grant all on tables to service_role;
 alter default privileges in schema public grant all on sequences to service_role;
@@ -109,6 +152,7 @@ alter default privileges in schema public grant all on sequences to service_role
 alter table public.campaigns disable row level security;
 alter table public.messages disable row level security;
 alter table public.conversation_assignments disable row level security;
+alter table public.contacts disable row level security;
 
 -- If you need RLS for client-side access, enable and create strict policies.
 -- alter table public.campaigns enable row level security;

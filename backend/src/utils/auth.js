@@ -7,10 +7,6 @@ const {
   getInstallationByActivationCode,
   touchInstallation,
   getAppConfig,
-  getSaasUserByEmail,
-  touchSaasUserLogin,
-  isAdminEmail,
-  upsertSaasUser,
 } = require('../config/adminStore');
 
 function toBase64Url(value) {
@@ -67,25 +63,6 @@ function getSupabaseClient() {
 function getValidApiKey() {
   return String(process.env.API_SECRET_KEY || '').trim();
 }
-
-function isTruthy(value) {
-  if (value === true) return true;
-  const normalized = String(value || '').trim().toLowerCase();
-  return normalized === 'true' || normalized === '1' || normalized === 'yes' || normalized === 'admin';
-}
-
-function userHasAdminFlag(user = {}) {
-  return (
-    isTruthy(user?.user_metadata?.isAdmin)
-    || isTruthy(user?.user_metadata?.is_admin)
-    || isTruthy(user?.app_metadata?.isAdmin)
-    || isTruthy(user?.app_metadata?.is_admin)
-    || String(user?.app_metadata?.role || '').trim().toLowerCase() === 'admin'
-    || String(user?.user_metadata?.role || '').trim().toLowerCase() === 'admin'
-  );
-}
-
-const supabaseTokenCache = new Map();
 
 async function authenticateBearerToken(token, agentId = '') {
   const safeToken = String(token || '').trim();
@@ -163,98 +140,23 @@ async function authenticateBearerToken(token, agentId = '') {
   const supabase = getSupabaseClient();
   if (supabase) {
     try {
-      let user = null;
-      let cached = supabaseTokenCache.get(safeToken);
-      if (cached && cached.exp > Date.now()) {
-        user = cached.user;
-      } else {
-        const { data: userData = {}, error } = await supabase.auth.getUser(safeToken);
-        if (error) {
-          console.error('[AUTH] Supabase error:', error?.message || error, 'Token:', safeToken.substring(0, 10));
-          
-          if (String(error?.message).toLowerCase().includes('rate limit')) {
-              console.error("[AUTH] Supabase Rate Limit Hit! Implementing fallback...");
-          }
-          return null;
-        }
-        if (!userData || !userData.user) {
-          console.error('[AUTH] No user returned from Supabase', 'Token:', safeToken.substring(0, 10));
-          return null;
-        }
-        user = userData.user;
-        supabaseTokenCache.set(safeToken, { user, exp: Date.now() + 1000 * 60 * 5 }); // cache 5 min
+      const { data: { user } = {}, error } = await supabase.auth.getUser(safeToken);
+      if (!error && user) {
+        const resolvedAgentId = String(user?.id || agentId || 'admin').trim() || 'admin';
+        return {
+          kind: 'supabase-user',
+          user,
+          agentId: resolvedAgentId,
+          permissions: {
+            allowGemini: true,
+            allowRealtime: true,
+            allowCampaigns: true,
+            allowContacts: true,
+            allowInbox: true,
+          },
+        };
       }
-
-      const email = String(user.email || '').trim().toLowerCase();
-      const adminBypass = userHasAdminFlag(user) || (email && isAdminEmail(email));
-      let saasUser = null;
-      if (!adminBypass) {
-        saasUser = getSaasUserByEmail(email);
-        if (!saasUser) {
-          const defaultAgentId = String(
-            user?.user_metadata?.agentId
-            || user?.app_metadata?.agentId
-            || `user_${String(user.id || '').slice(0, 12)}`,
-          ).trim();
-          saasUser = upsertSaasUser({
-            email,
-            agentId: defaultAgentId,
-            status: 'active',
-            metadata: {
-              source: 'supabase-signin',
-              createdBy: 'auto-registration',
-            },
-          });
-        }
-        const nowMs = Date.now();
-        if (saasUser.expiresAt && new Date(saasUser.expiresAt).getTime() <= nowMs) {
-          saasUser = upsertSaasUser({
-            email,
-            status: 'suspended',
-            metadata: {
-              autoSuspendedAt: new Date().toISOString(),
-              reason: 'license_expired',
-            },
-          });
-        }
-        touchSaasUserLogin(email, {
-          lastAuthAt: new Date().toISOString(),
-          source: 'supabase-auth',
-        });
-      }
-
-      const derivedUserId = `user_${String(user.id || '').slice(0, 12)}`;
-      let resolvedAgentId = String(
-        saasUser?.agentId
-        || saasUser?.clientId
-        || user?.user_metadata?.agentId
-        || derivedUserId
-      ).trim();
-
-      // Ensure that if the admin user exists as a SaaS user, they keep their actual bot agentId.
-      // We only fall back to 'admin' if they somehow have no agentId and bypass is true.
-      if (!resolvedAgentId && adminBypass) {
-        resolvedAgentId = 'admin';
-      }
-      const activeAccess = adminBypass || (saasUser?.status === 'active' || saasUser?.status === 'pending');
-      const isDemo = String(saasUser?.planTerm || '').trim().toLowerCase() === 'demo';
-
-      return {
-        kind: 'supabase-user',
-        user,
-        agentId: resolvedAgentId || 'admin',
-        saasUser,
-        isAdmin: adminBypass,
-        permissions: {
-          allowGemini: activeAccess && !isDemo,
-          allowRealtime: activeAccess,
-          allowCampaigns: activeAccess && !isDemo,
-          allowContacts: activeAccess,
-          allowInbox: activeAccess,
-        },
-      };
     } catch (error) {
-      console.error('[AUTH] Supabase exception:', error?.message || error);
       return null;
     }
   }

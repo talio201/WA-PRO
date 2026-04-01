@@ -149,8 +149,18 @@ exports.generateVariants = async (req, res) => {
     const baseMessage = String(req.body?.message || "").trim();
     const targetCount = Math.max(1, Math.min(Number(req.body?.count) || 5, 10));
     if (!apiKey) {
+      // Log error to admin panel instead of exposing to client
+      emitRealtimeEvent("admin.extension_error", {
+        id: `gemini_config_${Date.now()}`,
+        timestamp: new Date().toISOString(),
+        error: "Gemini API key not configured",
+        message: "Backend is missing GEMINI_API_KEY or GOOGLE_API_KEY environment variable",
+        context: "AI variant generation requested",
+        agentId: req.headers["x-agent-id"] || "unknown",
+        severity: "critical"
+      });
       return res.status(400).json({
-        msg: "Gemini API key is not configured on server. Set GEMINI_API_KEY or GOOGLE_API_KEY in backend/.env.",
+        msg: "Serviço de IA temporariamente indisponível. Contate o administrador.",
       });
     }
     if (!baseMessage) {

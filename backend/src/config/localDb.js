@@ -208,6 +208,7 @@ function mapFieldToDb(collection, field) {
   if (collection === "campaigns") {
     const map = {
       _id: "id",
+      agentId: "agent_id",
       messageTemplate: "message_template",
       messageVariants: "message_variants",
       turboMode: "turbo_mode",
@@ -220,6 +221,7 @@ function mapFieldToDb(collection, field) {
   if (collection === "messages") {
     const map = {
       _id: "id",
+      agentId: "agent_id",
       campaign: "campaign_id",
       phoneOriginal: "phone_original",
       searchTerms: "search_terms",
@@ -263,6 +265,7 @@ function mapCampaignFromDb(row) {
   if (!row) return null;
   return {
     _id: row.id,
+    agentId: row.agent_id || "",
     name: row.name || "",
     messageTemplate: row.message_template || "",
     messageVariants: Array.isArray(row.message_variants)
@@ -281,6 +284,7 @@ function mapMessageFromDb(row) {
   if (!row) return null;
   return {
     _id: row.id,
+    agentId: row.agent_id || "",
     campaign: row.campaign_id || null,
     phone: row.phone || "",
     phoneOriginal: row.phone_original || "",
@@ -335,6 +339,7 @@ function mapFromDb(collection, row) {
 function mapCampaignToDb(item) {
   const payload = {
     id: item._id,
+    agent_id: item.agentId || "",
     name: item.name,
     message_template: item.messageTemplate,
     message_variants: Array.isArray(item.messageVariants)
@@ -353,6 +358,7 @@ function mapCampaignToDb(item) {
 function mapMessageToDb(item) {
   const payload = {
     id: item._id,
+    agent_id: item.agentId || "",
     campaign_id: item.campaign || null,
     phone: item.phone,
     phone_original: item.phoneOriginal || "",
@@ -412,13 +418,13 @@ class LocalDB {
     this.supabaseClient =
       this.provider === "supabase" ? getSupabaseClient() : null;
     if (this.provider === "supabase" && !this.supabaseClient) {
+      const errorMessage =
+        "Supabase provider requested, but SUPABASE_URL and key are missing. Refusing to fallback to local storage.";
       if (!hasWarnedSupabaseFallback) {
         hasWarnedSupabaseFallback = true;
-        console.warn(
-          "Supabase provider requested, but SUPABASE_URL/SUPABASE_KEY are missing. Falling back to local JSON DB.",
-        );
+        console.error(errorMessage);
       }
-      this.provider = "local";
+      throw new Error(errorMessage);
     }
     if (this.provider === "local") {
       ensureLocalDbFile();

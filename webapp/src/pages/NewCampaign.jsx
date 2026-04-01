@@ -466,9 +466,6 @@ const NewCampaign = ({ onCancel }) => {
                 </button>
               </div>
               <p className="text-xs text-slate-500">
-                Chave Gemini no servidor: configure em <code>backend/.env</code>{" "}
-                com <code>GEMINI_API_KEY</code> ou <code>GOOGLE_API_KEY</code>.
-              </p>
               {aiError && (
                 <p className="text-sm font-medium text-red-600">{aiError}</p>
               )}

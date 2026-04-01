@@ -1,6 +1,5 @@
 const Message = require("../models/Message");
 const Campaign = require("../models/Campaign");
-const { isWithinDeliveryWindow } = require("../utils/time");
 const ConversationAssignment = require("../models/ConversationAssignment");
 const SupportProtocol = require("../models/SupportProtocol");
 const { normalizePhone } = require("../utils/phone");
@@ -83,6 +82,9 @@ function toSafePhone(value) {
   return (
     normalizePhone(value).normalized || String(value || "").replace(/\D/g, "")
   );
+}
+function resolveOwnerId(req) {
+  return String(req.user?.id || req.agentId || "").trim();
 }
 function parseBooleanFlag(value) {
   if (value === undefined || value === null) return false;
@@ -175,10 +177,11 @@ function pickLatestAssignment(assignments = []) {
   })[0];
 }
 function resolveAgentIdFromRequest(req) {
+  const fromAuth = String(req.user?.id || req.agentId || "").trim();
   const fromBody = String(req.body?.agentId || "").trim();
   const fromQuery = String(req.query?.agentId || "").trim();
   const fromHeader = String(req.headers?.["x-agent-id"] || "").trim();
-  return fromBody || fromQuery || fromHeader;
+  return fromAuth || fromBody || fromQuery || fromHeader;
 }
 function normalizeHistoryDirection(value) {
   const normalized = String(value || "")
@@ -322,6 +325,7 @@ async function resolveRelatedCampaignId({
   normalizedPhone,
   preferredCampaignId = null,
   relatedMessages = [],
+  ownerAgentId = "",
 }) {
   if (preferredCampaignId) return preferredCampaignId;
   const history = Array.isArray(relatedMessages) ? relatedMessages : [];
@@ -334,15 +338,25 @@ async function resolveRelatedCampaignId({
       )?.campaign || null;
   if (fromHistory) return fromHistory;
   if (!normalizedPhone || normalizedPhone.length < 8) return null;
+  const allMessages = ownerAgentId
+    ? await Message.find({ agentId: ownerAgentId })
+    : await Message.find({});
+  const allList = Array.isArray(allMessages) ? allMessages : [];
   const targetTail = normalizedPhone.slice(-10);
-  const fuzzyMatch = await Message.findOne({
-    $or: [
-      { phone: normalizedPhone },
-      { phone: new RegExp(targetTail + "$") }
-    ],
-    direction: { $ne: "inbound" },
-    campaign: { $exists: true, $ne: null }
-  }).sort({ createdAt: -1 });
+  const fuzzyMatch = allList
+    .filter(
+      (item) =>
+        String(item.direction || "outbound") !== "inbound" && item.campaign,
+    )
+    .sort((a, b) => getMessageDateMs(b) - getMessageDateMs(a))
+    .find((item) => {
+      const messagePhone = toSafePhone(item.phone || item.phoneOriginal);
+      if (!messagePhone) return false;
+      if (messagePhone === normalizedPhone) return true;
+      if (messagePhone.endsWith(targetTail)) return true;
+      if (normalizedPhone.endsWith(messagePhone.slice(-10))) return true;
+      return false;
+    });
   if (fuzzyMatch?.campaign) return fuzzyMatch.campaign;
   // Fallback requires agentId to create system campaign properly
   const queryAgentId = (history.length > 0 && history[0].campaign && history[0].campaign.agentId) || 'system';
@@ -357,18 +371,20 @@ exports.getMessages = async (req, res) => {
       ? Math.max(1, Math.min(parsedLimit, maxLimit))
       : 200;
     
-    let query = {};
-    if (req.agentId && req.agentId !== 'bot' && req.agentId !== 'system') {
-      const safeAgentId = String(req.agentId);
-      const agentCampaigns = await Campaign.find({ agentId: safeAgentId }).select('_id');
-      const agentCampaignIds = agentCampaigns.map(c => String(c._id));
-      query.campaign = { $in: agentCampaignIds };
-    }
+    // Filtro inicial pegando campanhas do agente
+    const ownerId = resolveOwnerId(req);
+    const agentCampaigns = await Campaign.find({ agentId: ownerId });
+    const agentCampaignIds = agentCampaigns.map(c => c._id);
 
-    // Listando todas e filtrando apÃ³s, se for DB Local JSON (otimizavel se for SQL real)
-    let filtered = await Message.find(query).limit(safeLimit * 5);
-    filtered = Array.isArray(filtered) ? filtered : [];
+    // Listando todas e filtrando após, se for DB Local JSON (otimizavel se for SQL real)
+    const allMessages = await Message.find({});
+    let filtered = Array.isArray(allMessages) ? allMessages : [];
     
+    // Só deixa passar mensagens que pertençam a campanhas do agente atual 
+    // ou se agentId == bot (permite tudo pra fila)
+    if (ownerId !== 'bot') {
+        filtered = filtered.filter(item => agentCampaignIds.includes(item.campaign));
+    }
     if (status) {
       filtered = filtered.filter((item) => item.status === status);
     }
@@ -407,17 +423,15 @@ exports.getMessages = async (req, res) => {
 exports.getConversations = async (req, res) => {
   try {
     const { search = "", onlyWithReplies, onlyAssigned, limit } = req.query;
-    
-    let query = {};
-    if (req.agentId && req.agentId !== 'bot' && req.agentId !== 'system') {
-      const safeAgentId = String(req.agentId);
-      const agentCampaigns = await Campaign.find({ agentId: safeAgentId }).select('_id');
-      const agentCampaignIds = agentCampaigns.map(c => String(c._id));
-      query.campaign = { $in: agentCampaignIds };
-    }
 
-    let allMessages = await Message.find(query).sort({createdAt:-1}).limit(2000);
-    allMessages = Array.isArray(allMessages) ? allMessages : [];
+    const ownerId = resolveOwnerId(req);
+    const agentCampaigns = await Campaign.find({ agentId: ownerId });
+    const agentCampaignIds = agentCampaigns.map(c => c._id);
+
+    let allMessages = await Message.find({});
+    if (ownerId && ownerId !== 'bot') {
+        allMessages = allMessages.filter(item => agentCampaignIds.includes(item.campaign));
+    }
     let activeAssignments = [];
     try {
       activeAssignments = await ConversationAssignment.find({
@@ -493,7 +507,7 @@ exports.getConversations = async (req, res) => {
     });
     const onlyReplies = parseBooleanFlag(onlyWithReplies);
     const assignedOnly = parseBooleanFlag(onlyAssigned);
-    const searchQuery = String(search || "")
+    const query = String(search || "")
       .trim()
       .toLowerCase();
     const parsedLimit = Number(limit);
@@ -523,17 +537,17 @@ exports.getConversations = async (req, res) => {
       .filter((conversation) => {
         if (onlyReplies && !conversation.hasResponse) return false;
         if (assignedOnly && !conversation.assignment) return false;
-        if (!searchQuery) return true;
+        if (!query) return true;
         return (
           String(conversation.phone || "")
             .toLowerCase()
-            .includes(searchQuery) ||
+            .includes(query) ||
           String(conversation.name || "")
             .toLowerCase()
-            .includes(searchQuery) ||
+            .includes(query) ||
           String(conversation.assignment?.assignedTo || "")
             .toLowerCase()
-            .includes(searchQuery)
+            .includes(query)
         );
       })
       .sort(
@@ -555,16 +569,16 @@ exports.getHelpdeskQueues = async (req, res) => {
       .trim()
       .toLowerCase();
 
-    let queryMsg = {};
-    if (req.agentId && req.agentId !== 'bot' && req.agentId !== 'system') {
-      const safeAgentId = String(req.agentId);
-      const agentCampaigns = await Campaign.find({ agentId: safeAgentId }).select('_id');
-      const agentCampaignIds = agentCampaigns.map(c => String(c._id));
-      queryMsg.campaign = { $in: agentCampaignIds };
-    }
+    const ownerId = resolveOwnerId(req);
+    const agentCampaigns = await Campaign.find({ agentId: ownerId });
+    const agentCampaignIds = agentCampaigns.map((campaign) => campaign._id);
 
-    let allMessages = await Message.find(queryMsg).sort({createdAt:-1}).limit(2000);
-    allMessages = Array.isArray(allMessages) ? allMessages : [];
+    let allMessages = await Message.find({});
+    if (ownerId && ownerId !== "bot") {
+      allMessages = allMessages.filter((item) =>
+        agentCampaignIds.includes(item.campaign),
+      );
+    }
 
     let activeAssignments = [];
     try {
@@ -750,7 +764,7 @@ exports.getHelpdeskQueues = async (req, res) => {
 exports.getConversationHistory = async (req, res) => {
   try {
     const normalizedPhone = toSafePhone(req.params.phone);
-    const agentId = resolveAgentIdFromRequest(req);
+    const agentId = resolveOwnerId(req);
     if (!normalizedPhone) {
       return res.status(400).json({ msg: "Phone is required." });
     }
@@ -762,17 +776,13 @@ exports.getConversationHistory = async (req, res) => {
     const safeLimit = Number.isFinite(parsedLimit)
       ? Math.max(1, Math.min(parsedLimit, 5000))
       : 2000;
-    
-    let query = { phone: normalizedPhone };
-    if (agentId && agentId !== 'bot' && agentId !== 'system') {
-      const safeAgentId = String(agentId);
-      const agentCampaigns = await Campaign.find({ agentId: safeAgentId }).select('_id');
-      const agentCampaignIds = agentCampaigns.map(c => String(c._id));
-      query.campaign = { $in: agentCampaignIds };
-    }
+    const agentCampaigns = await Campaign.find({ agentId });
+    const agentCampaignIds = agentCampaigns.map(c => c._id);
 
-    let history = await Message.find(query).sort({ createdAt: -1 }).limit(safeLimit);
-    
+    let history = await Message.find({ phone: normalizedPhone });
+    if (agentId && agentId !== 'bot') {
+       history = history.filter(item => agentCampaignIds.includes(item.campaign));
+    }
     const ordered = (Array.isArray(history) ? history : []).sort(
       (a, b) => getMessageDateMs(a) - getMessageDateMs(b),
     );
@@ -796,7 +806,7 @@ exports.getConversationHistory = async (req, res) => {
 exports.syncConversationHistory = async (req, res) => {
   try {
     const normalizedPhone = toSafePhone(req.params.phone || req.body?.phone);
-    const agentId = resolveAgentIdFromRequest(req);
+    const agentId = resolveOwnerId(req);
     const source = String(req.body?.source || "whatsapp_history_sync").trim();
     if (!normalizedPhone) {
       return res.status(400).json({ msg: "Phone is required." });
@@ -817,7 +827,7 @@ exports.syncConversationHistory = async (req, res) => {
         totalReceived: 0,
       });
     }
-    const existingMessages = await Message.find({ phone: normalizedPhone }).sort({ createdAt: -1 }).limit(100);
+    const existingMessages = await Message.find({ phone: normalizedPhone });
     const existingList = Array.isArray(existingMessages)
       ? existingMessages
       : [];
@@ -826,6 +836,7 @@ exports.syncConversationHistory = async (req, res) => {
       preferredCampaignId:
         req.body?.campaignId || assignment?.campaignId || null,
       relatedMessages: existingList,
+      ownerAgentId: agentId,
     });
     const normalizedSearchTerms = normalizePhone(normalizedPhone).searchTerms;
     const workingHistory = [...existingList];
@@ -859,6 +870,7 @@ exports.syncConversationHistory = async (req, res) => {
         return;
       }
       const payload = {
+        agentId,
         campaign: resolvedCampaignId || null,
         phone: normalizedPhone,
         phoneOriginal: normalizedPhone,
@@ -1201,12 +1213,13 @@ exports.openConversationProtocol = async (req, res) => {
       return res.status(400).json({ msg: "subject is required." });
     }
 
-    const history = await Message.find({ phone: normalizedPhone }).sort({ createdAt: -1 }).limit(100);
+    const history = await Message.find({ phone: normalizedPhone });
     const relatedMessages = Array.isArray(history) ? history : [];
     const campaignId = await resolveRelatedCampaignId({
       normalizedPhone,
       preferredCampaignId: req.body?.campaignId || null,
       relatedMessages,
+      ownerAgentId: resolveOwnerId(req),
     });
 
     const protocol = new SupportProtocol({
@@ -1294,6 +1307,7 @@ exports.updateProtocolStatus = async (req, res) => {
 };
 exports.registerInboundMessage = async (req, res) => {
   try {
+    const ownerId = resolveOwnerId(req);
     const rawPhone = req.body?.phone || req.body?.phoneOriginal || "";
     const normalized = normalizePhone(rawPhone);
     const normalizedPhone =
@@ -1312,12 +1326,13 @@ exports.registerInboundMessage = async (req, res) => {
     }
     const isCandidateDateValid = !Number.isNaN(candidateDate.getTime());
     const messageDate = isCandidateDateValid ? candidateDate : new Date();
-    const history = await Message.find({ phone: normalizedPhone }).sort({ createdAt: -1 }).limit(100);
+    const history = await Message.find({ phone: normalizedPhone });
     const relatedMessages = Array.isArray(history) ? history : [];
     const relatedCampaignId = await resolveRelatedCampaignId({
       normalizedPhone,
       preferredCampaignId: req.body?.campaignId || null,
       relatedMessages,
+      ownerAgentId: ownerId,
     });
     if (!relatedCampaignId) {
       return res.status(202).json({
@@ -1337,16 +1352,15 @@ exports.registerInboundMessage = async (req, res) => {
       return delta <= 2 * 60 * 1000;
     });
     if (duplicate) {
-      const campaign = await Campaign.findById(relatedCampaignId);
       emitRealtimeEvent("messages.inbound.duplicate", {
         phone: normalizedPhone,
         campaignId: relatedCampaignId,
-        agentId: campaign?.agentId || null,
         messageId: duplicate._id,
       });
       return res.json({ duplicate: true, message: duplicate });
     }
     const payload = {
+      agentId: ownerId,
       campaign: relatedCampaignId,
       phone: normalizedPhone,
       phoneOriginal: String(rawPhone || ""),
@@ -1373,18 +1387,16 @@ exports.registerInboundMessage = async (req, res) => {
       ],
     };
     const [createdMessage] = await Message.insertMany([payload]);
-    ensureLead(req.agentId || 'admin', normalizedPhone, {
-      owner: req.agentId || 'admin',
+    ensureLead(ownerId || 'admin', normalizedPhone, {
+      owner: ownerId || 'admin',
     });
-    updateLead(req.agentId || 'admin', normalizedPhone, {
+    updateLead(ownerId || 'admin', normalizedPhone, {
       lastInboundAt: messageDate,
       stage: 'qualified',
     });
-    const campaign = await Campaign.findById(relatedCampaignId);
     emitRealtimeEvent("messages.inbound.received", {
       phone: normalizedPhone,
       campaignId: relatedCampaignId,
-      agentId: campaign?.agentId || null,
       message: createdMessage,
     });
     try {
@@ -1434,6 +1446,7 @@ exports.registerInboundMessage = async (req, res) => {
 };
 exports.registerManualOutbound = async (req, res) => {
   try {
+    const ownerId = resolveOwnerId(req);
     const rawPhone = req.body?.phone || req.body?.phoneOriginal || "";
     const normalized = normalizePhone(rawPhone);
     const normalizedPhone =
@@ -1452,12 +1465,13 @@ exports.registerManualOutbound = async (req, res) => {
     }
     const isCandidateDateValid = !Number.isNaN(candidateDate.getTime());
     const messageDate = isCandidateDateValid ? candidateDate : new Date();
-    const history = await Message.find({ phone: normalizedPhone }).sort({ createdAt: -1 }).limit(100);
+    const history = await Message.find({ phone: normalizedPhone });
     const relatedMessages = Array.isArray(history) ? history : [];
     const relatedCampaignId = await resolveRelatedCampaignId({
       normalizedPhone,
       preferredCampaignId: req.body?.campaignId || null,
       relatedMessages,
+      ownerAgentId: ownerId,
     });
     if (!relatedCampaignId) {
       return res.status(202).json({
@@ -1485,6 +1499,7 @@ exports.registerManualOutbound = async (req, res) => {
       return res.json({ duplicate: true, message: duplicate });
     }
     const payload = {
+      agentId: ownerId,
       campaign: relatedCampaignId,
       phone: normalizedPhone,
       phoneOriginal: String(rawPhone || ""),
@@ -1511,10 +1526,10 @@ exports.registerManualOutbound = async (req, res) => {
       ],
     };
     const [createdMessage] = await Message.insertMany([payload]);
-    ensureLead(req.agentId || 'admin', normalizedPhone, {
-      owner: req.agentId || 'admin',
+    ensureLead(ownerId || 'admin', normalizedPhone, {
+      owner: ownerId || 'admin',
     });
-    updateLead(req.agentId || 'admin', normalizedPhone, {
+    updateLead(ownerId || 'admin', normalizedPhone, {
       lastOutboundAt: messageDate,
     });
     emitRealtimeEvent("messages.outbound.manual_sent", {
@@ -1541,6 +1556,7 @@ exports.registerManualOutbound = async (req, res) => {
 };
 exports.getNextJob = async (req, res) => {
   try {
+    const ownerId = resolveOwnerId(req);
     const requestedCampaignId = req.query.campaignId;
     const configuredStaleTimeoutMs = Number(
       process.env.STALE_PROCESSING_TIMEOUT_MS,
@@ -1550,11 +1566,11 @@ exports.getNextJob = async (req, res) => {
         ? configuredStaleTimeoutMs
         : 90 * 1000;
     const query = { status: "running" };
-    if (req.agentId) {
-      query.agentId = req.agentId;
+    // Se não for bot, filtra pra puxar as campaigns rodando do agente atual
+    if (ownerId && ownerId !== "bot") {
+      query.agentId = ownerId;
     }
-    const allActive = await Campaign.find(query);
-    const activeCampaigns = allActive.filter(c => isWithinDeliveryWindow(c));
+    const activeCampaigns = await Campaign.find(query).select("_id");
     const activeCampaignIds = activeCampaigns.map((c) => c._id);
     const activeCampaignIdSet = new Set(
       activeCampaignIds.map((id) => String(id)),
@@ -1574,7 +1590,7 @@ exports.getNextJob = async (req, res) => {
       const processingMessages = await Message.find({
         status: "processing",
         campaign: { $in: eligibleCampaignIds },
-      }).limit(1000);
+      });
       const now = Date.now();
       const staleCandidates = (
         Array.isArray(processingMessages) ? processingMessages : []
@@ -1622,7 +1638,6 @@ exports.getNextJob = async (req, res) => {
       {
         status: "pending",
         attemptCount: -1,
-        campaign: { $in: eligibleCampaignIds },
       },
       { status: "processing" },
       { sort: { _id: 1 }, new: true },
@@ -1721,12 +1736,13 @@ exports.getNextJob = async (req, res) => {
 exports.requestHistorySync = async (req, res) => {
   try {
     const normalizedPhone = toSafePhone(req.body?.phone);
-    const agentId = resolveAgentIdFromRequest(req);
+    const agentId = resolveOwnerId(req);
     if (!normalizedPhone) {
       return res.status(400).json({ msg: "Phone is required for sync." });
     }
     const dummyCampaignId = await getOrCreateSystemCampaignId(agentId);
     const payload = {
+      agentId,
       campaign: dummyCampaignId,
       phone: normalizedPhone,
       phoneOriginal: normalizedPhone,
@@ -1816,24 +1832,22 @@ exports.updateJobStatus = async (req, res) => {
         campaignId: message.campaign,
       },
     });
-    const campaign = await Campaign.findById(message.campaign);
     emitRealtimeEvent("messages.status.updated", {
       messageId: message._id,
       campaignId: message.campaign || null,
-      agentId: campaign?.agentId || null,
       phone: message.phone || "",
       previousStatus,
       status: message.status,
       direction: message.direction || "outbound",
       updatedAt: message.updatedAt,
     });
+    const campaign = await Campaign.findById(message.campaign);
     if (campaign) {
       applyCampaignStatTransition(campaign, previousStatus, status);
       campaign.updatedAt = new Date();
       await campaign.save();
       emitRealtimeEvent("campaign.stats.updated", {
         campaignId: campaign._id,
-        agentId: campaign.agentId || null,
         stats: campaign.stats,
         updatedAt: campaign.updatedAt,
       });
@@ -1876,11 +1890,9 @@ exports.updateMessage = async (req, res) => {
     message.updatedAt = new Date();
     appendAudit(message, "edited", "Message edited by user", { changedFields });
     await message.save();
-    const campaign = await Campaign.findById(message.campaign);
     emitRealtimeEvent("messages.edited", {
       messageId: message._id,
       campaignId: message.campaign || null,
-      agentId: campaign?.agentId || null,
       phone: message.phone || "",
       changedFields,
       updatedAt: message.updatedAt,
@@ -1910,24 +1922,22 @@ exports.retryMessage = async (req, res) => {
       changedFields,
     });
     await message.save();
-    const campaign = await Campaign.findById(message.campaign);
     emitRealtimeEvent("messages.retried", {
       messageId: message._id,
       campaignId: message.campaign || null,
-      agentId: campaign?.agentId || null,
       phone: message.phone || "",
       previousStatus,
       status: message.status,
       changedFields,
       updatedAt: message.updatedAt,
     });
+    const campaign = await Campaign.findById(message.campaign);
     if (campaign) {
       applyCampaignStatTransition(campaign, previousStatus, "pending");
       campaign.updatedAt = new Date();
       await campaign.save();
       emitRealtimeEvent("campaign.stats.updated", {
         campaignId: campaign._id,
-        agentId: campaign.agentId || null,
         stats: campaign.stats,
         updatedAt: campaign.updatedAt,
       });
@@ -1938,45 +1948,4 @@ exports.retryMessage = async (req, res) => {
     const errorResponse = buildServerErrorResponse(err);
     res.status(errorResponse.statusCode).json(errorResponse.body);
   }
-};
-
-exports.getBotInstancesForSupervisor = async (req, res) => {
-  // Somente a Chave Mestra base (cujo auth resulta em agentId = 'bot') tem poder pra isso
-  if (req.agentId !== "bot") {
-    return res.status(403).json({ msg: "Acesso Negado. Credencial nÃ£o Ã© raiz." });
-  }
-  try {
-    const { readStore } = require('../config/adminStore');
-    const store = typeof readStore === 'function' ? readStore() : { clients: [], saasUsers: [] };
-    
-    // Bots for old clients array
-    const clients = (store.clients || [])
-      .filter(c => c.active) // somente ativos
-      .map(c => ({
-        agentId: c.clientId,
-        apiKey: c.apiKey, // envia raw api key
-        name: c.name
-      }));
-
-    // Bots for new SaaS users
-    const validApiKey = String(process.env.API_SECRET_KEY || '').trim();
-    const saasBots = (store.saasUsers || [])
-      .filter(u => u.status === 'active' && u.agentId)
-      .map(u => ({
-        agentId: u.agentId,
-        apiKey: validApiKey, // uses the master backend key to authenticate as bot
-        name: `SaaS User - ${u.email}`
-      }));
-
-      const adminInstance = {
-        agentId: 'admin',
-        apiKey: validApiKey,
-        name: 'System Admin Bot'
-      };
-
-      return res.json({ instances: [...clients, ...saasBots, adminInstance] });
-    } catch (err) {
-      console.error(err.message);
-      res.status(500).json({ msg: "Erro interno", error: err.message });
-    }
 };
