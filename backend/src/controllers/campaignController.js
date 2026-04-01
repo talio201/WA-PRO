@@ -308,3 +308,115 @@ exports.deleteCampaign = async (req, res) => {
     res.status(errorResponse.statusCode).json(errorResponse.body);
   }
 };
+exports.updateCampaign = async (req, res) => {
+  try {
+    const ownerId = resolveOwnerId(req);
+    const campaigns = await Campaign.find({ _id: req.params.id, agentId: ownerId });
+    const campaign = campaigns && campaigns.length > 0 ? campaigns[0] : null;
+    if (!campaign) {
+      return res.status(404).json({ msg: "Campaign not found or unauthorized" });
+    }
+    const { name, status, antiBan = {}, deliveryWindow = {}, resendPolicy = {} } = req.body || {};
+    if (name !== undefined) {
+      campaign.name = String(name || "").trim() || campaign.name;
+    }
+    if (status !== undefined) {
+      const allowed = ["running", "paused", "completed", "cancelled"];
+      if (!allowed.includes(status)) {
+        return res.status(400).json({ msg: `Invalid status. Allowed: ${allowed.join(", ")}` });
+      }
+      campaign.status = status;
+    }
+    if (Object.keys(antiBan).length > 0 || Object.keys(deliveryWindow).length > 0 || Object.keys(resendPolicy).length > 0) {
+      const mergedAntiBan = {
+        ...(campaign.antiBan || {}),
+        ...antiBan,
+        deliveryWindow: Object.keys(deliveryWindow).length > 0 ? deliveryWindow : (antiBan.deliveryWindow || campaign.antiBan?.deliveryWindow || {}),
+        resendPolicy: Object.keys(resendPolicy).length > 0 ? resendPolicy : (antiBan.resendPolicy || campaign.antiBan?.resendPolicy || {}),
+      };
+      campaign.antiBan = sanitizeAntiBanSettings(mergedAntiBan);
+    }
+    campaign.updatedAt = new Date();
+    await campaign.save();
+    emitRealtimeEvent("campaign.updated", {
+      campaignId: campaign._id,
+      name: campaign.name,
+      status: campaign.status,
+      antiBan: campaign.antiBan,
+    });
+    res.json(campaign);
+  } catch (err) {
+    console.error(err.message);
+    const errorResponse = buildServerErrorResponse(err);
+    res.status(errorResponse.statusCode).json(errorResponse.body);
+  }
+};
+exports.dispatchNextCampaignContact = async (req, res) => {
+  try {
+    const ownerId = resolveOwnerId(req);
+    const campaigns = await Campaign.find({ _id: req.params.id, agentId: ownerId });
+    const campaign = campaigns && campaigns.length > 0 ? campaigns[0] : null;
+    if (!campaign) {
+      return res.status(404).json({ msg: "Campaign not found or unauthorized" });
+    }
+    if (campaign.status !== "running") {
+      return res.json({ job: null, reason: "campaign_not_running" });
+    }
+    const job = await Message.findOneAndUpdate(
+      { status: "pending", campaign: req.params.id },
+      { status: "processing" },
+      { sort: { _id: 1 }, new: true },
+    );
+    if (!job) {
+      return res.json({ job: null });
+    }
+    emitRealtimeEvent("messages.queue.reserved", {
+      messageId: job._id,
+      campaignId: req.params.id,
+      phone: job.phone,
+      status: job.status,
+    });
+    res.json({ job });
+  } catch (err) {
+    console.error(err.message);
+    const errorResponse = buildServerErrorResponse(err);
+    res.status(errorResponse.statusCode).json(errorResponse.body);
+  }
+};
+exports.retryCampaignFailures = async (req, res) => {
+  try {
+    const ownerId = resolveOwnerId(req);
+    const campaigns = await Campaign.find({ _id: req.params.id, agentId: ownerId });
+    const campaign = campaigns && campaigns.length > 0 ? campaigns[0] : null;
+    if (!campaign) {
+      return res.status(404).json({ msg: "Campaign not found or unauthorized" });
+    }
+    const failures = await Message.find({ campaign: req.params.id, status: "failed" });
+    if (!failures || failures.length === 0) {
+      return res.json({ msg: "No failed messages to retry", retried: 0 });
+    }
+    let retried = 0;
+    const now = new Date();
+    for (const message of failures) {
+      const updated = await Message.findOneAndUpdate(
+        { _id: message._id, status: "failed" },
+        { status: "pending", lastError: null, updatedAt: now },
+        { new: true },
+      );
+      if (updated) retried += 1;
+    }
+    if (!campaign.stats) campaign.stats = { total: 0, sent: 0, failed: 0 };
+    campaign.stats.failed = Math.max(0, (campaign.stats.failed || 0) - retried);
+    campaign.updatedAt = new Date();
+    await campaign.save();
+    emitRealtimeEvent("campaign.stats.updated", {
+      campaignId: campaign._id,
+      stats: campaign.stats,
+    });
+    res.json({ msg: "Failed messages moved back to queue", retried });
+  } catch (err) {
+    console.error(err.message);
+    const errorResponse = buildServerErrorResponse(err);
+    res.status(errorResponse.statusCode).json(errorResponse.body);
+  }
+};
