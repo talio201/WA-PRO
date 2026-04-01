@@ -224,6 +224,9 @@ app.use("/api/public", require("./routes/publicRoutes"));
 app.use("/api", requireAuth);
 
 app.get('/api/account/status', (req, res) => {
+  if (!req.user) {
+    return res.status(401).json({ msg: 'Unauthorized: Supabase session required.' });
+  }
   const saasUser = req.saasUser || null;
   const isAdmin = req.user && req.isAdmin === true;
   const now = Date.now();
@@ -254,9 +257,17 @@ function requireActiveSaasAccount(req, res, next) {
   // Allow admin and API keys (bot authentication)
   if (req.isAdmin === true) return next();
   if (req.permissions?.allowCampaigns === true) return next(); // API key authenticated
+  if (req.authKind === 'installation-session') {
+    return res.status(403).json({
+      msg: 'Instalação legada não autorizada. Faça login via Supabase.',
+      accountStatus: 'legacy_blocked',
+    });
+  }
   
   // For Supabase users only
-  if (!req.user) return next();
+  if (!req.user) {
+    return res.status(401).json({ msg: 'Unauthorized: Supabase session required.' });
+  }
   const lastSignInAt = req.user?.last_sign_in_at ? new Date(req.user.last_sign_in_at).getTime() : 0;
   if (Number.isFinite(lastSignInAt) && lastSignInAt > 0) {
     const elapsedMs = Date.now() - lastSignInAt;

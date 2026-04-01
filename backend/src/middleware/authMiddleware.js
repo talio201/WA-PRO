@@ -55,23 +55,27 @@ const requireAuth = async (req, res, next) => {
        console.log('[AUTH MIDDLEWARE] authenticateBearerToken returned null for token:', token.substring(0, 10) + '...', agentId);
     }
     if (authResult?.kind === 'api-key') {
+      req.authKind = authResult.kind;
       req.agentId = authResult.agentId;
       req.permissions = authResult.permissions || {};
       return next();
     }
     if (authResult?.kind === 'bot-client') {
+      req.authKind = authResult.kind;
       req.agentId = authResult.agentId;
       req.permissions = authResult.permissions || {};
       req.apiClient = authResult.apiClient || null;
       return next();
     }
     if (authResult?.kind === 'installation-session') {
+      req.authKind = authResult.kind;
       req.agentId = authResult.agentId;
       req.permissions = authResult.permissions || {};
       req.installation = authResult.installation || null;
       return next();
     }
     if (authResult?.kind === 'supabase-user') {
+      req.authKind = authResult.kind;
       req.user = authResult.user;
       req.agentId = authResult.agentId;
       req.isAdmin = authResult.isAdmin || false;

@@ -76,7 +76,7 @@ function buildLegacySaasUserFallback({ email = '', agentId = '' }) {
   return {
     email: String(email || '').trim().toLowerCase() || null,
     agentId: String(agentId || '').trim() || null,
-    status: shouldRequireStrictApproval() ? 'pending' : 'active',
+    status: 'pending',
     clientId: null,
     activationCode: null,
     planTerm: null,
