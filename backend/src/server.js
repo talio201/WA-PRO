@@ -146,6 +146,9 @@ app.post("/api/bot/status", requireAuth, (req, res) => {
     if (req.saasUser?.expiresAt && new Date(req.saasUser.expiresAt).getTime() <= Date.now()) {
       return res.status(403).json({ msg: 'Licença expirada para ativação do WhatsApp.' });
     }
+    if (req.saasUser?.metadata?.access?.allowBot === false) {
+      return res.status(403).json({ msg: 'Seu plano não permite ativação do bot WhatsApp.' });
+    }
   }
   const { status, qrCodeBase64, agentId } = req.body;
   const targetId = (req.user && !req.isAdmin)
@@ -191,6 +194,12 @@ app.get("/api/bot/status", requireAuth, (req, res) => {
       return res.status(403).json({
         status: 'LICENSE_EXPIRED',
         msg: 'Licença expirada.',
+      });
+    }
+    if (req.saasUser?.metadata?.access?.allowBot === false) {
+      return res.status(403).json({
+        status: 'BOT_DISABLED',
+        msg: 'Bot desabilitado para este usuário.',
       });
     }
   }
@@ -256,6 +265,7 @@ app.get('/api/account/status', (req, res) => {
       expiresAt,
       activationCode: saasUser?.activationCode || null,
       clientId: saasUser?.clientId || null,
+      access: saasUser?.metadata?.access || null,
     },
   });
 });
@@ -296,6 +306,12 @@ function requireActiveSaasAccount(req, res, next) {
     return res.status(403).json({
       msg: 'Sua licença expirou. Solicite renovação ao administrador.',
       accountStatus: 'expired',
+    });
+  }
+  if (saasUser?.metadata?.access?.allowApp === false) {
+    return res.status(403).json({
+      msg: 'Acesso ao aplicativo está desativado para este usuário.',
+      accountStatus: 'app_disabled',
     });
   }
   return next();

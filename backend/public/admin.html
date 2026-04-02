@@ -256,6 +256,15 @@
                         </div>
                         <div><label class="block text-xs font-medium text-slate-400 mb-1">Limite Assentos</label><input id="saas-seats" type="number" class="input-field" value="1" min="1"></div>
                         <div><label class="block text-xs font-medium text-slate-400 mb-1">Vencimento Manual</label><input id="saas-expires-at" type="datetime-local" class="input-field"></div>
+
+                        <div class="md:col-span-2 lg:col-span-4">
+                            <label class="block text-xs font-medium text-slate-400 mb-1">Matriz de Acesso</label>
+                            <div class="grid grid-cols-1 md:grid-cols-3 gap-2 text-sm text-slate-300 bg-dark-900 p-3 rounded-lg border border-dark-800">
+                                <label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" id="saas-access-app" class="accent-brand-500" checked> Pode acessar app (/usuarios)</label>
+                                <label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" id="saas-access-admin" class="accent-brand-500"> Pode acessar painel admin</label>
+                                <label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" id="saas-access-bot" class="accent-brand-500" checked> Pode ativar bot/QR code</label>
+                            </div>
+                        </div>
                         
                         <!-- Campos ocultos mantidos por compatibilidade com api antiga -->
                         <input type="hidden" id="saas-desired-plan" value="demo">
@@ -652,10 +661,16 @@
         function clearSaasForm() {
             ['saas-email','saas-agent-id','saas-company-name','saas-cpf-cnpj','saas-client-id','saas-activation-code','saas-expires-at'].forEach(i => document.getElementById(i).value = '');
             document.getElementById('saas-seats').value = 1; document.getElementById('saas-plan-term').value = 'demo'; document.getElementById('saas-status').value = 'active';
+            document.getElementById('saas-access-app').checked = true;
+            document.getElementById('saas-access-admin').checked = false;
+            document.getElementById('saas-access-bot').checked = true;
         }
 
         function fillSaasForm(u) {
             document.getElementById('saas-email').value = u.email||''; document.getElementById('saas-agent-id').value = u.agentId||''; document.getElementById('saas-company-name').value = u?.metadata?.companyName||''; document.getElementById('saas-cpf-cnpj').value = u?.metadata?.cpfCnpj||''; document.getElementById('saas-status').value = u.status||'active'; document.getElementById('saas-plan-term').value = u.planTerm||'demo'; document.getElementById('saas-seats').value = Number(u?.metadata?.seats||1); document.getElementById('saas-expires-at').value = toDateTimeLocalValue(u.expiresAt);
+            document.getElementById('saas-access-app').checked = u?.metadata?.access?.allowApp !== false;
+            document.getElementById('saas-access-admin').checked = u?.metadata?.access?.allowAdmin === true;
+            document.getElementById('saas-access-bot').checked = u?.metadata?.access?.allowBot !== false;
             window.scrollTo({top:0, behavior:'smooth'});
         }
 
@@ -669,7 +684,12 @@
                 metadata: {
                     companyName: document.getElementById('saas-company-name').value.trim() || null,
                     cpfCnpj: document.getElementById('saas-cpf-cnpj').value.replace(/\D/g, '') || null,
-                    seats: Math.max(1, Number(document.getElementById('saas-seats').value)||1)
+                    seats: Math.max(1, Number(document.getElementById('saas-seats').value)||1),
+                    access: {
+                        allowApp: document.getElementById('saas-access-app').checked,
+                        allowAdmin: document.getElementById('saas-access-admin').checked,
+                        allowBot: document.getElementById('saas-access-bot').checked,
+                    },
                 }
             };
             if(!payload.email) return showToast('Email master é obrigatório', 'error');
@@ -759,7 +779,13 @@
                     const st = String(u.status||'active').toLowerCase();
                     const bCls = st==='active'?'badge-success':st==='pending'?'badge-warning':'badge-danger';
                     const exp = u.expiresAt ? new Date(u.expiresAt).toLocaleDateString() : 'INF';
-                    return '<tr class="border-b border-dark-800 hover:bg-dark-800/30 transition-colors"><td class="p-3 font-medium text-white">'+(u.email||'-')+'<br><span class="text-[10px] text-slate-500 font-normal">'+(u?.metadata?.companyName||'Sem nome')+'</span></td><td class="p-3 font-mono text-xs text-brand-400">'+(u.agentId||'-')+'</td><td class="p-3 text-slate-400 text-xs">'+(u.metadata?.cpfCnpj||'-')+'</td><td class="p-3"><span class="badge '+bCls+'">'+st.toUpperCase()+'</span></td><td class="p-3 text-slate-300 text-xs uppercase">'+(u.planTerm||'-')+'<br><span class="text-[10px] text-slate-500">'+(u.metadata?.seats||1)+' Slots</span></td><td class="p-3 text-slate-300 text-xs">'+exp+'</td><td class="p-3"><div class="flex gap-1 flex-wrap"><button onclick=\'fillSaasForm('+JSON.stringify(u).replace(/'/g, "&#39;")+')\' class="bg-dark-700 text-slate-300 px-2 py-1 rounded text-xs hover:bg-dark-600 border border-dark-600" title="Editar"><i class="fa-solid fa-pen"></i></button><button onclick="setSaasUserStatus(\''+u.email+'\',\''+(st==='active'?'suspended':'active')+'\')" class="bg-dark-700 text-slate-300 px-2 py-1 rounded text-xs hover:bg-dark-600 border border-dark-600" title="Ativar/Suspender"><i class="fa-solid '+(st==='active'?'fa-pause':'fa-play')+'"></i></button><button onclick="activateSaasTrial(\''+u.email+'\')" class="bg-emerald-900/50 text-emerald-300 px-2 py-1 rounded text-xs hover:bg-emerald-500 border border-emerald-800" title="Ativar trial 7d">7D</button><button onclick="activateSaas30d(\''+u.email+'\')" class="bg-blue-900/50 text-blue-300 px-2 py-1 rounded text-xs hover:bg-blue-500 border border-blue-800" title="Ativar plano 30d">30D</button><button onclick="apiRequest(\'/admin/bot/disconnect\',{method:\'POST\',body:JSON.stringify({agentId:\''+u.agentId+'\',reason:\'admin_manual_disconnect\'})});showToast(\'Forçando engine do zap a cair...\',\'warning\')" class="bg-dark-700 text-yellow-400 px-2 py-1 rounded text-xs hover:bg-dark-600 border border-dark-600" title="Deslogar sessão WhatsApp"><i class="fa-brands fa-whatsapp"></i></button><button onclick="removeSaasUser(\''+u.email+'\')" class="bg-red-900/50 text-red-300 px-2 py-1 rounded text-xs hover:bg-red-500 border border-red-800" title="Apagar usuário"><i class="fa-solid fa-trash"></i></button></div></td></tr>';
+                    const access = u?.metadata?.access || {};
+                    const accessBadges = [
+                      access.allowApp !== false ? '<span class="badge badge-success">APP</span>' : '<span class="badge badge-danger">APP OFF</span>',
+                      access.allowAdmin === true ? '<span class="badge bg-indigo-500/20 text-indigo-300">ADMIN</span>' : '<span class="badge bg-slate-500/20 text-slate-300">NO ADMIN</span>',
+                      access.allowBot !== false ? '<span class="badge bg-yellow-500/20 text-yellow-300">BOT</span>' : '<span class="badge bg-red-500/20 text-red-300">BOT OFF</span>',
+                    ].join(' ');
+                    return '<tr class="border-b border-dark-800 hover:bg-dark-800/30 transition-colors"><td class="p-3 font-medium text-white">'+(u.email||'-')+'<br><span class="text-[10px] text-slate-500 font-normal">'+(u?.metadata?.companyName||'Sem nome')+'</span></td><td class="p-3 font-mono text-xs text-brand-400">'+(u.agentId||'-')+'</td><td class="p-3 text-slate-400 text-xs">'+(u.metadata?.cpfCnpj||'-')+'</td><td class="p-3"><span class="badge '+bCls+'">'+st.toUpperCase()+'</span><div class="mt-1 flex flex-wrap gap-1">'+accessBadges+'</div></td><td class="p-3 text-slate-300 text-xs uppercase">'+(u.planTerm||'-')+'<br><span class="text-[10px] text-slate-500">'+(u.metadata?.seats||1)+' Slots</span></td><td class="p-3 text-slate-300 text-xs">'+exp+'</td><td class="p-3"><div class="flex gap-1 flex-wrap"><button onclick=\'fillSaasForm('+JSON.stringify(u).replace(/'/g, "&#39;")+')\' class="bg-dark-700 text-slate-300 px-2 py-1 rounded text-xs hover:bg-dark-600 border border-dark-600" title="Editar"><i class="fa-solid fa-pen"></i></button><button onclick="setSaasUserStatus(\''+u.email+'\',\''+(st==='active'?'suspended':'active')+'\')" class="bg-dark-700 text-slate-300 px-2 py-1 rounded text-xs hover:bg-dark-600 border border-dark-600" title="Ativar/Suspender"><i class="fa-solid '+(st==='active'?'fa-pause':'fa-play')+'"></i></button><button onclick="activateSaasTrial(\''+u.email+'\')" class="bg-emerald-900/50 text-emerald-300 px-2 py-1 rounded text-xs hover:bg-emerald-500 border border-emerald-800" title="Ativar trial 7d">7D</button><button onclick="activateSaas30d(\''+u.email+'\')" class="bg-blue-900/50 text-blue-300 px-2 py-1 rounded text-xs hover:bg-blue-500 border border-blue-800" title="Ativar plano 30d">30D</button><button onclick="apiRequest(\'/admin/bot/disconnect\',{method:\'POST\',body:JSON.stringify({agentId:\''+u.agentId+'\',reason:\'admin_manual_disconnect\'})});showToast(\'Forçando engine do zap a cair...\',\'warning\')" class="bg-dark-700 text-yellow-400 px-2 py-1 rounded text-xs hover:bg-dark-600 border border-dark-600" title="Deslogar sessão WhatsApp"><i class="fa-brands fa-whatsapp"></i></button><button onclick="removeSaasUser(\''+u.email+'\')" class="bg-red-900/50 text-red-300 px-2 py-1 rounded text-xs hover:bg-red-500 border border-red-800" title="Apagar usuário"><i class="fa-solid fa-trash"></i></button></div></td></tr>';
                 }).join('');
             } catch (e) {}
         }

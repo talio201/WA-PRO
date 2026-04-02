@@ -148,6 +148,16 @@ function normalizeSaasUserStatus(value = '') {
   return 'active';
 }
 
+function normalizeSaasAccess(raw = {}, fallback = {}) {
+  const source = raw && typeof raw === 'object' ? raw : {};
+  const base = fallback && typeof fallback === 'object' ? fallback : {};
+  return {
+    allowApp: source.allowApp !== undefined ? source.allowApp !== false : base.allowApp !== false,
+    allowAdmin: source.allowAdmin === true || base.allowAdmin === true,
+    allowBot: source.allowBot !== undefined ? source.allowBot !== false : base.allowBot !== false,
+  };
+}
+
 function normalizeSaasUser(entry = {}) {
   const email = String(entry.email || '').trim().toLowerCase();
   if (!email) return null;
@@ -163,7 +173,10 @@ function normalizeSaasUser(entry = {}) {
     createdAt: entry.createdAt || null,
     updatedAt: entry.updatedAt || null,
     lastLoginAt: entry.lastLoginAt || null,
-    metadata: entry.metadata || {},
+    metadata: {
+      ...(entry.metadata || {}),
+      access: normalizeSaasAccess(entry?.metadata?.access || {}, entry?.metadata?.access || {}),
+    },
   };
 }
 
@@ -302,6 +315,14 @@ function upsertSaasUser(payload = {}) {
       ...(base?.metadata || {}),
       ...(payload.metadata || {}),
     },
+  };
+
+  nextItem.metadata = {
+    ...(nextItem.metadata || {}),
+    access: normalizeSaasAccess(
+      payload?.metadata?.access || nextItem.metadata?.access || {},
+      base?.metadata?.access || { allowApp: true, allowAdmin: false, allowBot: true },
+    ),
   };
 
   if (nextItem.status === 'active') {
