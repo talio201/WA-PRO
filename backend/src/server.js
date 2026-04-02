@@ -202,7 +202,11 @@ app.get("/api/bot/status", requireAuth, (req, res) => {
   const targetAgentId = (req.user && !req.isAdmin && requestedAgentId !== "bot")
     ? req.agentId
     : (requestedAgentId || req.agentId || "system");
-  const state = botStates.get(targetAgentId) || { status: 'DISCONNECTED', qrCode: null };
+  const fallbackUserAgentId = String(req.user?.id || '').trim();
+  const state =
+    botStates.get(targetAgentId)
+    || (fallbackUserAgentId ? botStates.get(fallbackUserAgentId) : null)
+    || { status: 'DISCONNECTED', qrCode: null };
   
   res.json(state);
 });

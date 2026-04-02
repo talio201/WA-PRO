@@ -9,7 +9,7 @@ const MAX_ALLOWED_DELAY_SECONDS = 3600;
 const DEFAULT_RESEND_WINDOW_HOURS = 72;
 
 function resolveOwnerId(req) {
-  return String(req.user?.id || req.agentId || "").trim();
+  return String(req.agentId || req.user?.id || "").trim();
 }
 
 function normalizeCampaignContacts(contactsInput = []) {

@@ -27,7 +27,7 @@ function mergeContactWithLead(contact = {}, lead = null) {
 }
 
 function resolveOwnerId(req) {
-  return String(req.user?.id || req.agentId || "").trim();
+  return String(req.agentId || req.user?.id || "").trim();
 }
 
 exports.getContacts = async (req, res) => {

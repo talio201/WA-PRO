@@ -84,7 +84,7 @@ function toSafePhone(value) {
   );
 }
 function resolveOwnerId(req) {
-  return String(req.user?.id || req.agentId || "").trim();
+  return String(req.agentId || req.user?.id || "").trim();
 }
 function parseBooleanFlag(value) {
   if (value === undefined || value === null) return false;
@@ -774,10 +774,22 @@ exports.getBotInstancesForSupervisor = async (req, res) => {
     const desiredTtlMinutes = Number(process.env.BOT_DESIRED_TTL_MIN || 20);
     const desiredTtlMs = Math.max(1, desiredTtlMinutes) * 60 * 1000;
 
+    const userIdToAgentId = new Map();
+    activeUsers.forEach((user) => {
+      const runtimeAgentId = String(user.clientId || user.agentId || '').trim();
+      const supabaseUserId = String(user.metadata?.userId || '').trim();
+      if (runtimeAgentId && supabaseUserId) {
+        userIdToAgentId.set(supabaseUserId, runtimeAgentId);
+      }
+    });
+
     const activeCampaigns = await Campaign.find({ status: 'running' });
     const campaignAgentIds = new Set(
       (Array.isArray(activeCampaigns) ? activeCampaigns : [])
-        .map((item) => String(item.agentId || '').trim())
+        .map((item) => {
+          const rawAgentId = String(item.agentId || '').trim();
+          return userIdToAgentId.get(rawAgentId) || rawAgentId;
+        })
         .filter(Boolean),
     );
 
