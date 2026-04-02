@@ -1389,18 +1389,14 @@ exports.registerInboundMessage = async (req, res) => {
     const messageDate = isCandidateDateValid ? candidateDate : new Date();
     const history = await Message.find({ phone: normalizedPhone });
     const relatedMessages = Array.isArray(history) ? history : [];
-    const relatedCampaignId = await resolveRelatedCampaignId({
+    let relatedCampaignId = await resolveRelatedCampaignId({
       normalizedPhone,
       preferredCampaignId: req.body?.campaignId || null,
       relatedMessages,
       ownerAgentId: ownerId,
     });
     if (!relatedCampaignId) {
-      return res.status(202).json({
-        ignored: true,
-        reason: "campaign_not_resolved",
-        msg: "Inbound reply ignored because campaign could not be resolved for this phone.",
-      });
+      relatedCampaignId = await getOrCreateSystemCampaignId(ownerId || "system");
     }
     const recentInbound = relatedMessages
       .filter((item) => String(item.direction || "outbound") === "inbound")
@@ -1528,18 +1524,14 @@ exports.registerManualOutbound = async (req, res) => {
     const messageDate = isCandidateDateValid ? candidateDate : new Date();
     const history = await Message.find({ phone: normalizedPhone });
     const relatedMessages = Array.isArray(history) ? history : [];
-    const relatedCampaignId = await resolveRelatedCampaignId({
+    let relatedCampaignId = await resolveRelatedCampaignId({
       normalizedPhone,
       preferredCampaignId: req.body?.campaignId || null,
       relatedMessages,
       ownerAgentId: ownerId,
     });
     if (!relatedCampaignId) {
-      return res.status(202).json({
-        ignored: true,
-        reason: "campaign_not_resolved",
-        msg: "Outbound sent, but storage was skipped because campaign could not be resolved.",
-      });
+      relatedCampaignId = await getOrCreateSystemCampaignId(ownerId || "system");
     }
     const recentOutbound = relatedMessages
       .filter((item) => String(item.direction || "outbound") !== "inbound")

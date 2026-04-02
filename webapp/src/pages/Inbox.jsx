@@ -63,6 +63,12 @@ const readStoredAgentName = () => {
     return String(window.localStorage.getItem(AGENT_NAME_STORAGE_KEY) || '').trim();
 };
 
+const readStoredAgentIdentity = () => {
+    if (typeof window === 'undefined') return '';
+    const explicitAgent = String(window.localStorage.getItem('emidia_agent_id') || '').trim();
+    return explicitAgent || readStoredAgentName();
+};
+
 const formatDayLabel = (value) => {
     if (!value) return '-';
     const date = new Date(value);
@@ -130,10 +136,6 @@ const isWarmConversation = (conversation) => {
     return elapsedMs <= (15 * 60 * 1000) && String(conversation?.lastDirection || '') === 'inbound';
 };
 
-const sendDirectMessageViaExtension = () => Promise.reject(new Error('Envio via extensão desativado no ambiente SaaS.'));
-const sendDirectMediaViaExtension = () => Promise.reject(new Error('Envio de mídia via extensão desativado no ambiente SaaS.'));
-const openChatToolViaExtension = () => Promise.reject(new Error('Ferramentas de chat da extensão desativadas no ambiente SaaS.'));
-
 const QUICK_EMOJIS = ['😀', '😊', '😉', '👍', '🔥', '🚀', '🎯', '🙏', '🤝', '💬'];
 const PROTOCOL_STATUS_LABELS = {
     open: 'Aberto',
@@ -161,7 +163,7 @@ const Inbox = () => {
     const [releasing, setReleasing] = useState(false);
     const [onlyWithReplies, setOnlyWithReplies] = useState(true);
     const [onlyAssigned, setOnlyAssigned] = useState(false);
-    const [agentName, setAgentName] = useState(readStoredAgentName);
+    const [agentName, setAgentName] = useState(readStoredAgentIdentity);
     const [conversationError, setConversationError] = useState('');
     const [messageError, setMessageError] = useState('');
     const [assignmentUnavailable, setAssignmentUnavailable] = useState(false);
@@ -183,6 +185,7 @@ const Inbox = () => {
     const [transferTargetAgent, setTransferTargetAgent] = useState('');
     const [transferReason, setTransferReason] = useState('');
     const [transferringConversation, setTransferringConversation] = useState(false);
+    const [opsPanelExpanded, setOpsPanelExpanded] = useState(false);
 
     const fileInputRef = useRef(null);
     const selectedPhoneRef = useRef('');
@@ -268,7 +271,7 @@ const Inbox = () => {
 
     const loadSelectedMessages = useCallback(async (targetPhone = '', options = {}) => {
         const phone = normalizePhoneDigits(targetPhone || selectedPhoneRef.current);
-        const safeAgentId = String(options.agentId || agentName || '').trim();
+        const safeAgentId = String(options.agentId || agentName || readStoredAgentIdentity() || '').trim();
         const shouldSync = options.sync !== false;
 
         if (!phone) {
@@ -276,12 +279,6 @@ const Inbox = () => {
             setMessageError('');
             return;
         }
-        if (!safeAgentId) {
-            setConversationMessages([]);
-            setMessageError('Informe seu nome de atendimento para acessar o historico.');
-            return;
-        }
-
         try {
             setLoadingMessages(true);
             setMessageError('');
@@ -538,10 +535,9 @@ const Inbox = () => {
         if (!conversation) return true;
         if (assignmentUnavailable) return true;
 
-        const safeAgent = String(agentName || '').trim();
+        const safeAgent = String(agentName || readStoredAgentIdentity() || '').trim();
         if (!safeAgent) {
-            alert('Informe seu nome de atendimento para assumir conversas.');
-            return false;
+            return true;
         }
 
         if (conversation.assignment?.assignedTo === safeAgent && conversation.assignment?.status === 'active') {
@@ -598,9 +594,8 @@ const Inbox = () => {
 
     const handleReleaseConversation = async () => {
         if (!selectedConversation || assignmentUnavailable) return;
-        const safeAgent = String(agentName || '').trim();
+        const safeAgent = String(agentName || readStoredAgentIdentity() || '').trim();
         if (!safeAgent) {
-            alert('Informe seu nome de atendimento para liberar a conversa.');
             return;
         }
         try {
@@ -622,10 +617,9 @@ const Inbox = () => {
 
     const handleTransferConversation = async () => {
         if (!selectedConversation) return;
-        const safeFrom = String(agentName || '').trim();
+        const safeFrom = String(agentName || readStoredAgentIdentity() || '').trim();
         const safeTo = String(transferTargetAgent || '').trim();
         if (!safeFrom) {
-            alert('Informe seu nome para transferir atendimento.');
             return;
         }
         if (!safeTo) {
@@ -653,7 +647,7 @@ const Inbox = () => {
 
     const handleOpenProtocol = async () => {
         if (!selectedConversation) return;
-        const safeAgent = String(agentName || '').trim();
+        const safeAgent = String(agentName || readStoredAgentIdentity() || '').trim();
         const safeSubject = String(protocolSubject || '').trim();
         if (!safeSubject) {
             alert('Informe o assunto do protocolo.');
@@ -729,14 +723,6 @@ const Inbox = () => {
         if (!safePhone) throw new Error('Telefone invalido para envio.');
         if (!safeText) throw new Error('Mensagem vazia para envio.');
 
-        await sendDirectMessageViaExtension({
-            phone: safePhone,
-            text: safeText,
-            searchTerms: Array.isArray(searchTerms) ? searchTerms.filter(Boolean) : [],
-            source,
-            focusTab: false,
-        });
-
         return registerManualOutbound({
             phone: safePhone,
             name: String(name || ''),
@@ -768,9 +754,9 @@ const Inbox = () => {
             });
             applyLocalOutboundUpdate(outboundText);
             setComposeText('');
-            showActionFeedback('Mensagem enviada sem sair da tela.');
+            showActionFeedback('Mensagem enfileirada para envio.');
             if (storedOutbound?.ignored) {
-                alert('Mensagem enviada no WhatsApp, mas nao foi registrada no historico por falta de campanha vinculada.');
+                alert('Mensagem enfileirada, mas nao foi registrada no historico por falta de campanha vinculada.');
             }
         } catch (error) {
             console.error('Failed to send reply:', error);
@@ -848,9 +834,9 @@ const Inbox = () => {
                 ].filter(Boolean),
             });
             applyLocalOutboundUpdate(text);
-            showActionFeedback('Mensagem reenviada.');
+            showActionFeedback('Mensagem reenfileirada.');
             if (storedOutbound?.ignored) {
-                alert('Mensagem reenviada no WhatsApp, mas sem registro no historico por falta de campanha vinculada.');
+                alert('Mensagem reenfileirada, mas sem registro no historico por falta de campanha vinculada.');
             }
         } catch (error) {
             alert(error?.message || 'Nao foi possivel reenviar a mensagem.');
@@ -908,9 +894,9 @@ const Inbox = () => {
                 await loadConversations();
             }
 
-            showActionFeedback(`Mensagem encaminhada para ${targetPhone}.`);
+            showActionFeedback(`Encaminhamento enfileirado para ${targetPhone}.`);
             if (storedOutbound?.ignored) {
-                alert('Encaminhamento enviado no WhatsApp, mas sem registro no historico por falta de campanha vinculada.');
+                alert('Encaminhamento enfileirado, mas sem registro no historico por falta de campanha vinculada.');
             }
         } catch (error) {
             alert(error?.message || 'Nao foi possivel encaminhar a mensagem.');
@@ -921,17 +907,9 @@ const Inbox = () => {
 
     const openToolInWhatsApp = async (tool) => {
         if (!selectedConversation) return;
-        try {
-            await openChatToolViaExtension({
-                phone: selectedConversation.phone,
-                searchTerms: [
-                    selectedConversation.phone,
-                    selectedConversation.name,
-                ].filter(Boolean),
-                tool,
-            });
-        } catch (error) {
-            openWhatsAppChat();
+        openWhatsAppChat();
+        if (tool === 'mic') {
+            showActionFeedback('Abra o gravador direto no WhatsApp Web.');
         }
     };
 
@@ -953,31 +931,6 @@ const Inbox = () => {
             const uploaded = await uploadFile(file);
             const caption = composeText.trim();
 
-            if (caption) {
-                await sendDirectMessageViaExtension({
-                    phone: selectedConversation.phone,
-                    text: caption,
-                    searchTerms: [selectedConversation.phone, selectedConversation.name].filter(Boolean),
-                    source: 'atendimento_direct_media_caption',
-                    focusTab: false,
-                });
-            }
-
-            await sendDirectMediaViaExtension({
-                phone: selectedConversation.phone,
-                searchTerms: [
-                    selectedConversation.phone,
-                    selectedConversation.name,
-                ].filter(Boolean),
-                media: {
-                    fileUrl: uploaded.fileUrl,
-                    mimetype: uploaded.mimetype,
-                },
-                caption: '',
-                source: 'atendimento_direct_media',
-                focusTab: false,
-            });
-
             const historyText = caption
                 ? `${caption}\n${uploaded.fileUrl}`
                 : uploaded.fileUrl;
@@ -993,9 +946,9 @@ const Inbox = () => {
 
             applyLocalOutboundUpdate(historyText);
             setComposeText('');
-            showActionFeedback('Arquivo enviado com sucesso.');
+            showActionFeedback('Arquivo enfileirado para envio.');
             if (storedOutbound?.ignored) {
-                alert('Arquivo enviado no WhatsApp, mas nao foi registrada no historico por falta de campanha vinculada.');
+                alert('Arquivo enfileirado, mas nao foi registrada no historico por falta de campanha vinculada.');
             }
         } catch (error) {
             alert(error?.message || 'Nao foi possivel enviar o arquivo.');
@@ -1057,15 +1010,8 @@ const Inbox = () => {
                                 </button>
                             </div>
                         </div>
-                        <div className="agent-input-wrap">
-                            <label htmlFor="agentName">Seu nome de atendimento</label>
-                            <input
-                                id="agentName"
-                                type="text"
-                                value={agentName}
-                                onChange={(event) => setAgentName(event.target.value)}
-                                placeholder="Ex: Maria - Suporte"
-                            />
+                        <div className="soft-info">
+                            Atendimento SaaS ativo{trimmedAgent ? ` · agente ${trimmedAgent}` : ''}
                         </div>
                         <div className="search-wrap">
                             <MagnifyingGlassIcon className="w-3.5 h-3.5" />
@@ -1199,6 +1145,13 @@ const Inbox = () => {
                                 <div className="chat-actions">
                                     <button
                                         type="button"
+                                        className="header-btn"
+                                        onClick={() => setOpsPanelExpanded((prev) => !prev)}
+                                    >
+                                        {opsPanelExpanded ? 'Ocultar painel' : 'Painel operacional'}
+                                    </button>
+                                    <button
+                                        type="button"
                                         onClick={() => ensureConversationAssigned(selectedConversation, false)}
                                         disabled={assigning || assignmentUnavailable}
                                         className="header-btn primary"
@@ -1218,13 +1171,15 @@ const Inbox = () => {
                                     <button type="button" className="icon-btn" onClick={openWhatsAppChat} aria-label="Abrir no WhatsApp"><ArrowsRightLeftIcon className="w-4 h-4" /></button>
                                 </div>
                             </header>
-                            <section className="helpdesk-panel">
+                            <section className={`helpdesk-panel ${opsPanelExpanded ? '' : 'is-collapsed'}`}>
                                 <div className="helpdesk-summary-row">
                                     <span className="helpdesk-summary-pill">Fila: {helpdeskSummary?.waiting || 0}</span>
                                     <span className="helpdesk-summary-pill">Em atendimento: {helpdeskSummary?.inAttendance || 0}</span>
                                     <span className="helpdesk-summary-pill">Monitoramento: {helpdeskSummary?.monitoring || 0}</span>
                                     <span className="helpdesk-summary-pill">Protocolos: {helpdeskSummary?.protocolsOpen || 0}</span>
                                 </div>
+                                {opsPanelExpanded && (
+                                <>
                                 <div className="helpdesk-grid">
                                     <div className="helpdesk-card">
                                         <h4><ArrowsRightLeftIcon className="w-4 h-4 inline" /> Transferir atendimento</h4>
@@ -1320,6 +1275,8 @@ const Inbox = () => {
                                         </div>
                                     )}
                                 </div>
+                                </>
+                                )}
                             </section>
                             <section className="chat-messages" aria-live="polite">
                                 {loadingMessages ? (
