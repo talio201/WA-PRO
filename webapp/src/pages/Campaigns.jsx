@@ -10,13 +10,15 @@ import {
     ArrowDownTrayIcon,
     SparklesIcon,
     XMarkIcon,
+    UsersIcon,
 } from '@heroicons/react/24/outline';
-import { BarChart, Bar, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { BarChart, Bar, ResponsiveContainer, Tooltip, XAxis, YAxis, CartesianGrid, Cell } from 'recharts';
 import {
     deleteCampaign,
     dispatchCampaignNext,
     getCampaignFailures,
     getCampaigns,
+    getHelpdeskQueues,
     getLeadAnalytics,
     getMessages,
     retryCampaignFailures,
@@ -108,6 +110,7 @@ const Campaigns = () => {
     const [retryingAllFailures, setRetryingAllFailures] = useState(false);
     const [messageEdits, setMessageEdits] = useState({});
     const [leadAnalytics, setLeadAnalytics] = useState(null);
+    const [helpdeskSummary, setHelpdeskSummary] = useState(null);
     const [liveActivity, setLiveActivity] = useState(null);
     const [countdown, setCountdown] = useState(0);
     const syncInFlightRef = useRef(false);
@@ -128,6 +131,8 @@ const Campaigns = () => {
             setMessages(messagesData || []);
             const leads = await getLeadAnalytics().catch(() => null);
             setLeadAnalytics(leads || null);
+            const helpdesk = await getHelpdeskQueues({ limit: 50 }).catch(() => null);
+            setHelpdeskSummary(helpdesk?.summary || null);
             setLastSyncAt(new Date());
         } catch (err) {
             console.error('loadDashboardData error:', err);
@@ -248,6 +253,26 @@ const Campaigns = () => {
             replies: messages.filter((m) => m.direction === 'inbound').length,
         };
     }, [campaignRows, messages]);
+    const helpdeskCards = useMemo(() => {
+        const total = Number(helpdeskSummary?.total || 0);
+        const waiting = Number(helpdeskSummary?.waiting || 0);
+        const inAttendance = Number(helpdeskSummary?.inAttendance || 0);
+        const monitoring = Number(helpdeskSummary?.monitoring || 0);
+        const protocolsOpen = Number(helpdeskSummary?.protocolsOpen || 0);
+        return {
+            total,
+            waiting,
+            inAttendance,
+            monitoring,
+            protocolsOpen,
+            active: waiting + inAttendance + monitoring,
+        };
+    }, [helpdeskSummary]);
+    const helpdeskChartData = useMemo(() => (helpdeskSummary ? [
+        { name: 'Fila', value: Number(helpdeskSummary.waiting || 0), color: '#f68b2c' },
+        { name: 'Atendimento', value: Number(helpdeskSummary.inAttendance || 0), color: '#0f5ea8' },
+        { name: 'Monitoria', value: Number(helpdeskSummary.monitoring || 0), color: '#21a366' },
+    ] : []), [helpdeskSummary]);
     const filteredCampaigns = useMemo(() => {
         const query = search.trim().toLowerCase();
         let list = [...campaignRows];
@@ -694,23 +719,132 @@ const Campaigns = () => {
                         </div>
                     </div>
                 </section>
+                <section className={`${panelClass} p-5 md:p-6`}>
+                    <div className="flex flex-wrap items-start justify-between gap-4">
+                        <div>
+                            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-blue-300">Servicos</p>
+                            <h3 className="mt-1 text-xl font-bold text-slate-50">Gestao de Atendimento</h3>
+                            <p className="mt-1 text-sm text-slate-400">Fila, protocolos abertos e distribuicao operacional em tempo real.</p>
+                        </div>
+                        <span className="rounded-full border border-white/10 bg-slate-900/80 px-3 py-1.5 text-xs font-semibold text-slate-300">
+                            Base helpdesk
+                        </span>
+                    </div>
+                    <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
+                        <div className={heroMetricClass}>
+                            <div className="flex items-center justify-between text-xs font-bold uppercase tracking-wide text-slate-400">
+                                <span>Atendimentos</span>
+                                <UsersIcon className="w-4 h-4 text-orange-300" />
+                            </div>
+                            <div className="mt-2 text-2xl font-bold text-slate-50">{helpdeskCards.total}</div>
+                            <p className="mt-1 text-xs text-slate-400">Total em fila e em acompanhamento.</p>
+                        </div>
+                        <div className={heroMetricClass}>
+                            <div className="flex items-center justify-between text-xs font-bold uppercase tracking-wide text-slate-400">
+                                <span>Aguardando</span>
+                                <ClockIcon className="w-4 h-4 text-orange-300" />
+                            </div>
+                            <div className="mt-2 text-2xl font-bold text-slate-50">{helpdeskCards.waiting}</div>
+                            <p className="mt-1 text-xs text-slate-400">Pendentes de atendimento humano.</p>
+                        </div>
+                        <div className={heroMetricClass}>
+                            <div className="flex items-center justify-between text-xs font-bold uppercase tracking-wide text-slate-400">
+                                <span>Em atendimento</span>
+                                <ArrowPathIcon className="w-4 h-4 text-blue-300" />
+                            </div>
+                            <div className="mt-2 text-2xl font-bold text-slate-50">{helpdeskCards.inAttendance}</div>
+                            <p className="mt-1 text-xs text-slate-400">Conversas ativas no suporte.</p>
+                        </div>
+                        <div className={heroMetricClass}>
+                            <div className="flex items-center justify-between text-xs font-bold uppercase tracking-wide text-slate-400">
+                                <span>Protocolos</span>
+                                <ExclamationTriangleIcon className="w-4 h-4 text-amber-300" />
+                            </div>
+                            <div className="mt-2 text-2xl font-bold text-slate-50">{helpdeskCards.protocolsOpen}</div>
+                            <p className="mt-1 text-xs text-slate-400">Casos em aberto ou acompanhamento.</p>
+                        </div>
+                        <div className={heroMetricClass}>
+                            <div className="flex items-center justify-between text-xs font-bold uppercase tracking-wide text-slate-400">
+                                <span>Monitoria</span>
+                                <CheckCircleIcon className="w-4 h-4 text-emerald-300" />
+                            </div>
+                            <div className="mt-2 text-2xl font-bold text-slate-50">{helpdeskCards.monitoring}</div>
+                            <p className="mt-1 text-xs text-slate-400">Conversa observada sem intervenção.</p>
+                        </div>
+                    </div>
+                    <div className="mt-5 grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
+                        <div className="rounded-2xl border border-white/10 bg-slate-900/80 p-4">
+                            <div className="mb-3 flex items-center justify-between">
+                                <h4 className="text-sm font-semibold text-slate-50">Distribuicao da fila</h4>
+                                <span className="text-xs text-slate-400">Ativo: {helpdeskCards.active}</span>
+                            </div>
+                            <div className="h-64 min-h-64 overflow-hidden">
+                                {helpdeskChartData.length === 0 ? (
+                                    <div className="flex h-full items-center justify-center rounded-xl border border-dashed border-white/10 text-sm text-slate-400">
+                                        Sem dados de atendimento.
+                                    </div>
+                                ) : (
+                                    <ResponsiveContainer width="100%" height={240} minWidth={0} debounce={120}>
+                                        <BarChart data={helpdeskChartData} margin={{ top: 6, right: 8, bottom: 6, left: -8 }}>
+                                            <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.08)" vertical={false} />
+                                            <XAxis dataKey="name" tick={{ fill: '#cbd5e1', fontSize: 12 }} axisLine={{ stroke: 'rgba(255,255,255,0.12)' }} tickLine={false} />
+                                            <YAxis tick={{ fill: '#cbd5e1', fontSize: 12 }} axisLine={{ stroke: 'rgba(255,255,255,0.12)' }} tickLine={false} />
+                                            <Tooltip
+                                                cursor={{ fill: 'rgba(255,255,255,0.04)' }}
+                                                contentStyle={{
+                                                    background: '#0f1724',
+                                                    border: '1px solid rgba(255,255,255,0.12)',
+                                                    borderRadius: 16,
+                                                    color: '#f4f7fb',
+                                                }}
+                                                labelStyle={{ color: '#f4f7fb' }}
+                                            />
+                                            <Bar dataKey="value" radius={[8, 8, 0, 0]}>
+                                                {helpdeskChartData.map((entry) => (
+                                                    <Cell key={entry.name} fill={entry.color} />
+                                                ))}
+                                            </Bar>
+                                        </BarChart>
+                                    </ResponsiveContainer>
+                                )}
+                            </div>
+                        </div>
+                        <div className="rounded-2xl border border-white/10 bg-slate-900/80 p-4">
+                            <h4 className="text-sm font-semibold text-slate-50">Leitura gerencial</h4>
+                            <ul className="mt-3 space-y-3 text-sm text-slate-300">
+                                <li className="flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-slate-950/70 px-3 py-2">
+                                    <span>Backlog atual</span>
+                                    <strong className="text-slate-50">{helpdeskCards.waiting + helpdeskCards.inAttendance}</strong>
+                                </li>
+                                <li className="flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-slate-950/70 px-3 py-2">
+                                    <span>Relação fila/monitoria</span>
+                                    <strong className="text-slate-50">{helpdeskCards.monitoring > 0 ? `${Math.round(((helpdeskCards.waiting + helpdeskCards.inAttendance) / helpdeskCards.monitoring) * 100) / 100}:1` : 'N/D'}</strong>
+                                </li>
+                                <li className="flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-slate-950/70 px-3 py-2">
+                                    <span>Saúde operacional</span>
+                                    <strong className={helpdeskCards.waiting > helpdeskCards.inAttendance ? 'text-orange-300' : 'text-emerald-300'}>{helpdeskCards.waiting > helpdeskCards.inAttendance ? 'Carga alta' : 'Estável'}</strong>
+                                </li>
+                            </ul>
+                        </div>
+                    </div>
+                </section>
                 <section className="grid grid-cols-1 gap-6 lg:grid-cols-3">
                     <div className={`${panelClass} p-5 lg:col-span-1`}>
                         <h3 className="text-base font-semibold text-slate-50">Resumo operacional</h3>
                         <div className="mt-4 space-y-3">
-                            <div className="flex items-center justify-between rounded-lg bg-slate-100/70 px-3 py-2 text-sm">
+                            <div className="flex items-center justify-between rounded-lg border border-white/10 bg-slate-900/70 px-3 py-2 text-sm">
                                 <span className="text-slate-400">Executando</span>
                                 <span className="font-bold text-slate-50">{totals.running}</span>
                             </div>
-                            <div className="flex items-center justify-between rounded-lg bg-slate-100/70 px-3 py-2 text-sm">
+                            <div className="flex items-center justify-between rounded-lg border border-white/10 bg-slate-900/70 px-3 py-2 text-sm">
                                 <span className="text-slate-400">Com falha</span>
                                 <span className="font-bold text-slate-50">{totals.withFailures}</span>
                             </div>
-                            <div className="flex items-center justify-between rounded-lg bg-slate-100/70 px-3 py-2 text-sm">
+                            <div className="flex items-center justify-between rounded-lg border border-white/10 bg-slate-900/70 px-3 py-2 text-sm">
                                 <span className="text-slate-400">Respostas</span>
                                 <span className="font-bold text-slate-50">{totals.replies}</span>
                             </div>
-                            <div className="flex items-center justify-between rounded-lg bg-slate-100/70 px-3 py-2 text-sm">
+                            <div className="flex items-center justify-between rounded-lg border border-white/10 bg-slate-900/70 px-3 py-2 text-sm">
                                 <span className="text-slate-400">Conclusao media</span>
                                 <span className="font-bold text-slate-50">{totals.completionRate}%</span>
                             </div>
@@ -729,11 +863,21 @@ const Campaigns = () => {
                             ) : (
                                 <ResponsiveContainer width="100%" height={240} minWidth={0} debounce={120}>
                                     <BarChart data={chartData} margin={{ top: 6, right: 8, bottom: 6, left: -8 }}>
-                                        <XAxis dataKey="name" fontSize={12} />
-                                        <YAxis fontSize={12} />
-                                        <Tooltip />
-                                        <Bar dataKey="enviados" fill="#10B981" radius={[6, 6, 0, 0]} />
-                                        <Bar dataKey="falhas" fill="#EF4444" radius={[6, 6, 0, 0]} />
+                                        <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.08)" vertical={false} />
+                                        <XAxis dataKey="name" tick={{ fill: '#cbd5e1', fontSize: 12 }} axisLine={{ stroke: 'rgba(255,255,255,0.12)' }} tickLine={false} />
+                                        <YAxis tick={{ fill: '#cbd5e1', fontSize: 12 }} axisLine={{ stroke: 'rgba(255,255,255,0.12)' }} tickLine={false} />
+                                        <Tooltip
+                                            cursor={{ fill: 'rgba(255,255,255,0.04)' }}
+                                            contentStyle={{
+                                                background: '#0f1724',
+                                                border: '1px solid rgba(255,255,255,0.12)',
+                                                borderRadius: 16,
+                                                color: '#f4f7fb',
+                                            }}
+                                            labelStyle={{ color: '#f4f7fb' }}
+                                        />
+                                        <Bar dataKey="enviados" fill="#21a366" radius={[8, 8, 0, 0]} />
+                                        <Bar dataKey="falhas" fill="#f68b2c" radius={[8, 8, 0, 0]} />
                                     </BarChart>
                                 </ResponsiveContainer>
                             )}
@@ -741,7 +885,7 @@ const Campaigns = () => {
                     </div>
                 </section>
                 <section className={`${panelClass} overflow-hidden`}>
-                    <div className="border-b border-slate-200/80 px-5 py-4">
+                    <div className="border-b border-white/10 px-5 py-4">
                         <div className="flex flex-wrap items-center justify-between gap-3">
                             <div>
                                 <h3 className="text-base font-semibold text-slate-50">Campanhas</h3>
@@ -826,7 +970,7 @@ const Campaigns = () => {
                                             : 'bg-gradient-to-r from-sky-400 to-blue-500';
                                     const critical = isCriticalCampaign(campaign);
                                     return (
-                                        <tr key={campaign._id} className="border-t border-slate-100 align-top">
+                                        <tr key={campaign._id} className="border-t border-white/10 align-top">
                                             <td className="px-5 py-4">
                                                 <div className="font-semibold text-slate-50">{campaign.name}</div>
                                                 <div className="mt-1 text-xs text-slate-400">Enviadas: {campaign.sent} | Falhas: {campaign.failed}</div>
@@ -911,7 +1055,7 @@ const Campaigns = () => {
                     </div>
                 </section>
                 <section className={`${panelClass} overflow-hidden`}>
-                    <div className="border-b border-slate-200/80 px-5 py-4">
+                    <div className="border-b border-white/10 px-5 py-4">
                         <h3 className="text-base font-semibold text-slate-50">Atividade recente</h3>
                         <p className="text-xs text-slate-400">Ultimos 10 eventos de envio.</p>
                     </div>
