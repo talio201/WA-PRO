@@ -138,7 +138,7 @@ setInterval(() => {
 }, BOTSTATE_CLEANUP_INTERVAL_MS);
 
 app.post("/api/bot/status", requireAuth, (req, res) => {
-  if (req.user && !req.isAdmin) {
+  if (req.user) {
     const status = String(req.saasUser?.status || 'pending').trim().toLowerCase();
     if (status !== 'active') {
       return res.status(403).json({ msg: 'Conta aguardando aprovação para ativar WhatsApp.' });
@@ -179,7 +179,7 @@ app.post("/api/bot/live-activity", requireAuth, (req, res) => {
 });
 
 app.get("/api/bot/status", requireAuth, (req, res) => {
-  if (req.user && !req.isAdmin) {
+  if (req.user) {
     const status = String(req.saasUser?.status || 'pending').trim().toLowerCase();
     if (status !== 'active') {
       return res.status(403).json({
@@ -241,9 +241,7 @@ app.get('/api/account/status', (req, res) => {
   const now = Date.now();
   const expiresAt = saasUser?.expiresAt || null;
   const expired = Boolean(expiresAt && new Date(expiresAt).getTime() <= now);
-  const status = isAdmin
-    ? 'active'
-    : String(saasUser?.status || 'pending').trim().toLowerCase();
+  const status = String(saasUser?.status || 'pending').trim().toLowerCase();
 
   console.log('[DEBUG] /api/account/status accessed by', req.user?.email, 'agent:', req.agentId, 'status:', status, 'isAdmin:', isAdmin);
 
@@ -263,8 +261,7 @@ app.get('/api/account/status', (req, res) => {
 });
 
 function requireActiveSaasAccount(req, res, next) {
-  // Allow admin and API keys (bot authentication)
-  if (req.isAdmin === true) return next();
+  // Allow API keys (bot authentication)
   if (req.permissions?.allowCampaigns === true) return next(); // API key authenticated
   if (req.authKind === 'installation-session') {
     return res.status(403).json({
@@ -306,7 +303,7 @@ function requireActiveSaasAccount(req, res, next) {
 
 async function enforceDemoOutboundPolicy(req, res, next) {
   try {
-    if (!req.user || req.isAdmin === true) return next();
+    if (!req.user) return next();
     const planTerm = String(req.saasUser?.planTerm || '').trim().toLowerCase();
     if (planTerm !== 'demo') return next();
 
@@ -354,7 +351,7 @@ app.get('/api/admin/access/me', adminController.getMyAdminAccess);
 app.use("/api/admin", requireAdminAccess, require("./routes/adminRoutes"));
 app.use('/api/campaigns', requireActiveSaasAccount, (req, res, next) => {
   const planTerm = String(req.saasUser?.planTerm || '').trim().toLowerCase();
-  if (req.user && !req.isAdmin && planTerm === 'demo' && req.method !== 'GET') {
+  if (req.user && planTerm === 'demo' && req.method !== 'GET') {
     return res.status(403).json({
       msg: 'Plano DEMO não permite disparos de campanha. Use envio manual de teste.',
       code: 'demo_campaigns_blocked',

@@ -1,6 +1,7 @@
 const os = require("os");
 const fs = require("fs");
 const path = require("path");
+const Message = require("../models/Message");
 const { emitRealtimeEvent } = require("../realtime/realtime");
 const {
   listClients,
@@ -184,6 +185,25 @@ exports.getDashboard = async (req, res) => {
   try {
     cleanInactiveUsers();
     const metrics = getSystemMetrics();
+    const queueStats = getBotCommandStats();
+
+    const [pendingMessages, processingMessages, inboundMessages, sentMessages] = await Promise.all([
+      Message.find({ status: 'pending' }),
+      Message.find({ status: 'processing' }),
+      Message.find({ direction: 'inbound' }),
+      Message.find({ status: 'sent', direction: 'outbound' }),
+    ]);
+
+    const now = Date.now();
+    const dayWindowMs = 24 * 60 * 60 * 1000;
+    const inbound24h = (Array.isArray(inboundMessages) ? inboundMessages : []).filter((item) => {
+      const at = new Date(item.updatedAt || item.createdAt || item.sentAt || 0).getTime();
+      return Number.isFinite(at) && now - at <= dayWindowMs;
+    }).length;
+    const sent24h = (Array.isArray(sentMessages) ? sentMessages : []).filter((item) => {
+      const at = new Date(item.updatedAt || item.createdAt || item.sentAt || 0).getTime();
+      return Number.isFinite(at) && now - at <= dayWindowMs;
+    }).length;
 
     const filteredBotActivity = req.isAdmin 
       ? botActivityLogs 
@@ -193,6 +213,18 @@ exports.getDashboard = async (req, res) => {
       activeUsers: Array.from(activeUsers.values()),
       totalActiveUsers: activeUsers.size,
       systemMetrics: metrics,
+      serviceStatus: {
+        api: 'online',
+        realtime: 'online',
+        storageProvider: String(process.env.STORAGE_PROVIDER || process.env.DB_PROVIDER || 'local').toLowerCase(),
+      },
+      messageStats: {
+        pending: Array.isArray(pendingMessages) ? pendingMessages.length : 0,
+        processing: Array.isArray(processingMessages) ? processingMessages.length : 0,
+        inbound24h,
+        sent24h,
+      },
+      botCommandQueue: queueStats,
       recentSecurityLogs: securityLogs.slice(0, 10),
       recentBotActivity: filteredBotActivity.slice(0, 10),
       recentExtensionErrors: extensionErrors.slice(0, 10),

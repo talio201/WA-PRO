@@ -20,8 +20,8 @@
                             600: '#475569',
                         },
                         brand: {
-                            500: '#6366f1',
-                            600: '#4f46e5',
+                            500: '#10b981',
+                            600: '#059669',
                         }
                     }
                 }
@@ -120,7 +120,7 @@
             <!-- OVERVIEW TAB -->
             <div id="tab-overview" class="tab-content active">
                 <div class="flex justify-between items-center mb-6">
-                    <h2 class="text-2xl font-bold text-white">Painel de Controle em Tempo Real</h2>
+                    <h2 class="text-2xl font-bold text-white">Painel Gerencial SaaS em Tempo Real</h2>
                     <button onclick="refreshDashboard()" class="text-brand-400 hover:text-brand-300 transition-colors"><i class="fa-solid fa-arrows-rotate"></i> Atualizar Agora</button>
                 </div>
                 
@@ -153,6 +153,31 @@
                         <p class="text-sm font-medium text-slate-400 mb-1">Fluxo Mensagens/H</p>
                         <h3 class="text-3xl font-bold text-brand-400 mb-2" id="bot-messages-today">0</h3>
                         <p class="text-xs text-slate-500">Taxa de falhas: <span id="bot-errors" class="text-red-400 font-medium">0</span></p>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                    <div class="glass-panel p-4 rounded-xl border border-dark-700">
+                        <p class="text-xs font-medium text-slate-400 mb-1">Serviços</p>
+                        <div class="text-sm text-slate-200 space-y-1">
+                            <div>API: <span id="svc-api" class="text-green-400 font-semibold">ONLINE</span></div>
+                            <div>Realtime: <span id="svc-realtime" class="text-green-400 font-semibold">ONLINE</span></div>
+                            <div>Storage: <span id="svc-storage" class="text-brand-400 font-semibold">local</span></div>
+                        </div>
+                    </div>
+                    <div class="glass-panel p-4 rounded-xl border border-dark-700">
+                        <p class="text-xs font-medium text-slate-400 mb-1">Fila de Mensagens</p>
+                        <div class="text-sm text-slate-200 space-y-1">
+                            <div>Pendentes: <span id="msg-pending" class="font-semibold text-yellow-300">0</span></div>
+                            <div>Processando: <span id="msg-processing" class="font-semibold text-blue-300">0</span></div>
+                        </div>
+                    </div>
+                    <div class="glass-panel p-4 rounded-xl border border-dark-700">
+                        <p class="text-xs font-medium text-slate-400 mb-1">Tráfego 24h</p>
+                        <div class="text-sm text-slate-200 space-y-1">
+                            <div>Recebidas: <span id="msg-inbound-24h" class="font-semibold text-emerald-300">0</span></div>
+                            <div>Enviadas: <span id="msg-sent-24h" class="font-semibold text-brand-300">0</span></div>
+                        </div>
                     </div>
                 </div>
 
@@ -571,6 +596,19 @@
                     document.getElementById('sys-hostname').textContent = data.systemMetrics.platform.hostname + ' / ' + data.systemMetrics.platform.arch;
                 }
 
+                if (data.serviceStatus) {
+                    document.getElementById('svc-api').textContent = String(data.serviceStatus.api || 'offline').toUpperCase();
+                    document.getElementById('svc-realtime').textContent = String(data.serviceStatus.realtime || 'offline').toUpperCase();
+                    document.getElementById('svc-storage').textContent = String(data.serviceStatus.storageProvider || '-');
+                }
+
+                if (data.messageStats) {
+                    document.getElementById('msg-pending').textContent = String(data.messageStats.pending || 0);
+                    document.getElementById('msg-processing').textContent = String(data.messageStats.processing || 0);
+                    document.getElementById('msg-inbound-24h').textContent = String(data.messageStats.inbound24h || 0);
+                    document.getElementById('msg-sent-24h').textContent = String(data.messageStats.sent24h || 0);
+                }
+
                 if (data.recentBotActivity) {
                     let failCount=0; let successCount=0;
                     document.getElementById('recent-activity').innerHTML = data.recentBotActivity.map(a => {
@@ -774,7 +812,7 @@
 
         /* Boot Run */
         checkAuth(); connectWebSocket(); refreshDashboard(); refreshSaasUsers(); refreshAdminUsers(); loadProvisioningData(); refreshUsers(); refreshSecurityLogs();
-        setInterval(refreshDashboard, 1000); setInterval(refreshSaasUsers, 15000); setInterval(refreshAdminUsers, 15000); setInterval(refreshUsers, 15000); setInterval(refreshSecurityLogs, 5000);
+        setInterval(refreshDashboard, 2000); setInterval(refreshSaasUsers, 15000); setInterval(refreshAdminUsers, 15000); setInterval(refreshUsers, 15000); setInterval(refreshSecurityLogs, 5000);
 
     </script>
 </body>
