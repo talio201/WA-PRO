@@ -154,8 +154,13 @@ const Campaigns = () => {
                 
                 if (eventName === 'bot.live_activity') {
                     const payload = message.payload || {};
-                    setLiveActivity(payload);
-                    if (payload.activity === 'waiting' && payload.data?.nextSendAt) {
+                    const normalizedActivity = String(payload.activity || '').trim().toLowerCase();
+                    setLiveActivity({
+                        ...payload,
+                        activity: normalizedActivity || 'processing',
+                        data: payload.data || {},
+                    });
+                    if (normalizedActivity === 'waiting' && payload.data?.nextSendAt) {
                         const remaining = Math.max(0, Math.round((payload.data.nextSendAt - Date.now()) / 1000));
                         setCountdown(remaining);
                     } else {
@@ -533,6 +538,7 @@ const Campaigns = () => {
         : realtimeStatus === 'connecting'
             ? 'border-sky-200 bg-sky-50 text-sky-700'
             : 'border-amber-200 bg-amber-50 text-amber-700';
+    const liveActivityType = String(liveActivity?.activity || '').trim().toLowerCase();
     return (
         <>
             <div className={`campaigns-page space-y-6 ${glassMode ? 'campaigns-page--glass' : ''}`}>
@@ -547,32 +553,32 @@ const Campaigns = () => {
                             <div className="mt-4 flex flex-col md:flex-row md:items-center gap-3">
                                 {liveActivity && (
                                     <div className={`inline-flex items-center gap-3 px-4 py-1.5 rounded-2xl border backdrop-blur-md shadow-sm transition-all duration-300 ${
-                                        liveActivity.activity === 'typing' ? 'bg-sky-50/80 border-sky-100 text-sky-700 animate-pulse' :
-                                        liveActivity.activity === 'waiting' ? 'bg-amber-50/80 border-amber-100 text-amber-700' :
-                                        liveActivity.activity === 'sending' ? 'bg-emerald-50/80 border-emerald-100 text-emerald-700' :
+                                        liveActivityType === 'typing' ? 'bg-sky-50/80 border-sky-100 text-sky-700 animate-pulse' :
+                                        liveActivityType === 'waiting' ? 'bg-amber-50/80 border-amber-100 text-amber-700' :
+                                        liveActivityType === 'sending' ? 'bg-emerald-50/80 border-emerald-100 text-emerald-700' :
                                         'bg-slate-50/80 border-slate-100 text-slate-600'
                                     }`}>
                                         <div className="relative">
                                             <div className={`h-2 w-2 rounded-full ${
-                                                liveActivity.activity === 'typing' ? 'bg-sky-500' :
-                                                liveActivity.activity === 'waiting' ? 'bg-amber-500' :
-                                                liveActivity.activity === 'sending' ? 'bg-emerald-500' :
+                                                liveActivityType === 'typing' ? 'bg-sky-500' :
+                                                liveActivityType === 'waiting' ? 'bg-amber-500' :
+                                                liveActivityType === 'sending' ? 'bg-emerald-500' :
                                                 'bg-slate-400'
                                             }`} />
-                                            {liveActivity.activity === 'typing' && (
+                                            {liveActivityType === 'typing' && (
                                                 <div className="absolute inset-0 h-2 w-2 rounded-full bg-sky-500 animate-ping" />
                                             )}
                                         </div>
                                         <span className="text-xs font-semibold">
-                                            {liveActivity.activity === 'typing' && `Robô está digitando para ${liveActivity.data?.text || 'contato'}...`}
-                                            {liveActivity.activity === 'waiting' && (
+                                            {liveActivityType === 'typing' && `Robô está digitando para ${liveActivity.data?.text || 'contato'}...`}
+                                            {liveActivityType === 'waiting' && (
                                                 countdown > 0 
                                                     ? `Anti-ban: Próximo envio em ${countdown}s`
                                                     : `Aguardando início do próximo envio...`
                                             )}
-                                            {liveActivity.activity === 'sending' && `Enviando mensagem agora...`}
-                                            {liveActivity.activity === 'processing' && `Processando fila de mensagens...`}
-                                            {!['typing', 'waiting', 'sending', 'processing'].includes(liveActivity.activity) && `Atividade detectada: ${liveActivity.activity}`}
+                                            {liveActivityType === 'sending' && `Enviando mensagem agora...`}
+                                            {liveActivityType === 'processing' && `Processando fila de mensagens...`}
+                                            {!['typing', 'waiting', 'sending', 'processing'].includes(liveActivityType) && `Atividade do robô em execução...`}
                                         </span>
                                     </div>
                                 )}
