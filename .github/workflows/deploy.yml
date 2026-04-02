@@ -77,13 +77,42 @@ jobs:
              # Keep an always-valid rollback target before updating code.
              PREV_SHA=$(git rev-parse HEAD)
              echo "Previous SHA: $PREV_SHA"
+
+             changed_files() {
+               git diff --name-only "$PREV_SHA" HEAD || true
+             }
+
+             should_match() {
+               local pattern="$1"
+               changed_files | grep -Eq "$pattern"
+             }
+
+             REBUILD_BACKEND=false
+             REBUILD_WORKER=false
+             RESTART_BOT=false
              
              # Fetch and update without disruption
              git fetch origin main
              git pull --ff-only origin main
+
+             if should_match '^(backend/|webapp/|docker-compose\.yml|deploy/|scripts/|\.github/workflows/)'; then
+               REBUILD_BACKEND=true
+               REBUILD_WORKER=true
+             fi
+
+             if should_match '^(python_bot/|backend/\.env$|backend/src/config/botControlStore\.js$|backend/src/controllers/publicActivationController\.js$|backend/src/utils/auth\.js$)'; then
+               RESTART_BOT=true
+             fi
+
+             echo "Change summary: backend=${REBUILD_BACKEND}, worker=${REBUILD_WORKER}, bot=${RESTART_BOT}"
              
-             # Build containers without stopping current ones
-             docker compose build
+             # Build only what changed.
+             if [ "$REBUILD_BACKEND" = true ]; then
+               docker compose build backend backend_worker
+             fi
+             if [ "$RESTART_BOT" = true ]; then
+               docker compose build python_bot
+             fi
              
              # Health check current service before deploy
              echo "Checking current service health..."
@@ -102,8 +131,13 @@ jobs:
              done
              
              # Start new containers (rolling update - no downtime)
-             echo "Deploying new containers..."
-             docker compose up -d --no-deps --build backend backend_worker python_bot
+             echo "Deploying changed containers..."
+             if [ "$REBUILD_BACKEND" = true ]; then
+               docker compose up -d --no-deps --build backend backend_worker
+             fi
+             if [ "$RESTART_BOT" = true ]; then
+               docker compose up -d --no-deps --build python_bot
+             fi
              
              sleep 5
              
@@ -131,10 +165,13 @@ jobs:
                echo "Rolling back to $PREV_SHA"
                git checkout --force "$PREV_SHA"
                docker compose rm -sf backend backend_worker python_bot || true
-               docker compose up -d --build backend backend_worker python_bot
+               docker compose up -d --build backend backend_worker
+               if [ "$RESTART_BOT" = true ]; then
+                 docker compose up -d --build python_bot
+               fi
                echo "Rollback completed"
                exit 1
              fi
-             
+
              echo "✓ Deploy completed successfully"
              docker compose ps

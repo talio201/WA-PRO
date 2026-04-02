@@ -9,12 +9,12 @@ echo "✔️ Backup salvo em $BACKUP_PATH"
 
 echo '[2/4] Atualizando repositório...'
 cd /opt/EmidiaWhats || exit
-# git pull origin main (descomente caso utilize git pull no servidor)
+git pull --ff-only origin main
 
 echo '[3/4] Reconstruindo imagens Docker...'
-docker compose build
+docker compose build backend backend_worker
 
 echo '[4/4] Subindo os containers (Restart)...'
-docker compose up -d
+docker compose up -d --no-deps backend backend_worker
 
 echo '✅ Deploy automático e backup concluídos com sucesso!'
