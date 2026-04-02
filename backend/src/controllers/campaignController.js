@@ -12,6 +12,41 @@ function resolveOwnerId(req) {
   return String(req.user?.id || req.agentId || "").trim();
 }
 
+function normalizeCampaignContacts(contactsInput = []) {
+  if (!Array.isArray(contactsInput)) return [];
+  return contactsInput
+    .map((contact) => {
+      const phoneNormalization = normalizePhone(contact?.phone || contact?.phoneOriginal || "");
+      if (!phoneNormalization.isValid) return null;
+      return {
+        phone: phoneNormalization.normalized,
+        phoneOriginal: String(contact?.phone || contact?.phoneOriginal || "").trim(),
+        name: String(contact?.name || "").trim(),
+        variables: contact && typeof contact.variables === 'object' && !Array.isArray(contact.variables)
+          ? contact.variables
+          : null,
+      };
+    })
+    .filter(Boolean);
+}
+
+function resolveAntiBanPayload({ antiBan = {}, deliveryWindow = {}, resendPolicy = {} } = {}) {
+  const antiBanObject = antiBan && typeof antiBan === 'object' ? antiBan : {};
+  const deliveryWindowPayload =
+    (deliveryWindow && Object.keys(deliveryWindow).length > 0)
+      ? deliveryWindow
+      : antiBanObject.deliveryWindow || {};
+  const resendPolicyPayload =
+    (resendPolicy && Object.keys(resendPolicy).length > 0)
+      ? resendPolicy
+      : antiBanObject.resendPolicy || {};
+  return sanitizeAntiBanSettings({
+    ...antiBanObject,
+    deliveryWindow: deliveryWindowPayload,
+    resendPolicy: resendPolicyPayload,
+  });
+}
+
 function parseTimeToMinutes(value, fallback) {
   const safe = String(value || '').trim();
   const match = safe.match(/^(\d{2}):(\d{2})$/);
@@ -135,8 +170,15 @@ exports.createCampaign = async (req, res) => {
       deliveryWindow = {},
       resendPolicy = {},
     } = req.body;
-    const antiBanSettings = sanitizeAntiBanSettings({
-      ...(antiBan || {}),
+    const safeContacts = normalizeCampaignContacts(contacts);
+    if (!String(name || '').trim()) {
+      return res.status(400).json({ msg: 'Campaign name is required.' });
+    }
+    if (safeContacts.length === 0) {
+      return res.status(400).json({ msg: 'Selecione ao menos um contato válido.' });
+    }
+    const antiBanSettings = resolveAntiBanPayload({
+      antiBan,
       deliveryWindow,
       resendPolicy,
     });
@@ -155,7 +197,7 @@ exports.createCampaign = async (req, res) => {
       status: "running",
       antiBan: antiBanSettings,
       stats: {
-        total: contacts.length,
+        total: safeContacts.length,
         sent: 0,
         failed: 0,
       },
@@ -175,11 +217,9 @@ exports.createCampaign = async (req, res) => {
     const nowMs = Date.now();
     const resendWindowMs = Number(antiBanSettings.resendPolicy?.recentWindowHours || DEFAULT_RESEND_WINDOW_HOURS) * 60 * 60 * 1000;
 
-    const messages = contacts.map((contact, index) => {
-      const phoneNormalization = normalizePhone(contact.phone);
-      const normalizedPhone =
-        phoneNormalization.normalized ||
-        String(contact.phone || "").replace(/\D/g, "");
+    const messages = safeContacts.map((contact) => {
+      const normalizedPhone = contact.phone;
+      const phoneNormalization = normalizePhone(contact.phoneOriginal || contact.phone);
       const existingByPhone = messagesByPhone.get(normalizedPhone) || [];
       const lastOutboundAt = existingByPhone
         .filter((item) => String(item.direction || "outbound") === "outbound" && String(item.status || "") === "sent")
@@ -207,7 +247,7 @@ exports.createCampaign = async (req, res) => {
         agentId: ownerId,
         campaign: campaign._id,
         phone: normalizedPhone,
-        phoneOriginal: String(contact.phone || ""),
+        phoneOriginal: contact.phoneOriginal || normalizedPhone,
         searchTerms: phoneNormalization.searchTerms,
         name: contact.name,
         variables: contact.variables,
