@@ -13,7 +13,7 @@ API_SECRET_KEY = str(os.getenv("API_SECRET_KEY", "")).strip()
 BOT_MASTER_KEY = str(os.getenv("BOT_API_KEY", "")).strip() or API_SECRET_KEY
 
 API_HEADERS = { 
-    "Authorization": f"Bearer {API_SECRET_KEY}",
+    "Authorization": f"Bearer {BOT_MASTER_KEY}",
     "x-agent-id": "bot"
 }
 
@@ -34,8 +34,8 @@ def get_instances():
 MAX_WORKERS = 10 # Limite de instâncias simultâneas para evitar OOM (RAM alta)
 
 def main():
-    if not API_SECRET_KEY:
-        logging.critical("API_SECRET_KEY mestre não definida! Cancelando.")
+    if not BOT_MASTER_KEY:
+        logging.critical("API_SECRET_KEY/BOT_API_KEY mestre não definida! Cancelando.")
         return
         
     logging.info(f"Supervisor Multi-Tenant iniciado (Limite: {MAX_WORKERS} workers). Monitorando endpoints...")
