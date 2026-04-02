@@ -24,7 +24,8 @@ function canAccessAdmin(req) {
   const email = String(req.user.email || '').trim().toLowerCase();
   const hasLegacyAdminTrust = userHasAdminFlag(req.user) || isAdminEmail(email);
   const hasExplicitAdminGate = access?.allowAdmin === true;
-  const hasImplicitLegacyAdminGate = access?.allowAdmin === undefined && hasLegacyAdminTrust;
+  const hasExplicitAdminDeny = access?.allowAdmin === false;
+  const hasImplicitLegacyAdminGate = !hasExplicitAdminDeny && hasLegacyAdminTrust;
   const hasAdminGate = hasExplicitAdminGate || hasImplicitLegacyAdminGate;
   if (Number.isFinite(expiresAt) && expiresAt > 0 && expiresAt <= Date.now()) return false;
   if (!hasAdminGate) return false;
