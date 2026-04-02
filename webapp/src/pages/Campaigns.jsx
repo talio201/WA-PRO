@@ -498,46 +498,46 @@ const Campaigns = () => {
     };
     if (loading) {
         return (
-            <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600 shadow-sm">
-                <ArrowPathIcon className="w-4 h-4 animate-spin text-slate-500" />
+            <div className="flex items-center gap-2 rounded-xl border border-white/10 bg-slate-950/80 px-4 py-3 text-sm text-slate-300 shadow-sm">
+                <ArrowPathIcon className="w-4 h-4 animate-spin text-orange-300" />
                 <span>Carregando dados...</span>
             </div>
         );
     }
     const panelClass = glassMode
-        ? 'rounded-[24px] border border-white/55 bg-white/65 shadow-[0_28px_65px_-42px_rgba(15,23,42,0.6)] backdrop-blur-2xl'
-        : 'rounded-xl border border-slate-200 bg-white shadow-sm';
+        ? 'rounded-[24px] border border-white/10 bg-slate-950/86 shadow-[0_28px_65px_-42px_rgba(0,0,0,0.8)] backdrop-blur-2xl'
+        : 'rounded-xl border border-white/10 bg-slate-950/92 shadow-sm';
     const heroMetricClass = glassMode
-        ? 'rounded-xl border border-white/50 bg-white/55 p-4 backdrop-blur-xl'
-        : 'rounded-xl border border-slate-200 bg-slate-50 p-4';
+        ? 'rounded-xl border border-white/10 bg-slate-900/70 p-4 backdrop-blur-xl'
+        : 'rounded-xl border border-white/10 bg-slate-900/88 p-4';
     const neutralButtonClass = glassMode
-        ? 'inline-flex items-center gap-2 rounded-xl border border-white/60 bg-white/70 px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-white'
-        : 'inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-100';
+        ? 'inline-flex items-center gap-2 rounded-xl border border-white/10 bg-slate-900/75 px-3 py-2 text-xs font-semibold text-slate-200 transition hover:bg-slate-800'
+        : 'inline-flex items-center gap-2 rounded-xl border border-white/10 bg-slate-900 px-3 py-2 text-xs font-semibold text-slate-200 transition hover:bg-slate-800';
     const accentButtonClass = glassMode
-        ? 'inline-flex items-center gap-2 rounded-xl border border-emerald-300/60 bg-emerald-500/20 px-3 py-2 text-xs font-semibold text-emerald-800 transition hover:bg-emerald-500/30'
-        : 'inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-emerald-700';
+        ? 'inline-flex items-center gap-2 rounded-xl border border-orange-400/30 bg-gradient-to-r from-orange-500 to-amber-400 px-3 py-2 text-xs font-semibold text-slate-950 transition hover:from-orange-400 hover:to-amber-300'
+        : 'inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-orange-500 to-amber-400 px-3 py-2 text-xs font-semibold text-slate-950 transition hover:from-orange-400 hover:to-amber-300';
     const inputClass = glassMode
-        ? 'w-full rounded-xl border border-white/60 bg-white/70 px-3 py-2 text-sm text-slate-700 outline-none backdrop-blur focus:border-emerald-400'
-        : 'w-full rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-700 outline-none focus:border-emerald-500';
+        ? 'w-full rounded-xl border border-white/10 bg-slate-950/80 px-3 py-2 text-sm text-slate-100 outline-none backdrop-blur focus:border-orange-400'
+        : 'w-full rounded-md border border-white/10 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none focus:border-orange-400';
     const tableHeadClass = glassMode
-        ? 'bg-white/45 text-slate-700'
-        : 'bg-slate-50 text-slate-600';
+        ? 'bg-slate-900/70 text-slate-300'
+        : 'bg-slate-900 text-slate-300';
     const quickFilterBase = glassMode
-        ? 'rounded-full border border-white/55 bg-white/60 px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-white'
-        : 'rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 transition hover:bg-slate-100';
+        ? 'rounded-full border border-white/10 bg-slate-900/75 px-3 py-1.5 text-xs font-semibold text-slate-200 transition hover:bg-slate-800'
+        : 'rounded-full border border-white/10 bg-slate-900 px-3 py-1.5 text-xs font-semibold text-slate-200 transition hover:bg-slate-800';
     const quickFilterActive = glassMode
-        ? 'border-emerald-300/70 bg-emerald-500/20 text-emerald-800'
-        : 'border-emerald-200 bg-emerald-50 text-emerald-700';
+        ? 'border-orange-400/40 bg-orange-500/20 text-orange-200'
+        : 'border-orange-400/40 bg-orange-500/20 text-orange-200';
     const realtimeLabel = realtimeStatus === 'connected'
         ? `Tempo real ativo${lastRealtimeAt ? ` (${new Date(lastRealtimeAt).toLocaleTimeString()})` : ''}`
         : realtimeStatus === 'connecting'
             ? 'Conectando websocket...'
             : 'Fallback ativo por intervalo';
     const realtimeClass = realtimeStatus === 'connected'
-        ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+        ? 'border-emerald-400/20 bg-emerald-500/10 text-emerald-300'
         : realtimeStatus === 'connecting'
-            ? 'border-sky-200 bg-sky-50 text-sky-700'
-            : 'border-amber-200 bg-amber-50 text-amber-700';
+            ? 'border-blue-400/20 bg-blue-500/10 text-blue-300'
+            : 'border-orange-400/20 bg-orange-500/10 text-orange-200';
     const liveActivityType = String(liveActivity?.activity || '').trim().toLowerCase();
     return (
         <>
@@ -545,24 +545,24 @@ const Campaigns = () => {
                 <section className={`${panelClass} p-5 md:p-6`}>
                     <div className="flex flex-wrap items-start justify-between gap-4">
                         <div>
-                            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-emerald-700">Operations</p>
-                            <h2 className="mt-1 text-2xl font-bold tracking-tight text-slate-900">Painel de Campanhas</h2>
-                            <p className="mt-1 text-sm text-slate-600">Fluxo de envio, falhas e produtividade em uma visao executiva unica.</p>
+                            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-orange-300">Operations</p>
+                            <h2 className="mt-1 text-2xl font-bold tracking-tight text-slate-50">Painel de Campanhas</h2>
+                            <p className="mt-1 text-sm text-slate-400">Fluxo de envio, falhas e produtividade em uma visao executiva unica.</p>
                             
                             {/* Live Activity Feed */}
                             <div className="mt-4 flex flex-col md:flex-row md:items-center gap-3">
                                 {liveActivity && (
                                     <div className={`inline-flex items-center gap-3 px-4 py-1.5 rounded-2xl border backdrop-blur-md shadow-sm transition-all duration-300 ${
-                                        liveActivityType === 'typing' ? 'bg-sky-50/80 border-sky-100 text-sky-700 animate-pulse' :
-                                        liveActivityType === 'waiting' ? 'bg-amber-50/80 border-amber-100 text-amber-700' :
-                                        liveActivityType === 'sending' ? 'bg-emerald-50/80 border-emerald-100 text-emerald-700' :
-                                        'bg-slate-50/80 border-slate-100 text-slate-600'
+                                        liveActivityType === 'typing' ? 'bg-blue-500/10 border-blue-400/20 text-blue-200 animate-pulse' :
+                                        liveActivityType === 'waiting' ? 'bg-orange-500/10 border-orange-400/20 text-orange-200' :
+                                        liveActivityType === 'sending' ? 'bg-emerald-500/10 border-emerald-400/20 text-emerald-200' :
+                                        'bg-slate-900/70 border-white/10 text-slate-300'
                                     }`}>
                                         <div className="relative">
                                             <div className={`h-2 w-2 rounded-full ${
-                                                liveActivityType === 'typing' ? 'bg-sky-500' :
-                                                liveActivityType === 'waiting' ? 'bg-amber-500' :
-                                                liveActivityType === 'sending' ? 'bg-emerald-500' :
+                                                liveActivityType === 'typing' ? 'bg-blue-400' :
+                                                liveActivityType === 'waiting' ? 'bg-orange-400' :
+                                                liveActivityType === 'sending' ? 'bg-emerald-400' :
                                                 'bg-slate-400'
                                             }`} />
                                             {liveActivityType === 'typing' && (
@@ -583,7 +583,7 @@ const Campaigns = () => {
                                     </div>
                                 )}
                                 {!liveActivity && (
-                                    <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-2xl bg-white/30 border border-white/50 text-slate-400 text-[11px] italic">
+                                    <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-2xl bg-slate-900/70 border border-white/10 text-slate-400 text-[11px] italic">
                                         <ClockIcon className="w-3.5 h-3.5" />
                                         Aguardando atividade do robô...
                                     </div>
@@ -628,7 +628,7 @@ const Campaigns = () => {
                         </div>
                     </div>
                     <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
-                        <span className="text-slate-500">
+                            <span className="text-slate-400">
                             Ultima sincronizacao: {lastSyncAt ? lastSyncAt.toLocaleTimeString() : '-'}
                         </span>
                         <span className={`inline-flex items-center rounded-full border px-2 py-1 text-[11px] font-semibold ${realtimeClass}`}>
@@ -637,93 +637,93 @@ const Campaigns = () => {
                     </div>
                     <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-8">
                         <div className={heroMetricClass}>
-                            <div className="flex items-center justify-between text-xs font-bold uppercase tracking-wide text-slate-500">
+                            <div className="flex items-center justify-between text-xs font-bold uppercase tracking-wide text-slate-400">
                                 <span>Enviadas</span>
                                 <CheckCircleIcon className="w-4 h-4 text-emerald-600" />
                             </div>
-                            <div className="mt-2 text-2xl font-bold text-slate-900">{totals.sent}</div>
+                            <div className="mt-2 text-2xl font-bold text-slate-50">{totals.sent}</div>
                         </div>
                         <div className={heroMetricClass}>
-                            <div className="flex items-center justify-between text-xs font-bold uppercase tracking-wide text-slate-500">
+                            <div className="flex items-center justify-between text-xs font-bold uppercase tracking-wide text-slate-400">
                                 <span>Taxa sucesso</span>
                                 <ArrowPathIcon className="w-4 h-4 text-blue-600" />
                             </div>
-                            <div className="mt-2 text-2xl font-bold text-slate-900">{totals.successRate}%</div>
+                            <div className="mt-2 text-2xl font-bold text-slate-50">{totals.successRate}%</div>
                         </div>
                         <div className={heroMetricClass}>
-                            <div className="flex items-center justify-between text-xs font-bold uppercase tracking-wide text-slate-500">
+                            <div className="flex items-center justify-between text-xs font-bold uppercase tracking-wide text-slate-400">
                                 <span>Na fila</span>
                                 <ClockIcon className="w-4 h-4 text-amber-600" />
                             </div>
-                            <div className="mt-2 text-2xl font-bold text-slate-900">{totals.pending}</div>
+                            <div className="mt-2 text-2xl font-bold text-slate-50">{totals.pending}</div>
                         </div>
                         <div className={heroMetricClass}>
-                            <div className="flex items-center justify-between text-xs font-bold uppercase tracking-wide text-slate-500">
+                            <div className="flex items-center justify-between text-xs font-bold uppercase tracking-wide text-slate-400">
                                 <span>Falhas</span>
                                 <ExclamationTriangleIcon className="w-4 h-4 text-red-600" />
                             </div>
-                            <div className="mt-2 text-2xl font-bold text-slate-900">{totals.failed}</div>
+                            <div className="mt-2 text-2xl font-bold text-slate-50">{totals.failed}</div>
                         </div>
                         <div className={heroMetricClass}>
-                            <div className="flex items-center justify-between text-xs font-bold uppercase tracking-wide text-slate-500">
+                            <div className="flex items-center justify-between text-xs font-bold uppercase tracking-wide text-slate-400">
                                 <span>Criticas</span>
                                 <ExclamationTriangleIcon className="w-4 h-4 text-orange-600" />
                             </div>
-                            <div className="mt-2 text-2xl font-bold text-slate-900">{totals.critical}</div>
+                            <div className="mt-2 text-2xl font-bold text-slate-50">{totals.critical}</div>
                         </div>
                         <div className={heroMetricClass}>
-                            <div className="flex items-center justify-between text-xs font-bold uppercase tracking-wide text-slate-500">
+                            <div className="flex items-center justify-between text-xs font-bold uppercase tracking-wide text-slate-400">
                                 <span>Contatos</span>
                                 <ArrowPathIcon className="w-4 h-4 text-indigo-600" />
                             </div>
-                            <div className="mt-2 text-2xl font-bold text-slate-900">{totals.contacts}</div>
+                            <div className="mt-2 text-2xl font-bold text-slate-50">{totals.contacts}</div>
                         </div>
                         <div className={heroMetricClass}>
-                            <div className="flex items-center justify-between text-xs font-bold uppercase tracking-wide text-slate-500">
+                            <div className="flex items-center justify-between text-xs font-bold uppercase tracking-wide text-slate-400">
                                 <span>Leads qualif.</span>
                                 <ArrowPathIcon className="w-4 h-4 text-cyan-600" />
                             </div>
-                            <div className="mt-2 text-2xl font-bold text-slate-900">{leadAnalytics?.byStage?.qualified || 0}</div>
+                            <div className="mt-2 text-2xl font-bold text-slate-50">{leadAnalytics?.byStage?.qualified || 0}</div>
                         </div>
                         <div className={heroMetricClass}>
-                            <div className="flex items-center justify-between text-xs font-bold uppercase tracking-wide text-slate-500">
+                            <div className="flex items-center justify-between text-xs font-bold uppercase tracking-wide text-slate-400">
                                 <span>Conv. leads</span>
                                 <CheckCircleIcon className="w-4 h-4 text-emerald-600" />
                             </div>
-                            <div className="mt-2 text-2xl font-bold text-slate-900">{leadAnalytics?.conversion?.wonRate || 0}%</div>
+                            <div className="mt-2 text-2xl font-bold text-slate-50">{leadAnalytics?.conversion?.wonRate || 0}%</div>
                         </div>
                     </div>
                 </section>
                 <section className="grid grid-cols-1 gap-6 lg:grid-cols-3">
                     <div className={`${panelClass} p-5 lg:col-span-1`}>
-                        <h3 className="text-base font-semibold text-slate-900">Resumo operacional</h3>
+                        <h3 className="text-base font-semibold text-slate-50">Resumo operacional</h3>
                         <div className="mt-4 space-y-3">
                             <div className="flex items-center justify-between rounded-lg bg-slate-100/70 px-3 py-2 text-sm">
-                                <span className="text-slate-600">Executando</span>
-                                <span className="font-bold text-slate-900">{totals.running}</span>
+                                <span className="text-slate-400">Executando</span>
+                                <span className="font-bold text-slate-50">{totals.running}</span>
                             </div>
                             <div className="flex items-center justify-between rounded-lg bg-slate-100/70 px-3 py-2 text-sm">
-                                <span className="text-slate-600">Com falha</span>
-                                <span className="font-bold text-slate-900">{totals.withFailures}</span>
+                                <span className="text-slate-400">Com falha</span>
+                                <span className="font-bold text-slate-50">{totals.withFailures}</span>
                             </div>
                             <div className="flex items-center justify-between rounded-lg bg-slate-100/70 px-3 py-2 text-sm">
-                                <span className="text-slate-600">Respostas</span>
-                                <span className="font-bold text-slate-900">{totals.replies}</span>
+                                <span className="text-slate-400">Respostas</span>
+                                <span className="font-bold text-slate-50">{totals.replies}</span>
                             </div>
                             <div className="flex items-center justify-between rounded-lg bg-slate-100/70 px-3 py-2 text-sm">
-                                <span className="text-slate-600">Conclusao media</span>
-                                <span className="font-bold text-slate-900">{totals.completionRate}%</span>
+                                <span className="text-slate-400">Conclusao media</span>
+                                <span className="font-bold text-slate-50">{totals.completionRate}%</span>
                             </div>
                         </div>
                     </div>
                     <div className={`${panelClass} p-5 lg:col-span-2`}>
                         <div className="mb-4 flex items-center justify-between">
-                            <h3 className="text-base font-semibold text-slate-900">Performance</h3>
-                            <span className="text-xs text-slate-500">Top 8 campanhas filtradas</span>
+                            <h3 className="text-base font-semibold text-slate-50">Performance</h3>
+                            <span className="text-xs text-slate-400">Top 8 campanhas filtradas</span>
                         </div>
                         <div className="h-64 min-h-64 min-w-0 overflow-hidden">
                             {chartData.length === 0 ? (
-                                <div className="flex h-full items-center justify-center rounded-xl border border-dashed border-slate-300 text-sm text-slate-500">
+                                <div className="flex h-full items-center justify-center rounded-xl border border-dashed border-white/10 text-sm text-slate-400">
                                     Sem dados para os filtros selecionados.
                                 </div>
                             ) : (
@@ -744,8 +744,8 @@ const Campaigns = () => {
                     <div className="border-b border-slate-200/80 px-5 py-4">
                         <div className="flex flex-wrap items-center justify-between gap-3">
                             <div>
-                                <h3 className="text-base font-semibold text-slate-900">Campanhas</h3>
-                                <p className="text-xs text-slate-500">{filteredCampaigns.length} de {campaignRows.length} exibidas.</p>
+                                <h3 className="text-base font-semibold text-slate-50">Campanhas</h3>
+                                <p className="text-xs text-slate-400">{filteredCampaigns.length} de {campaignRows.length} exibidas.</p>
                             </div>
                             <div className="flex flex-wrap items-center gap-2">
                                 <div className="relative min-w-55">
@@ -813,7 +813,7 @@ const Campaigns = () => {
                             <tbody>
                                 {filteredCampaigns.length === 0 ? (
                                     <tr>
-                                        <td colSpan="7" className="px-5 py-10 text-center text-sm text-slate-500">
+                                        <td colSpan="7" className="px-5 py-10 text-center text-sm text-slate-400">
                                             Nenhuma campanha encontrada para os filtros atuais.
                                         </td>
                                     </tr>
@@ -828,10 +828,10 @@ const Campaigns = () => {
                                     return (
                                         <tr key={campaign._id} className="border-t border-slate-100 align-top">
                                             <td className="px-5 py-4">
-                                                <div className="font-semibold text-slate-900">{campaign.name}</div>
-                                                <div className="mt-1 text-xs text-slate-500">Enviadas: {campaign.sent} | Falhas: {campaign.failed}</div>
+                                                <div className="font-semibold text-slate-50">{campaign.name}</div>
+                                                <div className="mt-1 text-xs text-slate-400">Enviadas: {campaign.sent} | Falhas: {campaign.failed}</div>
                                                 {critical && (
-                                                    <span className="mt-2 inline-flex rounded-full bg-orange-100 px-2 py-1 text-[11px] font-semibold text-orange-700">
+                                                    <span className="mt-2 inline-flex rounded-full bg-orange-500/10 px-2 py-1 text-[11px] font-semibold text-orange-200 border border-orange-400/20">
                                                         Prioridade
                                                     </span>
                                                 )}
@@ -842,22 +842,22 @@ const Campaigns = () => {
                                                 </span>
                                             </td>
                                             <td className="px-5 py-4">
-                                                <div className="mb-1 flex items-center justify-between text-xs text-slate-600">
+                                                <div className="mb-1 flex items-center justify-between text-xs text-slate-400">
                                                     <span>{campaign.sent + campaign.failed}/{campaign.total}</span>
                                                     <span>{campaign.progress}%</span>
                                                 </div>
-                                                <div className="h-2 rounded-full bg-slate-100">
+                                                <div className="h-2 rounded-full bg-slate-800">
                                                     <div className={`h-2 rounded-full ${progressBarClass}`} style={{ width: `${campaign.progress}%` }} />
                                                 </div>
                                             </td>
                                             <td className="px-5 py-4">
-                                                <div className="text-sm font-semibold text-slate-900">{campaign.pending}</div>
-                                                <div className="text-xs text-slate-500">pendente(s)</div>
+                                                <div className="text-sm font-semibold text-slate-50">{campaign.pending}</div>
+                                                <div className="text-xs text-slate-400">pendente(s)</div>
                                             </td>
-                                            <td className="px-5 py-4 text-slate-700">
+                                            <td className="px-5 py-4 text-slate-300">
                                                 {Number(campaign?.antiBan?.minDelaySeconds || 0)}s - {Number(campaign?.antiBan?.maxDelaySeconds || 0)}s
                                             </td>
-                                            <td className="px-5 py-4 text-xs text-slate-600">{formatDate(campaign.createdAt)}</td>
+                                            <td className="px-5 py-4 text-xs text-slate-400">{formatDate(campaign.createdAt)}</td>
                                             <td className="px-5 py-4">
                                                 <div className="flex justify-end gap-2">
                                                     <button
@@ -866,10 +866,10 @@ const Campaigns = () => {
                                                         disabled={dispatchingCampaignId === campaign._id || campaign.pending <= 0}
                                                         className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
                                                             dispatchingCampaignId === campaign._id
-                                                                ? 'cursor-not-allowed bg-emerald-200 text-emerald-500'
+                                                                ? 'cursor-not-allowed bg-slate-700 text-slate-400'
                                                                 : campaign.pending <= 0
-                                                                    ? 'cursor-not-allowed bg-slate-200 text-slate-400'
-                                                                    : 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200'
+                                                                    ? 'cursor-not-allowed bg-slate-700 text-slate-500'
+                                                                    : 'bg-gradient-to-r from-emerald-500 to-emerald-400 text-slate-950 hover:from-emerald-400 hover:to-emerald-300'
                                                         }`}
                                                     >
                                                         <CheckCircleIcon className="w-4 h-4" />
@@ -878,7 +878,7 @@ const Campaigns = () => {
                                                     <button
                                                         type="button"
                                                         onClick={() => openCampaignEditModal(campaign)}
-                                                        className="inline-flex items-center gap-1.5 rounded-lg bg-sky-100 px-3 py-1.5 text-xs font-semibold text-sky-800 transition hover:bg-sky-200"
+                                                        className="inline-flex items-center gap-1.5 rounded-lg bg-blue-500/10 px-3 py-1.5 text-xs font-semibold text-blue-200 transition hover:bg-blue-500/20 border border-blue-400/20"
                                                     >
                                                         <PencilIcon className="w-4 h-4" />
                                                         Editar
@@ -887,7 +887,7 @@ const Campaigns = () => {
                                                         type="button"
                                                         onClick={() => openFailuresModal(campaign)}
                                                         disabled={campaign.failed === 0}
-                                                        className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition ${campaign.failed === 0 ? 'cursor-not-allowed bg-slate-200 text-slate-400' : 'bg-amber-100 text-amber-800 hover:bg-amber-200'}`}
+                                                        className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition ${campaign.failed === 0 ? 'cursor-not-allowed bg-slate-700 text-slate-500' : 'bg-orange-500/10 text-orange-200 hover:bg-orange-500/20 border border-orange-400/20'}`}
                                                     >
                                                         <ExclamationTriangleIcon className="w-4 h-4" />
                                                         Falhas ({campaign.failed})
@@ -896,7 +896,7 @@ const Campaigns = () => {
                                                         type="button"
                                                         onClick={() => handleDeleteCampaign(campaign)}
                                                         disabled={deletingId === campaign._id}
-                                                        className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition ${deletingId === campaign._id ? 'cursor-not-allowed bg-red-200 text-red-400' : 'bg-red-100 text-red-700 hover:bg-red-200'}`}
+                                                        className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition ${deletingId === campaign._id ? 'cursor-not-allowed bg-slate-700 text-slate-500' : 'bg-red-500/10 text-red-200 hover:bg-red-500/20 border border-red-400/20'}`}
                                                     >
                                                         <TrashIcon className="w-4 h-4" />
                                                         {deletingId === campaign._id ? 'Excluindo...' : 'Excluir'}
@@ -912,23 +912,23 @@ const Campaigns = () => {
                 </section>
                 <section className={`${panelClass} overflow-hidden`}>
                     <div className="border-b border-slate-200/80 px-5 py-4">
-                        <h3 className="text-base font-semibold text-slate-900">Atividade recente</h3>
-                        <p className="text-xs text-slate-500">Ultimos 10 eventos de envio.</p>
+                        <h3 className="text-base font-semibold text-slate-50">Atividade recente</h3>
+                        <p className="text-xs text-slate-400">Ultimos 10 eventos de envio.</p>
                     </div>
                     <div className="divide-y divide-slate-100">
                         {recentActivity.length === 0 ? (
-                            <div className="px-5 py-6 text-sm text-slate-500">Nenhuma atividade recente encontrada.</div>
+                            <div className="px-5 py-6 text-sm text-slate-400">Nenhuma atividade recente encontrada.</div>
                         ) : recentActivity.map((item) => (
                             <div key={item._id} className="flex flex-wrap items-center justify-between gap-3 px-5 py-3">
                                 <div className="min-w-0 flex-1">
-                                    <div className="truncate text-sm font-medium text-slate-800">{item.name || item.phone || 'Contato sem nome'}</div>
-                                    <div className="truncate text-xs text-slate-500">{item.processedMessage || 'Sem texto'}</div>
+                                    <div className="truncate text-sm font-medium text-slate-100">{item.name || item.phone || 'Contato sem nome'}</div>
+                                    <div className="truncate text-xs text-slate-400">{item.processedMessage || 'Sem texto'}</div>
                                 </div>
                                 <div className="flex items-center gap-3">
-                                    <span className={`rounded-full px-2 py-1 text-xs font-semibold ${item.status === 'sent' ? 'bg-emerald-100 text-emerald-700' : item.status === 'failed' ? 'bg-red-100 text-red-700' : 'bg-slate-100 text-slate-700'}`}>
+                                    <span className={`rounded-full px-2 py-1 text-xs font-semibold ${item.status === 'sent' ? 'bg-emerald-500/10 text-emerald-200 border border-emerald-400/20' : item.status === 'failed' ? 'bg-red-500/10 text-red-200 border border-red-400/20' : 'bg-slate-800 text-slate-200 border border-white/10'}`}>
                                         {item.status || 'pending'}
                                     </span>
-                                    <span className="text-xs text-slate-500">{formatDate(item.updatedAt || item.sentAt || item.createdAt)}</span>
+                                    <span className="text-xs text-slate-400">{formatDate(item.updatedAt || item.sentAt || item.createdAt)}</span>
                                 </div>
                             </div>
                         ))}
@@ -936,19 +936,19 @@ const Campaigns = () => {
                 </section>
             </div>
             {selectedCampaign && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm">
-                    <div className={`flex max-h-[90vh] w-full max-w-6xl flex-col overflow-hidden shadow-2xl ${glassMode ? 'rounded-3xl border border-white/60 bg-white/80 backdrop-blur-2xl' : 'rounded-xl bg-white'}`}>
-                        <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4">
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/85 p-4 backdrop-blur-md">
+                    <div className={`flex max-h-[90vh] w-full max-w-6xl flex-col overflow-hidden shadow-2xl ${glassMode ? 'rounded-3xl border border-white/10 bg-slate-950/96 backdrop-blur-2xl' : 'rounded-xl bg-slate-950/96'}`}>
+                        <div className="flex items-center justify-between border-b border-white/10 px-6 py-4">
                             <div>
-                                <h3 className="text-lg font-bold text-gray-900">Falhas da Campanha</h3>
-                                <p className="text-sm text-gray-500">{selectedCampaign.name}</p>
+                                <h3 className="text-lg font-bold text-slate-50">Falhas da Campanha</h3>
+                                <p className="text-sm text-slate-400">{selectedCampaign.name}</p>
                             </div>
                             <div className="flex items-center gap-2">
                                 <button
                                     type="button"
                                     onClick={handleRetryAllFailures}
                                     disabled={loadingFailures || failures.length === 0 || retryingAllFailures}
-                                    className={`inline-flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-semibold text-white transition ${loadingFailures || failures.length === 0 || retryingAllFailures ? 'cursor-not-allowed bg-slate-300' : 'bg-emerald-600 hover:bg-emerald-700'}`}
+                                    className={`inline-flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-semibold text-slate-950 transition ${loadingFailures || failures.length === 0 || retryingAllFailures ? 'cursor-not-allowed bg-slate-700 text-slate-500' : 'bg-gradient-to-r from-orange-500 to-amber-400 hover:from-orange-400 hover:to-amber-300'}`}
                                 >
                                     <ArrowPathIcon className={`w-4 h-4 ${retryingAllFailures ? 'animate-spin' : ''}`} />
                                     {retryingAllFailures ? 'Reenfileirando...' : 'Reenfileirar todas'}
@@ -965,12 +965,12 @@ const Campaigns = () => {
                         </div>
                         <div className="overflow-y-auto p-6">
                             {loadingFailures ? (
-                                <div className="flex items-center justify-center gap-2 py-10 text-center text-sm text-gray-500">
+                                <div className="flex items-center justify-center gap-2 py-10 text-center text-sm text-slate-400">
                                     <ArrowPathIcon className="w-4 h-4 animate-spin" />
                                     <span>Carregando falhas...</span>
                                 </div>
                             ) : failures.length === 0 ? (
-                                <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-700">
+                                <div className="rounded-lg border border-emerald-400/20 bg-emerald-500/10 p-4 text-sm text-emerald-200">
                                     Nenhuma falha pendente para auditoria.
                                 </div>
                             ) : (
@@ -980,8 +980,8 @@ const Campaigns = () => {
                                         const isSaving = savingMessageId === item._id;
                                         const isRetrying = retryingMessageId === item._id;
                                         return (
-                                            <div key={item._id} className={`rounded-lg border p-4 ${glassMode ? 'border-white/60 bg-white/65 shadow-sm backdrop-blur' : 'border-gray-200 bg-white shadow-sm'}`}>
-                                                <div className="mb-2 text-xs text-red-700">Motivo: {item.lastError || item.error || 'Erro nao informado'}</div>
+                                            <div key={item._id} className={`rounded-lg border p-4 ${glassMode ? 'border-white/10 bg-slate-900/80 shadow-sm backdrop-blur' : 'border-white/10 bg-slate-900 shadow-sm'}`}>
+                                                <div className="mb-2 text-xs text-red-300">Motivo: {item.lastError || item.error || 'Erro nao informado'}</div>
                                                 <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                                                     <input
                                                         type="text"
@@ -1010,7 +1010,7 @@ const Campaigns = () => {
                                                         type="button"
                                                         onClick={() => handleSaveMessage(item._id)}
                                                         disabled={isSaving || isRetrying}
-                                                        className={`rounded-md px-3 py-1.5 text-xs font-semibold text-white ${isSaving || isRetrying ? 'cursor-not-allowed bg-slate-300' : 'bg-blue-600 hover:bg-blue-700'}`}
+                                                        className={`rounded-md px-3 py-1.5 text-xs font-semibold text-slate-950 ${isSaving || isRetrying ? 'cursor-not-allowed bg-slate-700 text-slate-500' : 'bg-gradient-to-r from-blue-500 to-cyan-400 hover:from-blue-400 hover:to-cyan-300'}`}
                                                     >
                                                         {isSaving ? 'Salvando...' : 'Salvar'}
                                                     </button>
@@ -1018,7 +1018,7 @@ const Campaigns = () => {
                                                         type="button"
                                                         onClick={() => handleRetryMessage(item._id)}
                                                         disabled={isSaving || isRetrying}
-                                                        className={`rounded-md px-3 py-1.5 text-xs font-semibold text-white ${isSaving || isRetrying ? 'cursor-not-allowed bg-slate-300' : 'bg-emerald-600 hover:bg-emerald-700'}`}
+                                                        className={`rounded-md px-3 py-1.5 text-xs font-semibold text-slate-950 ${isSaving || isRetrying ? 'cursor-not-allowed bg-slate-700 text-slate-500' : 'bg-gradient-to-r from-orange-500 to-amber-400 hover:from-orange-400 hover:to-amber-300'}`}
                                                     >
                                                         {isRetrying ? 'Reenfileirando...' : 'Salvar + reenfileirar'}
                                                     </button>
@@ -1033,12 +1033,12 @@ const Campaigns = () => {
                 </div>
             )}
             {editingCampaign && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm">
-                    <div className={`w-full max-w-3xl overflow-hidden shadow-2xl ${glassMode ? 'rounded-3xl border border-white/60 bg-white/80 backdrop-blur-2xl' : 'rounded-xl bg-white'}`}>
-                        <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4">
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/85 p-4 backdrop-blur-md">
+                    <div className={`w-full max-w-3xl overflow-hidden shadow-2xl ${glassMode ? 'rounded-3xl border border-white/10 bg-slate-950/96 backdrop-blur-2xl' : 'rounded-xl bg-slate-950/96'}`}>
+                        <div className="flex items-center justify-between border-b border-white/10 px-6 py-4">
                             <div>
-                                <h3 className="text-lg font-bold text-slate-900">Editar campanha</h3>
-                                <p className="text-sm text-slate-500">{editingCampaign.name}</p>
+                                <h3 className="text-lg font-bold text-slate-50">Editar campanha</h3>
+                                <p className="text-sm text-slate-400">{editingCampaign.name}</p>
                             </div>
                             <button type="button" onClick={closeCampaignEditModal} className={neutralButtonClass}>
                                 <XMarkIcon className="w-4 h-4" />
@@ -1055,7 +1055,7 @@ const Campaigns = () => {
                             />
                             {editingCampaign?.turboMode || (campaignEditForm.messageVariants && campaignEditForm.messageVariants.length > 0) ? (
                                   <div className="space-y-3">
-                                      <p className="text-sm font-semibold text-emerald-300">Variações de Mensagens (Modo Turbo)</p>
+                                      <p className="text-sm font-semibold text-orange-200">Variações de Mensagens (Modo Turbo)</p>
                                       {campaignEditForm.messageVariants.map((variant, index) => (
                                           <div key={index} className="flex flex-col gap-1">
                                               <label className="text-xs text-slate-400">Variação {index + 1}</label>
@@ -1067,7 +1067,7 @@ const Campaigns = () => {
                                                       newVariants[index] = e.target.value;
                                                       setCampaignEditForm(prev => ({ ...prev, messageVariants: newVariants }));
                                                   }}
-                                                  className={`${inputClass} resize-y bg-slate-900 border-slate-700/50 text-white p-3 rounded-xl w-full focus:outline-none focus:border-emerald-500/50`}
+                                                  className={`${inputClass} resize-y bg-slate-950 border-white/10 text-slate-100 p-3 rounded-xl w-full focus:outline-none focus:border-orange-400/50`}
                                               />
                                           </div>
                                       ))}

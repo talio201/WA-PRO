@@ -94,16 +94,16 @@ export default function App() {
   const qrImageSource = isValidQrImageSource(botState.qrCode) ? String(botState.qrCode).trim() : '';
 
   return (
-    <div className="crm-app flex h-screen min-h-0 text-slate-900 overflow-hidden">
+    <div className="crm-app flex h-screen min-h-0 text-slate-100 overflow-hidden">
       {/* Sidebar */}
       <aside className={`crm-sidebar flex flex-col ${sidebarCollapsed ? 'w-16' : 'w-60'} shrink-0 min-h-0 backdrop-blur-md transition-all duration-200`}>
-        <div className={`flex items-center ${sidebarCollapsed ? 'justify-center' : 'justify-between'} px-2 py-4 border-b border-slate-200/60`}>
+        <div className={`flex items-center ${sidebarCollapsed ? 'justify-center' : 'justify-between'} px-2 py-4 border-b border-white/10`}>
           <div>
-            <h1 className={`font-bold text-base text-slate-800 tracking-tight transition-all duration-200 ${sidebarCollapsed ? 'hidden' : ''}`}>EmidiaWhats</h1>
-            {!sidebarCollapsed && <p className="text-xs text-slate-500 mt-0.5 truncate">{agentLabel}</p>}
+            <h1 className={`font-bold text-base text-slate-50 tracking-tight transition-all duration-200 ${sidebarCollapsed ? 'hidden' : ''}`}>EmidiaWhats</h1>
+            {!sidebarCollapsed && <p className="text-xs text-slate-400 mt-0.5 truncate">{agentLabel}</p>}
           </div>
           <button
-            className="p-2 rounded-lg hover:bg-slate-200 transition ml-2"
+            className="p-2 rounded-lg hover:bg-white/10 transition ml-2 text-slate-200"
             title={sidebarCollapsed ? 'Expandir menu' : 'Recolher menu'}
             onClick={() => setSidebarCollapsed((v) => !v)}
           >
@@ -119,7 +119,7 @@ export default function App() {
               className={`crm-nav-btn w-full text-left flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-medium transition-all ${
                 activeTab === tab.id
                   ? 'crm-nav-btn-active text-white shadow-sm'
-                  : 'text-slate-600 hover:bg-slate-100'
+                  : 'text-slate-300 hover:bg-white/5'
               } ${sidebarCollapsed ? 'justify-center px-2' : ''}`}
             >
               <span className="text-base flex items-center justify-center">{tab.icon}</span>
@@ -128,24 +128,24 @@ export default function App() {
           ))}
         </nav>
 
-        <div className={`${sidebarCollapsed ? 'px-1' : 'px-4'} py-4 border-t border-slate-200/60 space-y-2`}>
+        <div className={`${sidebarCollapsed ? 'px-1' : 'px-4'} py-4 border-t border-white/10 space-y-2`}>
           {/* Bot status */}
-          <div className={`flex items-center gap-2 text-xs text-slate-500 ${sidebarCollapsed ? 'justify-center' : ''}`}>
+          <div className={`flex items-center gap-2 text-xs text-slate-400 ${sidebarCollapsed ? 'justify-center' : ''}`}>
             <span className={`inline-block h-2 w-2 rounded-full ${botColor}`} />
             {!sidebarCollapsed && <span>Bot: {botState.status}</span>}
           </div>
           {/* QR code if awaiting */}
           {botState.status === 'AWAITING_QR' && qrImageSource && !sidebarCollapsed && (
-            <div className="rounded-lg border border-amber-300 bg-amber-50 p-2">
-              <p className="text-xs text-amber-700 mb-1 font-semibold">Escaneie o QR no WhatsApp</p>
-              <img src={qrImageSource} alt="QR Code" className="w-full rounded" />
+            <div className="rounded-xl border border-orange-400/30 bg-slate-950/80 p-2">
+              <p className="text-xs text-orange-200 mb-1 font-semibold">Escaneie o QR no WhatsApp</p>
+              <img src={qrImageSource} alt="QR Code" className="w-full rounded-lg border border-white/10 bg-white p-2" />
             </div>
           )}
           {/* Version + logout */}
-          {!sidebarCollapsed && <p className="text-xs text-slate-400">v2.3.0 · Web</p>}
+          {!sidebarCollapsed && <p className="text-xs text-slate-500">v2.3.0 · Web</p>}
           <button
             onClick={logout}
-            className={`w-full text-xs text-slate-500 hover:text-rose-600 transition text-left px-1 ${sidebarCollapsed ? 'justify-center flex' : ''}`}
+            className={`w-full text-xs text-slate-400 hover:text-rose-400 transition text-left px-1 ${sidebarCollapsed ? 'justify-center flex' : ''}`}
           >
             {!sidebarCollapsed ? 'Sair' : <span title="Sair"><svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6A2.25 2.25 0 005.25 5.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15" /><path strokeLinecap="round" strokeLinejoin="round" d="M18 12H9m0 0l3-3m-3 3l3 3" /></svg></span>}
           </button>
@@ -153,13 +153,13 @@ export default function App() {
       </aside>
 
       {/* Main content */}
-      <main className="crm-main flex-1 overflow-x-hidden overflow-y-auto min-w-0 min-h-0 relative isolate">
+      <main className="crm-main flex-1 overflow-x-hidden overflow-y-auto min-w-0 min-h-0 relative isolate text-slate-100">
         {botState.status === 'AWAITING_QR' && qrImageSource && (
-          <section className="mb-3 rounded-2xl border border-amber-300 bg-amber-50 p-3 md:p-4">
+          <section className="mb-3 rounded-2xl border border-orange-400/30 bg-slate-950/80 p-3 md:p-4">
             <div className="flex items-start justify-between gap-3">
               <div>
-                <h3 className="text-amber-800 font-semibold">Conectar WhatsApp</h3>
-                <p className="text-amber-700 text-sm">Escaneie este QR Code no WhatsApp Web para ativar o envio para sua conta.</p>
+                <h3 className="text-orange-200 font-semibold">Conectar WhatsApp</h3>
+                <p className="text-slate-300 text-sm">Escaneie este QR Code no WhatsApp Web para ativar o envio para sua conta.</p>
               </div>
               <button
                 onClick={async () => {
@@ -168,13 +168,13 @@ export default function App() {
                     if (res) setBotState({ status: res.status || 'DISCONNECTED', qrCode: res.qrCode || null });
                   } catch (_) {}
                 }}
-                className="px-3 py-1.5 text-xs rounded-lg bg-amber-200 text-amber-900 hover:bg-amber-300"
+                className="px-3 py-1.5 text-xs rounded-lg bg-orange-400 text-slate-950 hover:bg-orange-300"
               >
                 Atualizar QR
               </button>
             </div>
             <div className="mt-3 flex justify-center">
-              <img src={qrImageSource} alt="QR Code WhatsApp" className="w-56 max-w-full rounded-lg border border-amber-300 bg-white p-2" />
+              <img src={qrImageSource} alt="QR Code WhatsApp" className="w-56 max-w-full rounded-xl border border-white/10 bg-white p-2 shadow-lg" />
             </div>
           </section>
         )}

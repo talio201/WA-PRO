@@ -68,30 +68,30 @@ function Root() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-100">
-        <div className="w-8 h-8 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin" />
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-950 via-slate-900 to-black">
+        <div className="w-8 h-8 border-4 border-orange-400 border-t-transparent rounded-full animate-spin" />
       </div>
     );
   }
 
   if (session && account.loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-100">
-        <div className="w-8 h-8 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin" />
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-950 via-slate-900 to-black">
+        <div className="w-8 h-8 border-4 border-orange-400 border-t-transparent rounded-full animate-spin" />
       </div>
     );
   }
 
   if (session && account.status !== 'active') {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-900 via-slate-950 to-black px-4">
-        <div className="max-w-md w-full bg-white/5 border border-white/15 rounded-2xl p-6 text-center backdrop-blur-xl">
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-950 via-slate-900 to-black px-4">
+        <div className="max-w-md w-full bg-slate-950/88 border border-white/10 rounded-2xl p-6 text-center backdrop-blur-xl">
           <div className="text-4xl mb-3">⏳</div>
-          <h2 className="text-xl text-white font-semibold mb-2">Conta em validação</h2>
+          <h2 className="text-xl text-slate-50 font-semibold mb-2">Conta em validação</h2>
           <p className="text-slate-300 text-sm">{account.message || 'Aguardando validação administrativa.'}</p>
           <button
             onClick={() => supabase.auth.signOut()}
-            className="mt-5 w-full bg-rose-600 hover:bg-rose-500 text-white rounded-lg py-2"
+            className="mt-5 w-full bg-rose-500 hover:bg-rose-400 text-slate-950 rounded-lg py-2 font-semibold"
           >
             Sair
           </button>
