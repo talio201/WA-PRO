@@ -226,13 +226,14 @@ const Inbox = () => {
                     search: search.trim(),
                     agentId: String(agentName || '').trim(),
                 });
-                nextConversations = Array.isArray(queuePayload?.items) ? queuePayload.items : [];
-                if (onlyWithReplies) {
-                    nextConversations = nextConversations.filter((item) => Number(item.inboundCount || 0) > 0);
-                }
-                if (onlyAssigned) {
-                    nextConversations = nextConversations.filter((item) => Boolean(item.assignment?.assignedTo));
-                }
+                const queueItems = Array.isArray(queuePayload?.items) ? queuePayload.items : [];
+                const repliedItems = onlyWithReplies
+                    ? queueItems.filter((item) => Number(item.inboundCount || 0) > 0)
+                    : queueItems;
+                const assignedItems = onlyAssigned
+                    ? repliedItems.filter((item) => Boolean(item.assignment?.assignedTo))
+                    : repliedItems;
+                nextConversations = assignedItems.length > 0 ? assignedItems : (repliedItems.length > 0 ? repliedItems : queueItems);
                 setHelpdeskSummary(queuePayload?.summary || null);
                 setQueueOverview(queuePayload?.queueOverview || null);
             } catch (queueError) {
@@ -1049,10 +1050,10 @@ const Inbox = () => {
                             </div>
                             <div className="inbox-header-actions">
                                 <button type="button" className="icon-btn" onClick={handleRefreshConversationPanel} aria-label="Atualizar lista">
-                                    <RefreshCw size={16} />
+                                    <ArrowPathIcon className="w-4 h-4" />
                                 </button>
                                 <button type="button" className="icon-btn" aria-label="Mais opcoes">
-                                    <MoreHorizontal size={16} />
+                                    <EllipsisHorizontalIcon className="w-4 h-4" />
                                 </button>
                             </div>
                         </div>
@@ -1067,7 +1068,7 @@ const Inbox = () => {
                             />
                         </div>
                         <div className="search-wrap">
-                            <Search size={14} />
+                            <MagnifyingGlassIcon className="w-3.5 h-3.5" />
                             <input
                                 type="text"
                                 value={search}
@@ -1145,20 +1146,20 @@ const Inbox = () => {
                                         <div className="conversation-foot">
                                             {conversation.queueType && (
                                                 <span className="owner-badge">
-                                                    <ListTodo size={11} />
+                                                    <ClipboardIcon className="w-3 h-3" />
                                                     {QUEUE_LABELS[conversation.queueType] || conversation.queueType}
                                                 </span>
                                             )}
                                             {Number(conversation.protocolOpenCount || 0) > 0 && (
                                                 <span className="owner-badge is-other">
-                                                    <FileText size={11} />
+                                                    <DocumentDuplicateIcon className="w-3 h-3" />
                                                     {conversation.protocolOpenCount} protocolos
                                                 </span>
                                             )}
                                             {conversation.failedCount > 0 && <span className="badge badge-failed">{conversation.failedCount} falhas</span>}
                                             {assignment?.assignedTo && (
                                                 <span className={`owner-badge ${ownedByCurrentAgent ? 'is-self' : ownedByAnotherAgent ? 'is-other' : ''}`}>
-                                                    <Lock size={11} />
+                                                    <LockClosedIcon className="w-3 h-3" />
                                                     {ownedByCurrentAgent ? 'Em seu atendimento' : `Atendendo: ${assignment.assignedTo}`}
                                                 </span>
                                             )}
