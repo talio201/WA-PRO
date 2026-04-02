@@ -1,6 +1,23 @@
+@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+:root {
+  --crm-bg: #f4f6fb;
+  --crm-bg-gradient-a: #e9f7f0;
+  --crm-bg-gradient-b: #ecf3ff;
+  --crm-surface: #ffffff;
+  --crm-surface-soft: #f8fbff;
+  --crm-border: #dfe7f2;
+  --crm-text: #102033;
+  --crm-text-muted: #5b6b7d;
+  --crm-accent: #0d8f6f;
+  --crm-accent-strong: #086b53;
+  --crm-danger: #cc425e;
+  --crm-shadow: 0 16px 38px -26px rgba(17, 34, 68, 0.42);
+}
 
 *, *::before, *::after {
   box-sizing: border-box;
@@ -10,8 +27,108 @@ html, body, #root {
   height: 100%;
   margin: 0;
   padding: 0;
-  font-family: 'Inter', system-ui, -apple-system, sans-serif;
-  background: #f1f5f9;
+  font-family: 'Manrope', 'Segoe UI Variable', 'Segoe UI', sans-serif;
+  background: radial-gradient(circle at 8% 8%, var(--crm-bg-gradient-a), transparent 38%),
+    radial-gradient(circle at 86% 2%, var(--crm-bg-gradient-b), transparent 38%),
+    var(--crm-bg);
+  color: var(--crm-text);
+}
+
+body {
+  letter-spacing: 0.01em;
+}
+
+.crm-app {
+  background: radial-gradient(circle at 10% 10%, rgba(13, 143, 111, 0.12), transparent 35%),
+    radial-gradient(circle at 90% 0%, rgba(33, 96, 196, 0.1), transparent 38%),
+    var(--crm-bg);
+}
+
+.crm-sidebar {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(247, 251, 255, 0.9));
+  border-right-color: var(--crm-border);
+  box-shadow: var(--crm-shadow);
+}
+
+.crm-nav-btn {
+  border: 1px solid transparent;
+}
+
+.crm-nav-btn:hover {
+  border-color: var(--crm-border);
+  background: var(--crm-surface-soft);
+}
+
+.crm-nav-btn-active {
+  background: linear-gradient(135deg, var(--crm-accent), #129d7a);
+  border-color: transparent;
+  color: #fff;
+}
+
+.crm-main {
+  padding: 12px;
+}
+
+.crm-surface {
+  background: var(--crm-surface);
+  border: 1px solid var(--crm-border);
+  box-shadow: var(--crm-shadow);
+}
+
+.crm-contacts {
+  color: var(--crm-text);
+  background: transparent;
+}
+
+.crm-contacts .crm-panel {
+  background: var(--crm-surface);
+  border: 1px solid var(--crm-border);
+  box-shadow: var(--crm-shadow);
+}
+
+.crm-contacts .crm-input {
+  background: #fff;
+  color: var(--crm-text);
+  border: 1px solid var(--crm-border);
+}
+
+.crm-contacts .crm-input::placeholder {
+  color: #7f8ea0;
+}
+
+.crm-contacts .crm-input:focus {
+  outline: none;
+  border-color: rgba(13, 143, 111, 0.5);
+  box-shadow: 0 0 0 3px rgba(13, 143, 111, 0.12);
+}
+
+.crm-contacts .crm-card {
+  background: #fff;
+  border: 1px solid var(--crm-border);
+}
+
+.crm-contacts .crm-kpi {
+  background: linear-gradient(180deg, #ffffff, #f8fbff);
+  border: 1px solid var(--crm-border);
+}
+
+.crm-settings-page {
+  max-width: 760px;
+}
+
+.crm-settings-card {
+  background: var(--crm-surface);
+  border: 1px solid var(--crm-border);
+  box-shadow: var(--crm-shadow);
+}
+
+.crm-primary-btn {
+  background: linear-gradient(135deg, var(--crm-accent), #14a781);
+  color: #fff;
+}
+
+.crm-primary-btn:hover {
+  background: linear-gradient(135deg, var(--crm-accent-strong), var(--crm-accent));
 }
 
 /* Scrollbar */

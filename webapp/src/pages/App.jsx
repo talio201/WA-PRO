@@ -94,9 +94,9 @@ export default function App() {
   const qrImageSource = isValidQrImageSource(botState.qrCode) ? String(botState.qrCode).trim() : '';
 
   return (
-    <div className="flex h-screen min-h-0 bg-gradient-to-br from-slate-100 via-sky-50 to-emerald-50 text-slate-900 overflow-hidden">
+    <div className="crm-app flex h-screen min-h-0 text-slate-900 overflow-hidden">
       {/* Sidebar */}
-      <aside className={`flex flex-col ${sidebarCollapsed ? 'w-16' : 'w-56'} shrink-0 min-h-0 bg-white/66 border-r border-white/60 backdrop-blur-md shadow-md transition-all duration-200`}>
+      <aside className={`crm-sidebar flex flex-col ${sidebarCollapsed ? 'w-16' : 'w-60'} shrink-0 min-h-0 backdrop-blur-md transition-all duration-200`}>
         <div className={`flex items-center ${sidebarCollapsed ? 'justify-center' : 'justify-between'} px-2 py-4 border-b border-slate-200/60`}>
           <div>
             <h1 className={`font-bold text-base text-slate-800 tracking-tight transition-all duration-200 ${sidebarCollapsed ? 'hidden' : ''}`}>EmidiaWhats</h1>
@@ -116,9 +116,9 @@ export default function App() {
             <button
               key={tab.id}
               onClick={() => navigateTo(tab.id)}
-              className={`w-full text-left flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-medium transition-all ${
+              className={`crm-nav-btn w-full text-left flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-medium transition-all ${
                 activeTab === tab.id
-                  ? 'bg-emerald-600 text-white shadow-sm'
+                  ? 'crm-nav-btn-active text-white shadow-sm'
                   : 'text-slate-600 hover:bg-slate-100'
               } ${sidebarCollapsed ? 'justify-center px-2' : ''}`}
             >
@@ -153,7 +153,7 @@ export default function App() {
       </aside>
 
       {/* Main content */}
-      <main className="flex-1 overflow-x-hidden overflow-y-auto p-0 min-w-0 min-h-0 relative isolate">
+      <main className="crm-main flex-1 overflow-x-hidden overflow-y-auto min-w-0 min-h-0 relative isolate">
         {botState.status === 'AWAITING_QR' && qrImageSource && (
           <section className="mb-3 rounded-2xl border border-amber-300 bg-amber-50 p-3 md:p-4">
             <div className="flex items-start justify-between gap-3">

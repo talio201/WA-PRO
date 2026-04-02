@@ -37,16 +37,20 @@ export default function Settings() {
   };
 
   return (
-    <div className="max-w-lg mx-auto p-8">
-      <h2 className="text-xl font-bold text-slate-800 mb-6">Configurações da conta</h2>
+    <div className="crm-settings-page mx-auto p-6 md:p-8 space-y-5">
+      <div>
+        <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-emerald-700">Account Center</p>
+        <h2 className="text-2xl font-extrabold text-slate-900 mt-1">Configuracoes da conta</h2>
+        <p className="text-sm text-slate-600 mt-1">Dados do perfil, seguranca e sessao atual.</p>
+      </div>
       
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 space-y-5">
+      <div className="crm-settings-card rounded-3xl p-6 space-y-5">
         <div>
           <label className="block text-sm font-medium text-slate-700 mb-1">E-mail</label>
           <input
             readOnly
             value={session?.user?.email || ''}
-            className="w-full rounded-lg bg-slate-50 border border-slate-200 text-slate-500 px-4 py-2.5 text-sm cursor-not-allowed"
+            className="w-full rounded-xl bg-slate-50 border border-slate-200 text-slate-500 px-4 py-2.5 text-sm cursor-not-allowed"
           />
         </div>
 
@@ -58,7 +62,7 @@ export default function Settings() {
             type="text"
             value={fullName}
             onChange={(e) => setFullName(e.target.value)}
-            className="w-full rounded-lg border border-slate-200 text-slate-800 px-4 py-2.5 text-sm outline-none focus:border-emerald-500 transition"
+            className="w-full rounded-xl border border-slate-200 text-slate-800 px-4 py-2.5 text-sm outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 transition"
             placeholder="Seu nome"
           />
         </div>
@@ -72,14 +76,14 @@ export default function Settings() {
             type="text"
             readOnly
             value={documentId || 'Não informado'}
-            className="w-full rounded-lg bg-slate-50 border border-slate-200 text-slate-500 px-4 py-2.5 text-sm cursor-not-allowed"
+            className="w-full rounded-xl bg-slate-50 border border-slate-200 text-slate-500 px-4 py-2.5 text-sm cursor-not-allowed"
           />
         </div>
 
-        <div className="flex items-center gap-3 pt-2">
+        <div className="flex flex-wrap items-center gap-3 pt-2">
           <button
             onClick={save}
-            className="bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold rounded-lg px-5 py-2.5 transition flex items-center gap-2"
+            className="crm-primary-btn text-sm font-semibold rounded-xl px-5 py-2.5 transition flex items-center gap-2"
           >
             {saved ? <CheckCircleIcon className="w-5 h-5" /> : null}
             {saved ? 'Salvo' : 'Salvar'}
@@ -89,12 +93,12 @@ export default function Settings() {
             className="text-sm text-rose-500 hover:text-rose-700 transition flex items-center gap-2"
           >
             <ArrowRightOnRectangleIcon className="w-5 h-5" />
-            Sair da conta
+            Encerrar sessao
           </button>
         </div>
       </div>
 
-      <div className="mt-6 bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
+      <div className="crm-settings-card rounded-3xl p-6">
         <h3 className="font-semibold text-slate-700 mb-2">Informações Avançadas</h3>
         <dl className="text-sm space-y-1 text-slate-600">
           <div className="flex gap-2"><dt className="font-medium w-28">Status:</dt><dd className="text-emerald-600 font-medium">Conta Ativa e Segura</dd></div>

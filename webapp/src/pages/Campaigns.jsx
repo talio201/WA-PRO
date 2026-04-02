@@ -541,7 +541,7 @@ const Campaigns = () => {
     const liveActivityType = String(liveActivity?.activity || '').trim().toLowerCase();
     return (
         <>
-            <div className={`campaigns-page space-y-6 ${glassMode ? 'campaigns-page--glass' : ''}`}>
+            <div className={`campaigns-page crm-campaigns space-y-6 ${glassMode ? 'campaigns-page--glass' : ''}`}>
                 <section className={`${panelClass} p-5 md:p-6`}>
                     <div className="flex flex-wrap items-start justify-between gap-4">
                         <div>
