@@ -24,7 +24,12 @@ const requireAuth = require("./middleware/authMiddleware");
 const { requireAdminAccess } = require("./middleware/adminAccessMiddleware");
 
 const app = express();
-const maintenanceBasePath = (`/${String(process.env.ADMIN_PORTAL_PATH || 'painel-interno').trim().replace(/^\/+|\/+$/g, '')}`).replace(/\/+/g, '/');
+const rawAdminPortalPath = String(process.env.ADMIN_PORTAL_PATH || 'painel-interno').trim();
+const normalizedAdminPortalPath = rawAdminPortalPath
+  .replace(/^\/+|\/+$/g, '')
+  .replace(/\/+/g, '/')
+  .replace(/\/(admin|dashboard)$/i, '');
+const maintenanceBasePath = (`/${normalizedAdminPortalPath || 'painel-interno'}`).replace(/\/+/g, '/');
 const blockedMaintenancePublicPaths = new Set(['/login.html', '/dashboard.html', '/admin.html']);
 
 // Enable trust proxy for Cloudflare/Proxy environments
@@ -395,6 +400,19 @@ app.get('/painel-interno', (req, res) => {
   return res.redirect(302, maintenanceBasePath);
 });
 
+if (rawAdminPortalPath && rawAdminPortalPath !== normalizedAdminPortalPath) {
+  const legacyPath = (`/${rawAdminPortalPath.replace(/^\/+|\/+$/g, '')}`).replace(/\/+/g, '/');
+  app.get(legacyPath, (req, res) => {
+    return res.redirect(302, maintenanceBasePath);
+  });
+  app.get(`${legacyPath}/admin`, (req, res) => {
+    return res.redirect(302, `${maintenanceBasePath}/admin`);
+  });
+  app.get(`${legacyPath}/dashboard`, (req, res) => {
+    return res.redirect(302, `${maintenanceBasePath}/dashboard`);
+  });
+}
+
 app.get(maintenanceBasePath, (req, res) => {
   res.set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
   res.sendFile(path.join(__dirname, "../public/login.html"));
@@ -426,6 +444,10 @@ app.get(`${maintenanceBasePath}/admin`, (req, res) => {
     console.error('[CSP] admin page render error', e);
     res.status(500).send('Failed to render admin page');
   }
+});
+
+app.get(`${maintenanceBasePath}/admin/`, (req, res) => {
+  return res.redirect(302, `${maintenanceBasePath}/admin`);
 });
 
 // 4. SPA Fallback - Redirect unmatched non-API routes to login.html
