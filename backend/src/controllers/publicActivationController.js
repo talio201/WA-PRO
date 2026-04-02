@@ -5,6 +5,7 @@ const {
   touchInstallation,
   getAppConfig,
   upsertSaasUser,
+  addAdminUser,
   canStartDemoForIp,
 } = require('../config/adminStore');
 const { emitRealtimeEvent } = require('../realtime/realtime');
@@ -16,6 +17,36 @@ const {
 
 function safeString(value = '') {
   return String(value || '').trim();
+}
+
+function hashIdentifier(value = '') {
+  const safe = safeString(value).toLowerCase();
+  if (!safe) return '';
+  return crypto.createHash('sha256').update(safe).digest('hex');
+}
+
+function getBootstrapSecret() {
+  return safeString(process.env.ADMIN_BOOTSTRAP_SECRET);
+}
+
+function getBootstrapAllowlist() {
+  return String(process.env.ADMIN_BOOTSTRAP_ALLOWLIST_HASHES || process.env.ADMIN_BOOTSTRAP_HASHES || '')
+    .split(',')
+    .map((item) => safeString(item).toLowerCase())
+    .filter(Boolean);
+}
+
+function isAuthorizedBootstrapUser(user = {}) {
+  const allowlist = getBootstrapAllowlist();
+  if (!allowlist.length) {
+    return true;
+  }
+
+  const candidates = [user?.email, user?.id]
+    .map((item) => hashIdentifier(item))
+    .filter(Boolean);
+
+  return candidates.some((candidate) => allowlist.includes(candidate));
 }
 
 exports.registerInstallation = async (req, res) => {
@@ -194,5 +225,58 @@ exports.requestSaasSignupApproval = async (req, res) => {
     return res.json({ success: true, user });
   } catch (error) {
     return res.status(500).json({ msg: 'Failed to create signup approval request.' });
+  }
+};
+
+exports.bootstrapAdminAccess = async (req, res) => {
+  try {
+    const bootstrapSecret = safeString(req.body?.bootstrapSecret || req.body?.secret);
+    const configuredSecret = getBootstrapSecret();
+
+    if (!bootstrapSecret) {
+      return res.status(400).json({ msg: 'bootstrapSecret is required.' });
+    }
+    if (!configuredSecret) {
+      return res.status(503).json({ msg: 'Admin bootstrap is not configured.' });
+    }
+    if (bootstrapSecret !== configuredSecret) {
+      return res.status(403).json({ msg: 'Invalid admin bootstrap secret.' });
+    }
+    if (!req.user?.email) {
+      return res.status(401).json({ msg: 'Supabase session required.' });
+    }
+    if (!isAuthorizedBootstrapUser(req.user)) {
+      return res.status(403).json({ msg: 'This account is not allowed to use the bootstrap secret.' });
+    }
+
+    const email = safeString(req.user.email).toLowerCase();
+    const activated = upsertSaasUser({
+      email,
+      agentId: safeString(req.agentId || req.user?.id || email),
+      status: 'active',
+      planTerm: 'lifetime',
+      expiresAt: null,
+      metadata: {
+        bootstrap: {
+          enabledAt: new Date().toISOString(),
+          enabledBy: req.user?.id || null,
+        },
+        access: {
+          allowApp: true,
+          allowAdmin: true,
+          allowBot: true,
+        },
+      },
+    });
+
+    addAdminUser(email);
+
+    return res.json({
+      success: true,
+      user: activated,
+      msg: 'Admin access enabled for the current session.',
+    });
+  } catch (error) {
+    return res.status(500).json({ msg: 'Failed to bootstrap admin access.' });
   }
 };

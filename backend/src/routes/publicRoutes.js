@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const publicActivationController = require('../controllers/publicActivationController');
+const requireAuth = require('../middleware/authMiddleware');
 const { createRateLimiter, getClientIp } = require('../middleware/rateLimitMiddleware');
 
 const publicReadLimiter = createRateLimiter({
@@ -33,6 +34,7 @@ const activationSessionLimiter = createRateLimiter({
 
 router.post('/installations/register', activationWriteLimiter, publicActivationController.registerInstallation);
 router.post('/saas/signup-request', activationWriteLimiter, publicActivationController.requestSaasSignupApproval);
+router.post('/admin/bootstrap', activationWriteLimiter, requireAuth, publicActivationController.bootstrapAdminAccess);
 router.get('/installations/:activationCode/status', publicReadLimiter, publicActivationController.getActivationStatus);
 router.post('/installations/session', activationSessionLimiter, publicActivationController.createSession);
 router.post('/installations/heartbeat', activationWriteLimiter, publicActivationController.heartbeat);

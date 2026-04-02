@@ -19,7 +19,6 @@ function userHasAdminFlag(user = {}) {
 
 function canAccessAdmin(req) {
   if (!req?.user) return false;
-  const status = String(req?.saasUser?.status || 'pending').trim().toLowerCase();
   const expiresAt = req?.saasUser?.expiresAt ? new Date(req.saasUser.expiresAt).getTime() : 0;
   const access = req?.saasUser?.metadata?.access || {};
   const email = String(req.user.email || '').trim().toLowerCase();
@@ -27,7 +26,6 @@ function canAccessAdmin(req) {
   const hasExplicitAdminGate = access?.allowAdmin === true;
   const hasImplicitLegacyAdminGate = access?.allowAdmin === undefined && hasLegacyAdminTrust;
   const hasAdminGate = hasExplicitAdminGate || hasImplicitLegacyAdminGate;
-  if (status !== 'active') return false;
   if (Number.isFinite(expiresAt) && expiresAt > 0 && expiresAt <= Date.now()) return false;
   if (!hasAdminGate) return false;
   if (userHasAdminFlag(req.user)) return true;
