@@ -472,6 +472,8 @@ const NewCampaign = ({ onCancel }) => {
                 </button>
               </div>
               <p className="text-xs text-slate-500">
+                Use {"{name}"} para personalizar a mensagem automaticamente.
+              </p>
               {aiError && (
                 <p className="text-sm font-medium text-red-600">{aiError}</p>
               )}

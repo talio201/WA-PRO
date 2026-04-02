@@ -7,7 +7,10 @@ import {
   getLeadAnalytics,
   updateContactCrm,
 } from "../utils/api.js";
+import { connectRealtime } from '../utils/realtime.js';
 import { UserGroupIcon, ArrowUpTrayIcon, PlusIcon, TrashIcon, MagnifyingGlassIcon, ExclamationTriangleIcon, PhoneIcon, ArrowPathIcon } from '@heroicons/react/24/outline';
+
+const CONTACTS_FALLBACK_REFRESH_INTERVAL_MS = 60000;
 
 export default function Contacts() {
   const [contacts, setContacts] = useState([]);
@@ -52,6 +55,30 @@ export default function Contacts() {
     fetchContacts();
   }, []);
 
+  useEffect(() => {
+    const disposeRealtime = connectRealtime({
+      onEvent: (message) => {
+        const eventName = String(message?.event || '');
+        const shouldReload = eventName.startsWith('contacts.')
+          || eventName.startsWith('messages.')
+          || eventName.startsWith('campaign.')
+          || eventName === 'upload.completed';
+        if (shouldReload) {
+          fetchContacts();
+        }
+      },
+    });
+
+    const interval = setInterval(() => {
+      fetchContacts();
+    }, CONTACTS_FALLBACK_REFRESH_INTERVAL_MS);
+
+    return () => {
+      disposeRealtime();
+      clearInterval(interval);
+    };
+  }, []);
+
   const handleAddSubmit = async (e) => {
     e.preventDefault();
     setError(null);
@@ -77,7 +104,7 @@ export default function Contacts() {
       setImporting(true);
       setError(null);
       const result = await importContactsXlsx(file);
-      alert(`ImportaÃ§Ã£o concluÃ­da! ${result.imported} contatos adicionados e ${result.ignored_duplicates || 0} duplicados ignorados.`);
+      alert(`Importacao concluida! ${result.imported} contatos adicionados e ${result.ignored_duplicates || 0} duplicados ignorados.`);
       fetchContacts();
     } catch (err) {
       setError(err.message);
@@ -227,7 +254,7 @@ export default function Contacts() {
               <label className="text-sm text-slate-400 pl-1">Nome (Opcional)</label>
               <input 
                 type="text" 
-                placeholder="Ex: JoÃ£o da Silva"
+                placeholder="Ex: Joao da Silva"
                 value={nameInput}
                 onChange={(e) => setNameInput(e.target.value)}
                 className="w-full bg-slate-900/50 border border-slate-700/60 hover:border-slate-600 rounded-xl px-4 py-3 text-white placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500/50 transition-all"
@@ -268,7 +295,7 @@ export default function Contacts() {
               <MagnifyingGlassIcon className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 group-focus-within:text-emerald-400 transition-colors" />
               <input
                  type="text"
-                 placeholder="Buscar por nome ou nÃºmero..."
+                 placeholder="Buscar por nome ou numero..."
                  value={search}
                  onChange={(e) => setSearch(e.target.value)}
                  className="w-full bg-slate-900 border border-slate-700/60 rounded-xl pl-10 pr-4 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/50 transition-all"
@@ -288,7 +315,7 @@ export default function Contacts() {
                   <UserGroupIcon className="w-8 h-8 text-slate-600" />
                 </div>
                 <p className="text-lg text-slate-300 font-medium mb-1">Nenhum contato encontrado</p>
-                <p className="max-w-xs">{search ? "Altere os termos de busca para encontrar." : "Adicione manualmente ou importe uma planilha Excel para comeÃ§ar."}</p>
+                <p className="max-w-xs">{search ? "Altere os termos de busca para encontrar." : "Adicione manualmente ou importe uma planilha Excel para comecar."}</p>
               </div>
             ) : (
               <ul className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -311,7 +338,7 @@ export default function Contacts() {
                         </div>
                         {contact?.crm?.nextActionAt && (
                           <div className="text-[11px] text-amber-300 mt-1 truncate">
-                            PrÃ³xima aÃ§Ã£o: {new Date(contact.crm.nextActionAt).toLocaleString()}
+                            Proxima acao: {new Date(contact.crm.nextActionAt).toLocaleString()}
                           </div>
                         )}
                       </div>
@@ -347,7 +374,7 @@ export default function Contacts() {
             <h4 className="text-lg font-bold text-white mb-4">Editar Lead CRM</h4>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <div>
-                <label className="text-xs text-slate-400">EstÃ¡gio</label>
+                <label className="text-xs text-slate-400">Estagio</label>
                 <select
                   value={leadDraft.stage}
                   onChange={(e) => setLeadDraft((prev) => ({ ...prev, stage: e.target.value }))}
@@ -381,7 +408,7 @@ export default function Contacts() {
                 />
               </div>
               <div>
-                <label className="text-xs text-slate-400">PrÃ³xima aÃ§Ã£o</label>
+                <label className="text-xs text-slate-400">Proxima acao</label>
                 <input
                   type="datetime-local"
                   value={leadDraft.nextActionAt}
@@ -391,7 +418,7 @@ export default function Contacts() {
               </div>
             </div>
             <div className="mt-3">
-              <label className="text-xs text-slate-400">Tags (separadas por vÃ­rgula)</label>
+              <label className="text-xs text-slate-400">Tags (separadas por virgula)</label>
               <input
                 type="text"
                 value={leadDraft.tags}
