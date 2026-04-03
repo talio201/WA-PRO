@@ -29,6 +29,7 @@ function canAccessAdmin(req) {
   const hasAdminGate = hasExplicitAdminGate || hasImplicitLegacyAdminGate;
   if (Number.isFinite(expiresAt) && expiresAt > 0 && expiresAt <= Date.now()) return false;
   if (!hasAdminGate) return false;
+  if (hasExplicitAdminGate) return true;
   if (userHasAdminFlag(req.user)) return true;
   if (isAdminEmail(email)) return true;
   return false;

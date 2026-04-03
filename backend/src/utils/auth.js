@@ -72,6 +72,23 @@ function shouldRequireStrictApproval() {
   return raw === '1' || raw === 'true' || raw === 'yes';
 }
 
+function isTruthy(value) {
+  if (value === true) return true;
+  const normalized = String(value || '').trim().toLowerCase();
+  return normalized === 'true' || normalized === '1' || normalized === 'yes' || normalized === 'admin';
+}
+
+function userHasAdminFlag(user = {}) {
+  return (
+    isTruthy(user?.user_metadata?.isAdmin)
+    || isTruthy(user?.user_metadata?.is_admin)
+    || isTruthy(user?.app_metadata?.isAdmin)
+    || isTruthy(user?.app_metadata?.is_admin)
+    || String(user?.app_metadata?.role || '').trim().toLowerCase() === 'admin'
+    || String(user?.user_metadata?.role || '').trim().toLowerCase() === 'admin'
+  );
+}
+
 function buildLegacySaasUserFallback({ email = '', agentId = '' }) {
   return {
     email: String(email || '').trim().toLowerCase() || null,
@@ -171,7 +188,6 @@ async function authenticateBearerToken(token, agentId = '') {
       const { data: { user } = {}, error } = await supabase.auth.getUser(safeToken);
       if (!error && user) {
         const email = String(user?.email || '').trim().toLowerCase();
-        const isAdmin = Boolean(email && isAdminEmail(email));
         const touchedUser = email
           ? touchSaasUserLogin(email, {
               userId: String(user?.id || '').trim() || null,
@@ -184,6 +200,12 @@ async function authenticateBearerToken(token, agentId = '') {
           email,
           agentId: String(user?.id || agentId || '').trim(),
         });
+        const saasAccess = saasUser?.metadata?.access || {};
+        const isAdmin = Boolean(
+          (email && isAdminEmail(email))
+          || userHasAdminFlag(user)
+          || saasAccess?.allowAdmin === true
+        );
 
         const resolvedAgentId = String(
           saasUser?.clientId || saasUser?.agentId || user?.id || agentId || (isAdmin ? 'admin' : 'user'),
