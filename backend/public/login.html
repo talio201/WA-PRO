@@ -198,6 +198,10 @@
                 <label>Senha</label>
                 <input type="password" id="password" placeholder="••••••••" required>
             </div>
+            <div class="form-group">
+                <label>Código de Recuperação Admin (opcional)</label>
+                <input type="password" id="bootstrap-secret" placeholder="Cole o código para liberar este login">
+            </div>
             <button type="submit" id="login-btn">
                 <span id="btn-text">Entrar no Painel</span>
                 <div id="loader" class="loader"></div>
@@ -236,6 +240,7 @@
 
                 const email = document.getElementById('email').value;
                 const password = document.getElementById('password').value;
+                const bootstrapSecret = String(document.getElementById('bootstrap-secret')?.value || '').trim();
 
                 errorMsg.style.display = 'none';
                 btnText.style.display = 'none';
@@ -263,8 +268,32 @@
                     });
                     const accessPayload = await accessResponse.json().catch(() => ({}));
                     if (!accessPayload?.allowed) {
+                        if (bootstrapSecret) {
+                            const bootstrapResponse = await fetch('/api/public/admin/bootstrap', {
+                                method: 'POST',
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                    'Authorization': `Bearer ${session?.access_token || ''}`,
+                                    'x-agent-id': 'admin-console',
+                                },
+                                body: JSON.stringify({ bootstrapSecret }),
+                            });
+                            const bootstrapPayload = await bootstrapResponse.json().catch(() => ({}));
+                            if (!bootstrapResponse.ok || !bootstrapPayload?.success) {
+                                await supabaseClient.auth.signOut();
+                                errorMsg.innerText = bootstrapPayload?.msg || 'Sua conta não tem acesso administrativo.';
+                                errorMsg.style.display = 'block';
+                                btnText.style.display = 'block';
+                                loader.style.display = 'none';
+                                btn.disabled = false;
+                                return;
+                            }
+                            window.location.href = `${maintenanceBase}/dashboard`;
+                            return;
+                        }
+
                         await supabaseClient.auth.signOut();
-                        errorMsg.innerText = 'Sua conta não tem acesso administrativo.';
+                        errorMsg.innerText = 'Sua conta não tem acesso administrativo. Se você tem o código de recuperação, preencha o campo opcional.';
                         errorMsg.style.display = 'block';
                         btnText.style.display = 'block';
                         loader.style.display = 'none';
