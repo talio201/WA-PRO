@@ -7,6 +7,7 @@ const {
   upsertSaasUser,
   addAdminUser,
   canStartDemoForIp,
+  listAdminUsers,
 } = require('../config/adminStore');
 const { emitRealtimeEvent } = require('../realtime/realtime');
 const crypto = require('crypto');
@@ -232,20 +233,25 @@ exports.bootstrapAdminAccess = async (req, res) => {
   try {
     const bootstrapSecret = safeString(req.body?.bootstrapSecret || req.body?.secret);
     const configuredSecret = getBootstrapSecret();
+    const configuredAdmins = listAdminUsers();
+    const hasConfiguredAdmins = Array.isArray(configuredAdmins) && configuredAdmins.length > 0;
 
-    if (!bootstrapSecret) {
-      return res.status(400).json({ msg: 'bootstrapSecret is required.' });
-    }
     if (!configuredSecret) {
-      return res.status(503).json({ msg: 'Admin bootstrap is not configured.' });
-    }
-    if (bootstrapSecret !== configuredSecret) {
-      return res.status(403).json({ msg: 'Invalid admin bootstrap secret.' });
+      if (hasConfiguredAdmins) {
+        return res.status(503).json({ msg: 'Admin bootstrap is not configured.' });
+      }
+    } else {
+      if (!bootstrapSecret) {
+        return res.status(400).json({ msg: 'bootstrapSecret is required.' });
+      }
+      if (bootstrapSecret !== configuredSecret) {
+        return res.status(403).json({ msg: 'Invalid admin bootstrap secret.' });
+      }
     }
     if (!req.user?.email) {
       return res.status(401).json({ msg: 'Supabase session required.' });
     }
-    if (!isAuthorizedBootstrapUser(req.user)) {
+    if (configuredSecret && !isAuthorizedBootstrapUser(req.user)) {
       return res.status(403).json({ msg: 'This account is not allowed to use the bootstrap secret.' });
     }
 

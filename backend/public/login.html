@@ -268,36 +268,26 @@
                     });
                     const accessPayload = await accessResponse.json().catch(() => ({}));
                     if (!accessPayload?.allowed) {
-                        if (bootstrapSecret) {
-                            const bootstrapResponse = await fetch('/api/public/admin/bootstrap', {
-                                method: 'POST',
-                                headers: {
-                                    'Content-Type': 'application/json',
-                                    'Authorization': `Bearer ${session?.access_token || ''}`,
-                                    'x-agent-id': 'admin-console',
-                                },
-                                body: JSON.stringify({ bootstrapSecret }),
-                            });
-                            const bootstrapPayload = await bootstrapResponse.json().catch(() => ({}));
-                            if (!bootstrapResponse.ok || !bootstrapPayload?.success) {
-                                await supabaseClient.auth.signOut();
-                                errorMsg.innerText = bootstrapPayload?.msg || 'Sua conta não tem acesso administrativo.';
-                                errorMsg.style.display = 'block';
-                                btnText.style.display = 'block';
-                                loader.style.display = 'none';
-                                btn.disabled = false;
-                                return;
-                            }
-                            window.location.href = `${maintenanceBase}/dashboard`;
+                        const bootstrapResponse = await fetch('/api/public/admin/bootstrap', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'Authorization': `Bearer ${session?.access_token || ''}`,
+                                'x-agent-id': 'admin-console',
+                            },
+                            body: JSON.stringify({ bootstrapSecret }),
+                        });
+                        const bootstrapPayload = await bootstrapResponse.json().catch(() => ({}));
+                        if (!bootstrapResponse.ok || !bootstrapPayload?.success) {
+                            await supabaseClient.auth.signOut();
+                            errorMsg.innerText = bootstrapPayload?.msg || 'Sua conta não tem acesso administrativo. Se você tem o código de recuperação, preencha o campo opcional.';
+                            errorMsg.style.display = 'block';
+                            btnText.style.display = 'block';
+                            loader.style.display = 'none';
+                            btn.disabled = false;
                             return;
                         }
-
-                        await supabaseClient.auth.signOut();
-                        errorMsg.innerText = 'Sua conta não tem acesso administrativo. Se você tem o código de recuperação, preencha o campo opcional.';
-                        errorMsg.style.display = 'block';
-                        btnText.style.display = 'block';
-                        loader.style.display = 'none';
-                        btn.disabled = false;
+                        window.location.href = `${maintenanceBase}/dashboard`;
                         return;
                     }
                     window.location.href = `${maintenanceBase}/dashboard`;
