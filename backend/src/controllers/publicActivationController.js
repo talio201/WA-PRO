@@ -236,26 +236,46 @@ exports.bootstrapAdminAccess = async (req, res) => {
     const configuredAdmins = listAdminUsers();
     const hasConfiguredAdmins = Array.isArray(configuredAdmins) && configuredAdmins.length > 0;
 
+    console.log('\n[DEBUG bootstrapAdminAccess] ===== BOOTSTRAP ADMIN ACCESS =====', {
+      bootstrapSecret: bootstrapSecret ? '***' : 'empty',
+      configuredSecret: configuredSecret ? '***' : 'empty',
+      configuredAdmins,
+      hasConfiguredAdmins,
+      userEmail: req.user?.email,
+      userId: req.user?.id,
+    });
+
     if (!configuredSecret) {
       if (hasConfiguredAdmins) {
+        console.log('[DEBUG bootstrapAdminAccess] DENIED: No secret configured but admins exist');
         return res.status(503).json({ msg: 'Admin bootstrap is not configured.' });
       }
+      console.log('[DEBUG bootstrapAdminAccess] Allowing bootstrap: no secret configured + no admins exist');
     } else {
       if (!bootstrapSecret) {
+        console.log('[DEBUG bootstrapAdminAccess] DENIED: Secret required but not provided');
         return res.status(400).json({ msg: 'bootstrapSecret is required.' });
       }
       if (bootstrapSecret !== configuredSecret) {
+        console.log('[DEBUG bootstrapAdminAccess] DENIED: Invalid secret provided');
         return res.status(403).json({ msg: 'Invalid admin bootstrap secret.' });
       }
+      console.log('[DEBUG bootstrapAdminAccess] Valid secret provided');
     }
+    
     if (!req.user?.email) {
+      console.log('[DEBUG bootstrapAdminAccess] DENIED: No Supabase session');
       return res.status(401).json({ msg: 'Supabase session required.' });
     }
+    
     if (configuredSecret && !isAuthorizedBootstrapUser(req.user)) {
+      console.log('[DEBUG bootstrapAdminAccess] DENIED: User not authorized for bootstrap');
       return res.status(403).json({ msg: 'This account is not allowed to use the bootstrap secret.' });
     }
 
     const email = safeString(req.user.email).toLowerCase();
+    console.log('[DEBUG bootstrapAdminAccess] Upserting SaaS user:', email);
+    
     const activated = upsertSaasUser({
       email,
       agentId: safeString(req.agentId || req.user?.id || email),
@@ -275,7 +295,14 @@ exports.bootstrapAdminAccess = async (req, res) => {
       },
     });
 
+    console.log('[DEBUG bootstrapAdminAccess] Activated user:', {
+      email: activated?.email,
+      status: activated?.status,
+      metadata: activated?.metadata,
+    });
+
     addAdminUser(email);
+    console.log('[DEBUG bootstrapAdminAccess] SUCCESSFULLY added to admin list');
 
     return res.json({
       success: true,
@@ -283,6 +310,11 @@ exports.bootstrapAdminAccess = async (req, res) => {
       msg: 'Admin access enabled for the current session.',
     });
   } catch (error) {
+    console.error('[ERROR bootstrapAdminAccess]', {
+      message: error.message,
+      stack: error.stack,
+      userEmail: req.user?.email,
+    });
     return res.status(500).json({ msg: 'Failed to bootstrap admin access.' });
   }
 };

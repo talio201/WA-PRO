@@ -18,7 +18,10 @@ function userHasAdminFlag(user = {}) {
 }
 
 function canAccessAdmin(req) {
-  if (!req?.user) return false;
+  if (!req?.user) {
+    console.log('[DEBUG canAccessAdmin] NO USER FOUND - BLOCKING ACCESS');
+    return false;
+  }
   const expiresAt = req?.saasUser?.expiresAt ? new Date(req.saasUser.expiresAt).getTime() : 0;
   const access = req?.saasUser?.metadata?.access || {};
   const email = String(req.user.email || '').trim().toLowerCase();
@@ -27,18 +30,53 @@ function canAccessAdmin(req) {
   const hasExplicitAdminDeny = access?.allowAdmin === false;
   const hasImplicitLegacyAdminGate = !hasExplicitAdminDeny && hasLegacyAdminTrust;
   const hasAdminGate = hasExplicitAdminGate || hasImplicitLegacyAdminGate;
-  if (Number.isFinite(expiresAt) && expiresAt > 0 && expiresAt <= Date.now()) return false;
-  if (!hasAdminGate) return false;
-  if (hasExplicitAdminGate) return true;
-  if (userHasAdminFlag(req.user)) return true;
-  if (isAdminEmail(email)) return true;
+  
+  // Comprehensive debug log
+  console.log('\n[DEBUG canAccessAdmin] ===== ADMIN ACCESS CHECK =====', {
+    email,
+    hasExplicitAdminGate, // Did SaaS metadata explicitly grant admin?
+    hasExplicitAdminDeny, // Did SaaS metadata explicitly deny admin?
+    hasLegacyAdminTrust, // Is user in legacy admin list or has admin flags?
+    hasImplicitLegacyAdminGate, // Legacy trust + not explicitly denied?
+    hasAdminGate, // Final gate status
+    userFlags: userHasAdminFlag(req.user),
+    isAdminEmail: isAdminEmail(email),
+    saasUserMetadata: req?.saasUser?.metadata,
+    userMetadata: { user_metadata: req?.user?.user_metadata, app_metadata: req?.user?.app_metadata },
+    tokenExpired: expiresAt > 0 && expiresAt <= Date.now(),
+  });
+  
+  if (Number.isFinite(expiresAt) && expiresAt > 0 && expiresAt <= Date.now()) {
+    console.log('[DEBUG canAccessAdmin] TOKEN EXPIRED - BLOCKING ACCESS');
+    return false;
+  }
+  if (!hasAdminGate) {
+    console.log('[DEBUG canAccessAdmin] NO ADMIN GATE FOUND - BLOCKING ACCESS');
+    return false;
+  }
+  if (hasExplicitAdminGate) {
+    console.log('[DEBUG canAccessAdmin] ALLOWED: Explicit SaaS allowAdmin=true');
+    return true;
+  }
+  if (userHasAdminFlag(req.user)) {
+    console.log('[DEBUG canAccessAdmin] ALLOWED: User has admin flag in metadata');
+    return true;
+  }
+  if (isAdminEmail(email)) {
+    console.log('[DEBUG canAccessAdmin] ALLOWED: Email in legacy admin list');
+    return true;
+  }
+  console.log('[DEBUG canAccessAdmin] FALLTHROUGH - BLOCKING ACCESS');
   return false;
 }
 
 function requireAdminAccess(req, res, next) {
+  console.log(`[DEBUG requireAdminAccess] Route: ${req.method} ${req.path}, User: ${req?.user?.email || 'UNKNOWN'}`);
   if (!canAccessAdmin(req)) {
+    console.log(`[DEBUG requireAdminAccess] DENIED - User ${req?.user?.email || 'UNKNOWN'} blocked from ${req.path}`);
     return res.status(403).json({ msg: 'Admin access required.' });
   }
+  console.log(`[DEBUG requireAdminAccess] ALLOWED - User ${req?.user?.email || 'UNKNOWN'} granted access to ${req.path}`);
   return next();
 }
 

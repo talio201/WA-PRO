@@ -111,10 +111,15 @@ function buildLegacySaasUserFallback({ email = '', agentId = '' }) {
 
 async function authenticateBearerToken(token, agentId = '') {
   const safeToken = String(token || '').trim();
-  if (!safeToken) return null;
+  console.log('[DEBUG authenticateBearerToken] Starting authentication...');
+  if (!safeToken) {
+    console.log('[DEBUG authenticateBearerToken] No token provided');
+    return null;
+  }
 
   const validKey = getValidApiKey();
   if (validKey && safeToken === validKey) {
+    console.log('[DEBUG authenticateBearerToken] Authenticated as API_SECRET_KEY');
     return {
       kind: 'api-key',
       agentId: String(agentId || 'bot').trim() || 'bot',
@@ -130,6 +135,7 @@ async function authenticateBearerToken(token, agentId = '') {
 
   const client = getClientByApiKey(safeToken);
   if (client) {
+    console.log('[DEBUG authenticateBearerToken] Authenticated as bot-client:', client.clientId);
     touchClient(client.clientId);
     return {
       kind: 'bot-client',
@@ -150,8 +156,10 @@ async function authenticateBearerToken(token, agentId = '') {
 
   const sessionPayload = verifyPayload(safeToken);
   if (sessionPayload?.type === 'installation_session') {
+    console.log('[DEBUG authenticateBearerToken] Verifying installation session...');
     const now = Math.floor(Date.now() / 1000);
     if (Number(sessionPayload.exp || 0) <= now) {
+      console.log('[DEBUG authenticateBearerToken] Installation session EXPIRED');
       return null;
     }
     const installation = validateInstallationCredentials(
@@ -159,8 +167,10 @@ async function authenticateBearerToken(token, agentId = '') {
       sessionPayload.installationSecret,
     );
     if (!installation) {
+      console.log('[DEBUG authenticateBearerToken] Installation session INVALID');
       return null;
     }
+    console.log('[DEBUG authenticateBearerToken] Authenticated as installation-session:', installation.clientId);
     touchInstallation(sessionPayload.activationCode, {
       lastSessionAt: new Date().toISOString(),
       agentId: sessionPayload.agentId,
@@ -184,52 +194,83 @@ async function authenticateBearerToken(token, agentId = '') {
 
   const supabase = getSupabaseClient();
   if (supabase) {
+    console.log('[DEBUG authenticateBearerToken] Attempting Supabase user authentication...');
     try {
       const { data: { user } = {}, error } = await supabase.auth.getUser(safeToken);
-      if (!error && user) {
-        const email = String(user?.email || '').trim().toLowerCase();
-        const touchedUser = email
-          ? touchSaasUserLogin(email, {
-              userId: String(user?.id || '').trim() || null,
-              source: 'supabase-login',
-              supabaseUserId: String(user?.id || '').trim() || null,
-            })
-          : null;
-        const mappedSaasUser = touchedUser || (email ? getSaasUserByEmail(email) : null);
-        const saasUser = mappedSaasUser || buildLegacySaasUserFallback({
-          email,
-          agentId: String(user?.id || agentId || '').trim(),
-        });
-        const saasAccess = saasUser?.metadata?.access || {};
-        const isAdmin = Boolean(
-          (email && isAdminEmail(email))
-          || userHasAdminFlag(user)
-          || saasAccess?.allowAdmin === true
-        );
-
-        const resolvedAgentId = String(
-          saasUser?.clientId || saasUser?.agentId || user?.id || agentId || (isAdmin ? 'admin' : 'user'),
-        ).trim() || (isAdmin ? 'admin' : 'user');
-        return {
-          kind: 'supabase-user',
-          user,
-          agentId: resolvedAgentId,
-          isAdmin,
-          saasUser,
-          permissions: {
-            allowGemini: true,
-            allowRealtime: true,
-            allowCampaigns: true,
-            allowContacts: true,
-            allowInbox: true,
-          },
-        };
+      if (error) {
+        console.log('[DEBUG authenticateBearerToken] Supabase error:', error.message);
+        return null;
       }
+      if (!user) {
+        console.log('[DEBUG authenticateBearerToken] No user returned from Supabase');
+        return null;
+      }
+      
+      const email = String(user?.email || '').trim().toLowerCase();
+      console.log('[DEBUG authenticateBearerToken] Supabase user found:', { email, userId: user?.id });
+      
+      const touchedUser = email
+        ? touchSaasUserLogin(email, {
+            userId: String(user?.id || '').trim() || null,
+            source: 'supabase-login',
+            supabaseUserId: String(user?.id || '').trim() || null,
+          })
+        : null;
+      
+      console.log('[DEBUG authenticateBearerToken] SaaS user touched:', touchedUser ? 'YES' : 'NO');
+      
+      const mappedSaasUser = touchedUser || (email ? getSaasUserByEmail(email) : null);
+      const saasUser = mappedSaasUser || buildLegacySaasUserFallback({
+        email,
+        agentId: String(user?.id || agentId || '').trim(),
+      });
+      const saasAccess = saasUser?.metadata?.access || {};
+      const isAdmin = Boolean(
+        (email && isAdminEmail(email))
+        || userHasAdminFlag(user)
+        || saasAccess?.allowAdmin === true
+      );
+
+      console.log('[DEBUG authenticateBearerToken] Admin verification:', {
+        email,
+        isAdminEmail: email && isAdminEmail(email),
+        userHasAdminFlag: userHasAdminFlag(user),
+        saasAccessAllowAdmin: saasAccess?.allowAdmin,
+        resultIsAdmin: isAdmin,
+        saasUserMetadata: saasUser?.metadata,
+      });
+
+      const resolvedAgentId = String(
+        saasUser?.clientId || saasUser?.agentId || user?.id || agentId || (isAdmin ? 'admin' : 'user'),
+      ).trim() || (isAdmin ? 'admin' : 'user');
+      
+      console.log('[DEBUG authenticateBearerToken] Authenticated as supabase-user:', {
+        email,
+        agentId: resolvedAgentId,
+        isAdmin,
+      });
+      
+      return {
+        kind: 'supabase-user',
+        user,
+        agentId: resolvedAgentId,
+        isAdmin,
+        saasUser,
+        permissions: {
+          allowGemini: true,
+          allowRealtime: true,
+          allowCampaigns: true,
+          allowContacts: true,
+          allowInbox: true,
+        },
+      };
     } catch (error) {
+      console.log('[DEBUG authenticateBearerToken] Supabase exception:', error.message);
       return null;
     }
   }
 
+  console.log('[DEBUG authenticateBearerToken] No Supabase client - returning null');
   return null;
 }
 
