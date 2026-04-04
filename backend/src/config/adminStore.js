@@ -28,6 +28,18 @@ const PLAN_TERMS = {
   lifetime: null,
 };
 
+const ADMIN_HASH_PREFIX = 'sha256:';
+
+function hashAdminEmail(email = '') {
+  const safeEmail = String(email || '').trim().toLowerCase();
+  if (!safeEmail) return '';
+  return `${ADMIN_HASH_PREFIX}${crypto.createHash('sha256').update(safeEmail).digest('hex')}`;
+}
+
+function isHashedAdminEntry(value = '') {
+  return String(value || '').trim().toLowerCase().startsWith(ADMIN_HASH_PREFIX);
+}
+
 function ensureStoreFile() {
   const dir = path.dirname(STORE_PATH);
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
@@ -112,7 +124,8 @@ function listAdminUsers() {
 function isAdminEmail(email = '') {
   const safeEmail = String(email || '').trim().toLowerCase();
   if (!safeEmail) return false;
-  return listAdminUsers().includes(safeEmail);
+  const hashedEmail = hashAdminEmail(safeEmail);
+  return listAdminUsers().some((entry) => entry === safeEmail || entry === hashedEmail);
 }
 
 function addAdminUser(email = '') {
@@ -131,9 +144,13 @@ function addAdminUser(email = '') {
 function removeAdminUser(email = '') {
   const safeEmail = String(email || '').trim().toLowerCase();
   if (!safeEmail) return false;
+  const hashedEmail = hashAdminEmail(safeEmail);
   const store = readStore();
   const list = Array.isArray(store.adminUsers) ? store.adminUsers : [];
-  const next = list.filter((item) => String(item || '').trim().toLowerCase() !== safeEmail);
+  const next = list.filter((item) => {
+    const normalized = String(item || '').trim().toLowerCase();
+    return normalized !== safeEmail && normalized !== hashedEmail;
+  });
   if (next.length === list.length) return false;
   store.adminUsers = next;
   writeStore(store);

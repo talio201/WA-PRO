@@ -89,14 +89,21 @@ function userHasAdminFlag(user = {}) {
   );
 }
 
-function buildLegacySaasUserFallback({ email = '', agentId = '' }) {
+function buildLegacySaasUserFallback({ email = '', agentId = '', user = {} }) {
+  const strictApproval = shouldRequireStrictApproval();
+  const hasLegacyAdminTrust = Boolean(
+    (email && isAdminEmail(email))
+    || userHasAdminFlag(user),
+  );
+  const shouldAllowLegacyAccess = !strictApproval || hasLegacyAdminTrust;
+
   return {
     email: String(email || '').trim().toLowerCase() || null,
     agentId: String(agentId || '').trim() || null,
-    status: 'pending',
+    status: shouldAllowLegacyAccess ? 'active' : 'pending',
     clientId: null,
     activationCode: null,
-    planTerm: null,
+    planTerm: shouldAllowLegacyAccess ? 'lifetime' : null,
     expiresAt: null,
     activatedAt: null,
     createdAt: null,
@@ -104,7 +111,13 @@ function buildLegacySaasUserFallback({ email = '', agentId = '' }) {
     lastLoginAt: new Date().toISOString(),
     metadata: {
       source: 'legacy-auth-fallback',
-      strictApproval: shouldRequireStrictApproval(),
+      strictApproval,
+      fallbackAccess: shouldAllowLegacyAccess ? 'legacy_active' : 'legacy_pending',
+      access: {
+        allowApp: shouldAllowLegacyAccess,
+        allowAdmin: hasLegacyAdminTrust,
+        allowBot: true,
+      },
     },
   };
 }
@@ -223,6 +236,7 @@ async function authenticateBearerToken(token, agentId = '') {
       const saasUser = mappedSaasUser || buildLegacySaasUserFallback({
         email,
         agentId: String(user?.id || agentId || '').trim(),
+        user,
       });
       const saasAccess = saasUser?.metadata?.access || {};
       const isAdmin = Boolean(
