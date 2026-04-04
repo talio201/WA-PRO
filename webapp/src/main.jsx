@@ -97,7 +97,7 @@ function Root() {
       });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) {
-        throw new Error(payload?.msg || 'Não foi possível ativar o admin agora.');
+        throw new Error('Sua conta não tem acesso administrativo.');
       }
       setBootstrapMessage('Admin ativado com sucesso. Recarregando acesso...');
       setBootstrapCode('');

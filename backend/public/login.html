@@ -280,7 +280,7 @@
                         const bootstrapPayload = await bootstrapResponse.json().catch(() => ({}));
                         if (!bootstrapResponse.ok || !bootstrapPayload?.success) {
                             await supabaseClient.auth.signOut();
-                            errorMsg.innerText = bootstrapPayload?.msg || 'Sua conta não tem acesso administrativo. Se você tem o código de recuperação, preencha o campo opcional.';
+                            errorMsg.innerText = 'Sua conta não tem acesso administrativo. Se você tem o código de recuperação, preencha o campo opcional.';
                             errorMsg.style.display = 'block';
                             btnText.style.display = 'block';
                             loader.style.display = 'none';

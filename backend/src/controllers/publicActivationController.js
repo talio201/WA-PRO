@@ -231,6 +231,7 @@ exports.requestSaasSignupApproval = async (req, res) => {
 
 exports.bootstrapAdminAccess = async (req, res) => {
   try {
+    const genericDeniedMsg = 'Sua conta não tem acesso administrativo.';
     const bootstrapSecret = safeString(req.body?.bootstrapSecret || req.body?.secret);
     const configuredSecret = getBootstrapSecret();
     const configuredAdmins = listAdminUsers();
@@ -248,17 +249,17 @@ exports.bootstrapAdminAccess = async (req, res) => {
     if (!configuredSecret) {
       if (hasConfiguredAdmins) {
         console.log('[DEBUG bootstrapAdminAccess] DENIED: No secret configured but admins exist');
-        return res.status(503).json({ msg: 'Admin bootstrap is not configured.' });
+        return res.status(403).json({ msg: genericDeniedMsg });
       }
       console.log('[DEBUG bootstrapAdminAccess] Allowing bootstrap: no secret configured + no admins exist');
     } else {
       if (!bootstrapSecret) {
         console.log('[DEBUG bootstrapAdminAccess] DENIED: Secret required but not provided');
-        return res.status(400).json({ msg: 'bootstrapSecret is required.' });
+        return res.status(403).json({ msg: genericDeniedMsg });
       }
       if (bootstrapSecret !== configuredSecret) {
         console.log('[DEBUG bootstrapAdminAccess] DENIED: Invalid secret provided');
-        return res.status(403).json({ msg: 'Invalid admin bootstrap secret.' });
+        return res.status(403).json({ msg: genericDeniedMsg });
       }
       console.log('[DEBUG bootstrapAdminAccess] Valid secret provided');
     }
@@ -270,7 +271,7 @@ exports.bootstrapAdminAccess = async (req, res) => {
     
     if (configuredSecret && !isAuthorizedBootstrapUser(req.user)) {
       console.log('[DEBUG bootstrapAdminAccess] DENIED: User not authorized for bootstrap');
-      return res.status(403).json({ msg: 'This account is not allowed to use the bootstrap secret.' });
+      return res.status(403).json({ msg: genericDeniedMsg });
     }
 
     const email = safeString(req.user.email).toLowerCase();
