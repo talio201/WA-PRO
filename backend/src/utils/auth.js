@@ -1,5 +1,6 @@
 const crypto = require('crypto');
 const { createClient } = require('@supabase/supabase-js');
+const { secureLog, hashToken, hashEmail, logAuthAttempt } = require('./secureLogs');
 const {
   getClientByApiKey,
   touchClient,
@@ -124,15 +125,16 @@ function buildLegacySaasUserFallback({ email = '', agentId = '', user = {} }) {
 
 async function authenticateBearerToken(token, agentId = '') {
   const safeToken = String(token || '').trim();
-  console.log('[DEBUG authenticateBearerToken] Starting authentication...');
+  secureLog('log', '[authenticateBearerToken] Starting authentication', { tokenHash: hashToken(token) });
+  
   if (!safeToken) {
-    console.log('[DEBUG authenticateBearerToken] No token provided');
+    secureLog('log', '[authenticateBearerToken] No token provided');
     return null;
   }
 
   const validKey = getValidApiKey();
   if (validKey && safeToken === validKey) {
-    console.log('[DEBUG authenticateBearerToken] Authenticated as API_SECRET_KEY');
+    secureLog('info', '[authenticateBearerToken] Authenticated as API_SECRET_KEY');
     return {
       kind: 'api-key',
       agentId: String(agentId || 'bot').trim() || 'bot',
@@ -148,7 +150,10 @@ async function authenticateBearerToken(token, agentId = '') {
 
   const client = getClientByApiKey(safeToken);
   if (client) {
-    console.log('[DEBUG authenticateBearerToken] Authenticated as bot-client:', client.clientId);
+    secureLog('info', '[authenticateBearerToken] Authenticated as bot-client', {
+      clientId: client.clientId,
+      tokenHash: hashToken(token),
+    });
     touchClient(client.clientId);
     return {
       kind: 'bot-client',
@@ -245,21 +250,19 @@ async function authenticateBearerToken(token, agentId = '') {
         || saasAccess?.allowAdmin === true
       );
 
-      console.log('[DEBUG authenticateBearerToken] Admin verification:', {
-        email,
-        isAdminEmail: email && isAdminEmail(email),
-        userHasAdminFlag: userHasAdminFlag(user),
-        saasAccessAllowAdmin: saasAccess?.allowAdmin,
-        resultIsAdmin: isAdmin,
-        saasUserMetadata: saasUser?.metadata,
+      logAuthAttempt('supabase-user-auth', {
+        emailHash: hashEmail(email),
+        isAdmin,
+        tokenHash: hashToken(token),
+        agentId: String(user?.id || agentId || '').substring(0, 8),
       });
 
       const resolvedAgentId = String(
         saasUser?.clientId || saasUser?.agentId || user?.id || agentId || (isAdmin ? 'admin' : 'user'),
       ).trim() || (isAdmin ? 'admin' : 'user');
       
-      console.log('[DEBUG authenticateBearerToken] Authenticated as supabase-user:', {
-        email,
+      secureLog('info', '[authenticateBearerToken] Authenticated as supabase-user', {
+        emailHash: hashEmail(email),
         agentId: resolvedAgentId,
         isAdmin,
       });
@@ -279,12 +282,15 @@ async function authenticateBearerToken(token, agentId = '') {
         },
       };
     } catch (error) {
-      console.log('[DEBUG authenticateBearerToken] Supabase exception:', error.message);
+      secureLog('error', '[authenticateBearerToken] Supabase exception', {
+        message: error.message,
+        tokenHash: hashToken(token),
+      });
       return null;
     }
   }
 
-  console.log('[DEBUG authenticateBearerToken] No Supabase client - returning null');
+  secureLog('debug', '[authenticateBearerToken] No Supabase client - returning null');
   return null;
 }
 
