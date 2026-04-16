@@ -89,6 +89,7 @@ jobs:
 
              REBUILD_BACKEND=false
              REBUILD_WORKER=false
+             REBUILD_WEBAPP=false
              RESTART_BOT=false
              
              # Fetch and update without disruption
@@ -100,11 +101,26 @@ jobs:
                REBUILD_WORKER=true
              fi
 
+             if should_match '^(webapp/)'; then
+               REBUILD_WEBAPP=true
+             fi
+
              if should_match '^(python_bot/|backend/\.env$|backend/src/config/botControlStore\.js$|backend/src/controllers/publicActivationController\.js$|backend/src/utils/auth\.js$)'; then
                RESTART_BOT=true
              fi
 
-             echo "Change summary: backend=${REBUILD_BACKEND}, worker=${REBUILD_WORKER}, bot=${RESTART_BOT}"
+             echo "Change summary: backend=${REBUILD_BACKEND}, worker=${REBUILD_WORKER}, webapp=${REBUILD_WEBAPP}, bot=${RESTART_BOT}"
+
+             if [ "$REBUILD_WEBAPP" = true ]; then
+               echo "Building webapp and syncing static bundle..."
+               cd /opt/EmidiaWhats/webapp
+               npm ci
+               npm run build
+               cd /opt/EmidiaWhats
+               rm -rf backend/public/app
+               mkdir -p backend/public/app
+               cp -R webapp/dist/. backend/public/app/
+             fi
              
              # Build only what changed.
              if [ "$REBUILD_BACKEND" = true ]; then
