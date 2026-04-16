@@ -112,14 +112,10 @@ jobs:
              echo "Change summary: backend=${REBUILD_BACKEND}, worker=${REBUILD_WORKER}, webapp=${REBUILD_WEBAPP}, bot=${RESTART_BOT}"
 
              if [ "$REBUILD_WEBAPP" = true ]; then
-               echo "Building webapp and syncing static bundle..."
+               echo "Building webapp static bundle..."
                cd /opt/EmidiaWhats/webapp
                npm ci
                npm run build
-               cd /opt/EmidiaWhats
-               rm -rf backend/public/app
-               mkdir -p backend/public/app
-               cp -R webapp/dist/. backend/public/app/
              fi
              
              # Build only what changed.
