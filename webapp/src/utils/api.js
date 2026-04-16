@@ -72,6 +72,7 @@ export const uploadFile = async (file) => {
 export const deleteCampaign = async (id) => requestJson(`/campaigns/${id}`, { method: 'DELETE' }, 'Failed to delete campaign');
 export const updateCampaign = async (id, payload = {}) => requestJson(`/campaigns/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }, 'Failed to update campaign');
 export const dispatchCampaignNext = async (id) => requestJson(`/campaigns/${id}/dispatch-next`, { method: 'POST' }, 'Failed to dispatch next contact');
+export const controlCampaignSending = async (id, payload = {}) => requestJson(`/campaigns/${id}/control-sending`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }, 'Failed to control campaign sending');
 export const retryCampaignFailures = async (id) => requestJson(`/campaigns/${id}/retry-failures`, { method: 'POST' }, 'Failed to retry campaign failures');
 export const getCampaignFailures = async (id) => requestJson(`/campaigns/${id}/failures`, {}, 'Failed to fetch campaign failures');
 export const getMessageAudit = async (id) => requestJson(`/messages/${id}/audit`, {}, 'Failed to fetch message audit');

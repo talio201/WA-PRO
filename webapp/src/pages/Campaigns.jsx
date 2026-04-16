@@ -5,6 +5,8 @@ import {
     MagnifyingGlassIcon,
     ExclamationTriangleIcon,
     ClockIcon,
+    PlayIcon,
+    PauseIcon,
     PencilIcon,
     TrashIcon,
     ArrowDownTrayIcon,
@@ -14,6 +16,7 @@ import {
 } from '@heroicons/react/24/outline';
 import { BarChart, Bar, ResponsiveContainer, Tooltip, XAxis, YAxis, CartesianGrid, Cell } from 'recharts';
 import {
+    controlCampaignSending,
     deleteCampaign,
     dispatchCampaignNext,
     getCampaignFailures,
@@ -73,8 +76,26 @@ const getStatusMeta = (campaign) => {
             className: 'bg-amber-100 text-amber-700',
         };
     }
+    if (campaign.status === 'completed') {
+        return {
+            label: 'Concluida',
+            className: 'bg-slate-100 text-slate-700',
+        };
+    }
+    if (campaign.status === 'draft') {
+        return {
+            label: 'Rascunho',
+            className: 'bg-blue-100 text-blue-700',
+        };
+    }
+    if (campaign.status === 'archived') {
+        return {
+            label: 'Arquivada',
+            className: 'bg-slate-200 text-slate-700',
+        };
+    }
     return {
-        label: 'Concluida',
+        label: campaign.status || 'Indefinido',
         className: 'bg-slate-100 text-slate-700',
     };
 };
@@ -92,6 +113,7 @@ const Campaigns = () => {
     const [sortBy, setSortBy] = useState('recent');
     const [deletingId, setDeletingId] = useState(null);
     const [dispatchingCampaignId, setDispatchingCampaignId] = useState(null);
+    const [controllingCampaignId, setControllingCampaignId] = useState(null);
     const [togglingWindowCampaignId, setTogglingWindowCampaignId] = useState(null);
     const [editingCampaign, setEditingCampaign] = useState(null);
     const [savingCampaignEdit, setSavingCampaignEdit] = useState(false);
@@ -382,6 +404,28 @@ const Campaigns = () => {
             setDispatchingCampaignId(null);
         }
     }, []);
+    const handleControlCampaignSending = useCallback(async (campaign, action, options = {}) => {
+        if (!campaign?._id) return;
+        try {
+            setControllingCampaignId(campaign._id);
+            const payload = {
+                action,
+                continueOutsideWindow: options.continueOutsideWindow === true,
+            };
+            const result = await controlCampaignSending(campaign._id, payload);
+            await loadDashboardData({ showSpinner: false });
+            if (action === 'resume') {
+                const resumed = Number(result?.reprioritized || 0);
+                const requeued = Number(result?.requeuedProcessing || 0);
+                alert(`Campanha retomada. ${resumed} pendente(s) priorizado(s), ${requeued} processamento(s) travado(s) recolocado(s) na fila.`);
+            }
+        } catch (error) {
+            console.error('Control campaign sending error:', error);
+            alert('Nao foi possivel atualizar o controle de envio da campanha.');
+        } finally {
+            setControllingCampaignId(null);
+        }
+    }, [loadDashboardData]);
     const handleToggleDeliveryWindow = useCallback(async (campaign, nextEnabled) => {
         if (!campaign?._id) return;
         try {
@@ -1060,6 +1104,48 @@ const Campaigns = () => {
                                                     >
                                                         <CheckCircleIcon className="w-4 h-4" />
                                                         {dispatchingCampaignId === campaign._id ? 'Disparando...' : 'Proximo imediato'}
+                                                    </button>
+                                                    {campaign.status === 'running' ? (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => handleControlCampaignSending(campaign, 'pause')}
+                                                            disabled={controllingCampaignId === campaign._id}
+                                                            className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
+                                                                controllingCampaignId === campaign._id
+                                                                    ? 'cursor-not-allowed bg-slate-700 text-slate-500'
+                                                                    : 'bg-rose-500/15 text-rose-200 hover:bg-rose-500/25 border border-rose-400/20'
+                                                            }`}
+                                                        >
+                                                            <PauseIcon className="w-4 h-4" />
+                                                            {controllingCampaignId === campaign._id ? 'Atualizando...' : 'Pausar'}
+                                                        </button>
+                                                    ) : (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => handleControlCampaignSending(campaign, 'resume')}
+                                                            disabled={controllingCampaignId === campaign._id || campaign.pending <= 0}
+                                                            className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
+                                                                controllingCampaignId === campaign._id || campaign.pending <= 0
+                                                                    ? 'cursor-not-allowed bg-slate-700 text-slate-500'
+                                                                    : 'bg-emerald-500/15 text-emerald-200 hover:bg-emerald-500/25 border border-emerald-400/20'
+                                                            }`}
+                                                        >
+                                                            <PlayIcon className="w-4 h-4" />
+                                                            {controllingCampaignId === campaign._id ? 'Atualizando...' : 'Retomar'}
+                                                        </button>
+                                                    )}
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => handleControlCampaignSending(campaign, 'resume', { continueOutsideWindow: true })}
+                                                        disabled={controllingCampaignId === campaign._id || campaign.pending <= 0}
+                                                        className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
+                                                            controllingCampaignId === campaign._id || campaign.pending <= 0
+                                                                ? 'cursor-not-allowed bg-slate-700 text-slate-500'
+                                                                : 'bg-cyan-500/15 text-cyan-200 hover:bg-cyan-500/25 border border-cyan-400/20'
+                                                        }`}
+                                                    >
+                                                        <PlayIcon className="w-4 h-4" />
+                                                        {controllingCampaignId === campaign._id ? 'Atualizando...' : 'Retomar fora horario'}
                                                     </button>
                                                     <button
                                                         type="button"

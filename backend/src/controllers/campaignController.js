@@ -557,3 +557,115 @@ exports.retryCampaignFailures = async (req, res) => {
     res.status(errorResponse.statusCode).json(errorResponse.body);
   }
 };
+
+exports.controlCampaignSending = async (req, res) => {
+  try {
+    const ownerId = resolveOwnerId(req);
+    const campaign = await findOwnedCampaign(req.params.id, ownerId);
+    if (!campaign) {
+      return res.status(404).json({ msg: "Campaign not found or unauthorized" });
+    }
+
+    const action = String(req.body?.action || "").trim().toLowerCase();
+    const continueOutsideWindow = req.body?.continueOutsideWindow === true;
+    if (!["pause", "resume"].includes(action)) {
+      return res.status(400).json({ msg: "Invalid action. Allowed: pause, resume" });
+    }
+
+    if (action === "pause") {
+      const updatedCampaign = await Campaign.findByIdAndUpdate(campaign._id, {
+        status: "paused",
+        updatedAt: new Date(),
+      });
+      emitRealtimeEvent("campaign.updated", {
+        campaignId: campaign._id,
+        campaign: updatedCampaign,
+        updatedAt: new Date(),
+      });
+      return res.json({
+        campaignId: campaign._id,
+        action,
+        status: "paused",
+      });
+    }
+
+    const nextAntiBan = {
+      ...(campaign.antiBan || {}),
+      deliveryWindow: {
+        ...((campaign.antiBan || {}).deliveryWindow || {}),
+        enabled: continueOutsideWindow
+          ? false
+          : Boolean((campaign.antiBan || {}).deliveryWindow?.enabled),
+      },
+    };
+
+    const updatedCampaign = await Campaign.findByIdAndUpdate(campaign._id, {
+      status: "running",
+      antiBan: sanitizeAntiBanSettings(nextAntiBan),
+      updatedAt: new Date(),
+    });
+
+    const queuedItems = await Message.find({
+      campaign: campaign._id,
+      status: { $in: ["pending", "processing"] },
+    });
+    const list = Array.isArray(queuedItems) ? queuedItems : [];
+
+    let reprioritized = 0;
+    let requeuedProcessing = 0;
+
+    for (const item of list) {
+      if (!item?._id) continue;
+      const message = await Message.findById(item._id);
+      if (!message) continue;
+      const previousStatus = String(message.status || "").toLowerCase();
+      if (!["pending", "processing"].includes(previousStatus)) continue;
+
+      if (previousStatus === "processing") {
+        message.status = "pending";
+        message.sentAt = null;
+        requeuedProcessing += 1;
+      }
+
+      if (String(message.direction || "outbound") !== "inbound") {
+        message.attemptCount = -1;
+        reprioritized += 1;
+      }
+
+      message.updatedAt = new Date();
+      appendAudit(
+        message,
+        "campaign_send_control",
+        continueOutsideWindow
+          ? "Campaign resumed manually outside delivery window"
+          : "Campaign resumed manually",
+        {
+          action,
+          continueOutsideWindow,
+          previousStatus,
+          campaignId: campaign._id,
+        },
+      );
+      await message.save();
+    }
+
+    emitRealtimeEvent("campaign.updated", {
+      campaignId: campaign._id,
+      campaign: updatedCampaign,
+      updatedAt: new Date(),
+    });
+
+    res.json({
+      campaignId: campaign._id,
+      action,
+      status: "running",
+      continueOutsideWindow,
+      reprioritized,
+      requeuedProcessing,
+    });
+  } catch (err) {
+    console.error(err.message);
+    const errorResponse = buildServerErrorResponse(err);
+    res.status(errorResponse.statusCode).json(errorResponse.body);
+  }
+};
