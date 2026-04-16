@@ -101,7 +101,7 @@ jobs:
                REBUILD_WORKER=true
              fi
 
-             if should_match '^(webapp/)'; then
+             if should_match '^(webapp/|\.github/workflows/)'; then
                REBUILD_WEBAPP=true
              fi
 
