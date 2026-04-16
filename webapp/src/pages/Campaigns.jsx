@@ -1089,7 +1089,7 @@ const Campaigns = () => {
                                             </td>
                                             <td className="px-5 py-4 text-xs text-slate-400">{formatDate(campaign.createdAt)}</td>
                                             <td className="px-5 py-4">
-                                                <div className="flex justify-end gap-2">
+                                                <div className="flex flex-wrap justify-end gap-2">
                                                     <button
                                                         type="button"
                                                         onClick={() => handleDispatchCampaign(campaign)}
