@@ -92,6 +92,7 @@ const Campaigns = () => {
     const [sortBy, setSortBy] = useState('recent');
     const [deletingId, setDeletingId] = useState(null);
     const [dispatchingCampaignId, setDispatchingCampaignId] = useState(null);
+    const [togglingWindowCampaignId, setTogglingWindowCampaignId] = useState(null);
     const [editingCampaign, setEditingCampaign] = useState(null);
     const [savingCampaignEdit, setSavingCampaignEdit] = useState(false);
     const [campaignEditForm, setCampaignEditForm] = useState({
@@ -100,6 +101,10 @@ const Campaigns = () => {
         messageVariants: [],
         minDelaySeconds: 0,
         maxDelaySeconds: 120,
+        deliveryWindowEnabled: true,
+        deliveryWindowStartTime: '08:00',
+        deliveryWindowEndTime: '20:00',
+        deliveryWindowTimezone: 'America/Sao_Paulo',
     });
     const [glassMode, setGlassMode] = useState(getStoredGlassMode);
     const [selectedCampaign, setSelectedCampaign] = useState(null);
@@ -377,15 +382,42 @@ const Campaigns = () => {
             setDispatchingCampaignId(null);
         }
     }, []);
+    const handleToggleDeliveryWindow = useCallback(async (campaign, nextEnabled) => {
+        if (!campaign?._id) return;
+        try {
+            setTogglingWindowCampaignId(campaign._id);
+            await updateCampaign(campaign._id, {
+                status: nextEnabled ? campaign.status : 'running',
+                antiBan: {
+                    ...(campaign?.antiBan || {}),
+                    deliveryWindow: {
+                        ...(campaign?.antiBan?.deliveryWindow || {}),
+                        enabled: Boolean(nextEnabled),
+                    },
+                },
+            });
+            await loadDashboardData({ showSpinner: false });
+        } catch (error) {
+            console.error('Toggle delivery window error:', error);
+            alert('Nao foi possivel atualizar a regra de horario desta campanha.');
+        } finally {
+            setTogglingWindowCampaignId(null);
+        }
+    }, [loadDashboardData]);
     const openCampaignEditModal = useCallback((campaign) => {
         if (!campaign?._id) return;
         setEditingCampaign(campaign);
+        const deliveryWindow = campaign?.antiBan?.deliveryWindow || {};
         setCampaignEditForm({
             name: String(campaign.name || ''),
             messageTemplate: String(campaign.messageTemplate || ''),
             messageVariants: Array.isArray(campaign.messageVariants) ? [...campaign.messageVariants] : [],
             minDelaySeconds: Number(campaign?.antiBan?.minDelaySeconds || 0),
             maxDelaySeconds: Number(campaign?.antiBan?.maxDelaySeconds || 120),
+            deliveryWindowEnabled: deliveryWindow.enabled !== false,
+            deliveryWindowStartTime: String(deliveryWindow.startTime || '08:00'),
+            deliveryWindowEndTime: String(deliveryWindow.endTime || '20:00'),
+            deliveryWindowTimezone: String(deliveryWindow.timezone || 'America/Sao_Paulo'),
         });
     }, []);
     const closeCampaignEditModal = useCallback(() => {
@@ -414,6 +446,13 @@ const Campaigns = () => {
                     ...(editingCampaign?.antiBan || {}),
                     minDelaySeconds,
                     maxDelaySeconds,
+                    deliveryWindow: {
+                        ...(editingCampaign?.antiBan?.deliveryWindow || {}),
+                        enabled: Boolean(campaignEditForm.deliveryWindowEnabled),
+                        startTime: String(campaignEditForm.deliveryWindowStartTime || '08:00'),
+                        endTime: String(campaignEditForm.deliveryWindowEndTime || '20:00'),
+                        timezone: String(campaignEditForm.deliveryWindowTimezone || 'America/Sao_Paulo'),
+                    },
                 },
             });
             await loadDashboardData({ showSpinner: false });
@@ -1000,6 +1039,9 @@ const Campaigns = () => {
                                             </td>
                                             <td className="px-5 py-4 text-slate-300">
                                                 {Number(campaign?.antiBan?.minDelaySeconds || 0)}s - {Number(campaign?.antiBan?.maxDelaySeconds || 0)}s
+                                                <div className="mt-1 text-xs text-slate-400">
+                                                    Horario: {campaign?.antiBan?.deliveryWindow?.enabled ? 'Ativo' : 'Desativado'}
+                                                </div>
                                             </td>
                                             <td className="px-5 py-4 text-xs text-slate-400">{formatDate(campaign.createdAt)}</td>
                                             <td className="px-5 py-4">
@@ -1018,6 +1060,25 @@ const Campaigns = () => {
                                                     >
                                                         <CheckCircleIcon className="w-4 h-4" />
                                                         {dispatchingCampaignId === campaign._id ? 'Disparando...' : 'Proximo imediato'}
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => handleToggleDeliveryWindow(campaign, !campaign?.antiBan?.deliveryWindow?.enabled)}
+                                                        disabled={togglingWindowCampaignId === campaign._id || campaign.pending <= 0}
+                                                        className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
+                                                            togglingWindowCampaignId === campaign._id || campaign.pending <= 0
+                                                                ? 'cursor-not-allowed bg-slate-700 text-slate-500'
+                                                                : campaign?.antiBan?.deliveryWindow?.enabled
+                                                                    ? 'bg-amber-500/15 text-amber-200 hover:bg-amber-500/25 border border-amber-400/20'
+                                                                    : 'bg-cyan-500/15 text-cyan-200 hover:bg-cyan-500/25 border border-cyan-400/20'
+                                                        }`}
+                                                    >
+                                                        <ClockIcon className="w-4 h-4" />
+                                                        {togglingWindowCampaignId === campaign._id
+                                                            ? 'Atualizando...'
+                                                            : campaign?.antiBan?.deliveryWindow?.enabled
+                                                                ? 'Continuar agora'
+                                                                : 'Respeitar horario'}
                                                     </button>
                                                     <button
                                                         type="button"
@@ -1242,6 +1303,40 @@ const Campaigns = () => {
                                     className={inputClass}
                                     placeholder="Max delay (s)"
                                 />
+                            </div>
+                            <div className="rounded-xl border border-white/10 bg-slate-900/70 p-4">
+                                <div className="mb-3 flex items-center justify-between">
+                                    <span className="text-sm font-semibold text-slate-100">Janela de envio</span>
+                                    <label className="inline-flex items-center gap-2 text-xs text-slate-300">
+                                        <input
+                                            type="checkbox"
+                                            checked={Boolean(campaignEditForm.deliveryWindowEnabled)}
+                                            onChange={(e) => setCampaignEditForm((prev) => ({ ...prev, deliveryWindowEnabled: e.target.checked }))}
+                                        />
+                                        Respeitar horario
+                                    </label>
+                                </div>
+                                <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+                                    <input
+                                        type="time"
+                                        value={campaignEditForm.deliveryWindowStartTime}
+                                        onChange={(e) => setCampaignEditForm((prev) => ({ ...prev, deliveryWindowStartTime: e.target.value }))}
+                                        className={inputClass}
+                                    />
+                                    <input
+                                        type="time"
+                                        value={campaignEditForm.deliveryWindowEndTime}
+                                        onChange={(e) => setCampaignEditForm((prev) => ({ ...prev, deliveryWindowEndTime: e.target.value }))}
+                                        className={inputClass}
+                                    />
+                                    <input
+                                        type="text"
+                                        value={campaignEditForm.deliveryWindowTimezone}
+                                        onChange={(e) => setCampaignEditForm((prev) => ({ ...prev, deliveryWindowTimezone: e.target.value }))}
+                                        className={inputClass}
+                                        placeholder="America/Sao_Paulo"
+                                    />
+                                </div>
                             </div>
                             <div className="flex justify-end gap-2 pt-2">
                                 <button type="button" onClick={closeCampaignEditModal} className={neutralButtonClass}>

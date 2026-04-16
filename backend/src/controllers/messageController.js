@@ -1723,7 +1723,8 @@ exports.getNextJob = async (req, res) => {
         const campaignDoc = await Campaign.findById(campaignId);
         if (campaignDoc) {
           const deliveryWindow = campaignDoc?.antiBan?.deliveryWindow || null;
-          if (!isInsideDeliveryWindow(deliveryWindow)) {
+          const shouldEnforceWindow = !isPriority;
+          if (shouldEnforceWindow && !isInsideDeliveryWindow(deliveryWindow)) {
             const deferredMessage = await Message.findById(job._id);
             if (deferredMessage && deferredMessage.status === "processing") {
               deferredMessage.status = "pending";
