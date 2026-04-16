@@ -7,6 +7,7 @@
     "start": "node src/server.js",
     "dev": "nodemon --ignore '*.log' --ignore 'data/*' --ignore 'uploads/*' src/server.js",
     "worker:helpdesk": "node src/workers/helpdeskWorker.js",
+    "recovery:unsent": "node scripts/requeue_unsent_campaign_messages.js",
     "test": "jest --runInBand"
   },
   "dependencies": {
