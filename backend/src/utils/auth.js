@@ -25,6 +25,22 @@ function getSessionSigningSecret() {
   return String(process.env.API_SECRET_KEY || '').trim() || 'emidia-session-secret';
 }
 
+function isLocalDevAuthEnabled() {
+  const nodeEnv = String(process.env.NODE_ENV || 'development').trim().toLowerCase();
+  const rawFlag = String(
+    process.env.ENABLE_LOCAL_DEV_AUTH || process.env.ENABLE_LOCAL_LOGIN || '',
+  ).trim().toLowerCase();
+  const enabled = rawFlag === '1' || rawFlag === 'true' || rawFlag === 'yes';
+  return enabled && nodeEnv !== 'production';
+}
+
+function getLocalDevAuthAllowedEmails() {
+  return String(process.env.LOCAL_DEV_AUTH_EMAILS || '')
+    .split(',')
+    .map((value) => String(value || '').trim().toLowerCase())
+    .filter(Boolean);
+}
+
 function signPayload(payload) {
   const header = toBase64Url(JSON.stringify({ alg: 'HS256', typ: 'JWT' }));
   const body = toBase64Url(JSON.stringify(payload));
@@ -173,6 +189,57 @@ async function authenticateBearerToken(token, agentId = '') {
   }
 
   const sessionPayload = verifyPayload(safeToken);
+  if (sessionPayload?.type === 'local_dev_session') {
+    if (!isLocalDevAuthEnabled()) {
+      secureLog('warn', '[authenticateBearerToken] local_dev_session disabled by env');
+      return null;
+    }
+
+    const now = Math.floor(Date.now() / 1000);
+    if (Number(sessionPayload.exp || 0) <= now) {
+      secureLog('warn', '[authenticateBearerToken] local_dev_session expired');
+      return null;
+    }
+
+    const email = String(sessionPayload.email || '').trim().toLowerCase();
+    if (!email) {
+      secureLog('warn', '[authenticateBearerToken] local_dev_session missing email');
+      return null;
+    }
+
+    const allowedEmails = getLocalDevAuthAllowedEmails();
+    if (allowedEmails.length > 0 && !allowedEmails.includes(email)) {
+      secureLog('warn', '[authenticateBearerToken] local_dev_session email not allowlisted', {
+        emailHash: hashEmail(email),
+      });
+      return null;
+    }
+
+    const resolvedAgentId = String(
+      sessionPayload.agentId || agentId || `local-dev:${email}`,
+    ).trim() || `local-dev:${email}`;
+    const isAdmin = isAdminEmail(email);
+
+    return {
+      kind: 'local-dev-session',
+      user: {
+        id: resolvedAgentId,
+        email,
+        user_metadata: { isAdmin },
+        app_metadata: { role: isAdmin ? 'admin' : 'user' },
+      },
+      agentId: resolvedAgentId,
+      isAdmin,
+      permissions: {
+        allowGemini: true,
+        allowRealtime: true,
+        allowCampaigns: true,
+        allowContacts: true,
+        allowInbox: true,
+      },
+    };
+  }
+
   if (sessionPayload?.type === 'installation_session') {
     console.log('[DEBUG authenticateBearerToken] Verifying installation session...');
     const now = Math.floor(Date.now() / 1000);
@@ -320,6 +387,26 @@ function issueInstallationSessionToken(installation, { ttlSeconds = 3600 * 12 } 
   };
 }
 
+function issueLocalDevSessionToken({ email, agentId, ttlSeconds = 3600 } = {}) {
+  const safeEmail = String(email || '').trim().toLowerCase();
+  const safeAgentId = String(agentId || `local-dev:${safeEmail}`).trim();
+  const now = Math.floor(Date.now() / 1000);
+  const exp = now + Math.max(60, Number(ttlSeconds) || 3600);
+
+  const token = signPayload({
+    type: 'local_dev_session',
+    email: safeEmail,
+    agentId: safeAgentId,
+    exp,
+  });
+
+  return {
+    token,
+    expiresAt: new Date(exp * 1000).toISOString(),
+    agentId: safeAgentId,
+  };
+}
+
 function getInstallationPublicStatus(activationCode) {
   const installation = getInstallationByActivationCode(activationCode);
   if (!installation) return null;
@@ -336,6 +423,9 @@ function getInstallationPublicStatus(activationCode) {
 module.exports = {
   authenticateBearerToken,
   getValidApiKey,
+  isLocalDevAuthEnabled,
+  getLocalDevAuthAllowedEmails,
   issueInstallationSessionToken,
+  issueLocalDevSessionToken,
   getInstallationPublicStatus,
 };

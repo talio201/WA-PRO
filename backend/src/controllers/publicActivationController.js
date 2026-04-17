@@ -14,6 +14,9 @@ const crypto = require('crypto');
 const {
   issueInstallationSessionToken,
   getInstallationPublicStatus,
+  isLocalDevAuthEnabled,
+  getLocalDevAuthAllowedEmails,
+  issueLocalDevSessionToken,
 } = require('../utils/auth');
 
 function safeString(value = '') {
@@ -317,5 +320,61 @@ exports.bootstrapAdminAccess = async (req, res) => {
       userEmail: req.user?.email,
     });
     return res.status(500).json({ msg: 'Failed to bootstrap admin access.' });
+  }
+};
+
+/**
+ * Local login without Supabase dependency
+ * USE ONLY FOR DEVELOPMENT/TESTING (when Supabase is unavailable)
+ */
+exports.localLogin = async (req, res) => {
+  try {
+    if (!isLocalDevAuthEnabled()) {
+      return res.status(404).json({ msg: 'Endpoint not available.' });
+    }
+
+    const email = safeString(req.body?.email).toLowerCase();
+    const password = safeString(req.body?.password);
+
+    if (!email || !password) {
+      return res.status(400).json({ msg: 'Email and password are required.' });
+    }
+
+    if (!email.includes('@')) {
+      return res.status(401).json({ msg: 'Invalid email format.' });
+    }
+
+    if (password.length < 8) {
+      return res.status(401).json({ msg: 'Invalid credentials.' });
+    }
+
+    const allowedEmails = getLocalDevAuthAllowedEmails();
+    if (allowedEmails.length > 0 && !allowedEmails.includes(email)) {
+      return res.status(403).json({ msg: 'Email not allowed for local development login.' });
+    }
+
+    const session = issueLocalDevSessionToken({
+      email,
+      agentId: `local-dev:${email}`,
+      ttlSeconds: Number(process.env.LOCAL_DEV_AUTH_TTL_SECONDS || 3600),
+    });
+    
+    return res.json({
+      success: true,
+      token: {
+        token: session.token,
+        expiresAt: session.expiresAt,
+        isDevMode: true,
+      },
+      user: {
+        email,
+        kind: 'local-dev-user',
+        agentId: session.agentId,
+      },
+      msg: 'Local login successful (development mode).',
+    });
+  } catch (error) {
+    console.error('[ERROR localLogin]', error);
+    return res.status(500).json({ msg: 'Failed to perform local login.' });
   }
 };

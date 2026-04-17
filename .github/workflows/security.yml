@@ -37,3 +37,61 @@ jobs:
           GITLEAKS_CONFIG: .gitleaks.toml
           GITLEAKS_ENABLE_UPLOAD_ARTIFACT: true
           GITLEAKS_ENABLE_COMMENTS: false
+
+  dependency-audit-node:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    strategy:
+      matrix:
+        target:
+          - .
+          - backend
+          - webapp
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            backend/package-lock.json
+            webapp/package-lock.json
+
+      - name: npm audit (high+)
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ ! -f "${{ matrix.target }}/package.json" ]; then
+            echo "No package.json in ${{ matrix.target }}; skipping"
+            exit 0
+          fi
+          cd "${{ matrix.target }}"
+          npm ci
+          npm audit --omit=dev --audit-level=high
+
+  dependency-audit-python:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install pip-audit
+        run: |
+          python -m pip install --upgrade pip
+          pip install pip-audit
+
+      - name: pip-audit requirements
+        run: |
+          pip-audit -r python_bot/requirements.txt --strict

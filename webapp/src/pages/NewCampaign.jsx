@@ -1,6 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useDropzone } from "react-dropzone";
-import * as XLSX from "xlsx";
 import {
   createCampaign,
   generateMessageVariants,
@@ -62,6 +61,23 @@ const parseManualContacts = (text) => {
     }
   });
   return dedupeContacts(contacts);
+};
+
+const parseCsvContacts = (text) => {
+  const rows = String(text || "")
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  const parsed = rows.map((line) => {
+    const cols = line.split(",").map((col) => String(col || "").trim());
+    return {
+      phone: normalizePhone(cols[0]),
+      name: String(cols[1] || "").trim(),
+    };
+  });
+
+  return dedupeContacts(parsed.filter((item) => item.phone));
 };
 const formatPhonePreview = (value) => {
   const phone = normalizePhone(value);
@@ -178,21 +194,12 @@ const NewCampaign = ({ onCancel }) => {
     setExcelFile(file);
     const reader = new FileReader();
     reader.onload = (event) => {
-      const data = new Uint8Array(event.target.result);
-      const workbook = XLSX.read(data, { type: "array" });
-      const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
-      const rows = XLSX.utils.sheet_to_json(firstSheet, { header: 1 });
-      const parsed = rows
-        .map((row) => ({
-          phone: normalizePhone(row?.[0]),
-          name: String(row?.[1] || "").trim(),
-        }))
-        .filter((item) => item.phone);
-      const clean = dedupeContacts(parsed);
+      const rawText = String(event?.target?.result || "");
+      const clean = parseCsvContacts(rawText);
       setExcelContacts(clean);
       setExcelSelectedPhones(clean.map((item) => item.phone));
     };
-    reader.readAsArrayBuffer(file);
+    reader.readAsText(file);
   }, []);
   const onDropMedia = useCallback(async (acceptedFiles) => {
     const file = acceptedFiles[0];
@@ -231,10 +238,6 @@ const NewCampaign = ({ onCancel }) => {
     useDropzone({
       onDrop: onDropExcel,
       accept: {
-        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": [
-          ".xlsx",
-        ],
-        "application/vnd.ms-excel": [".xls"],
         "text/csv": [".csv"],
       },
       maxFiles: 1,

@@ -52,13 +52,31 @@ def send_live_activity(activity, data=None):
     except Exception:
         pass
 
+def press_message_line_break(page):
+    page.keyboard.down("Shift")
+    page.keyboard.press("Enter")
+    page.keyboard.up("Shift")
+
 def type_like_human(page, text, is_priority=False):
     logging.info("Iniciando digitação...")
     send_live_activity("typing", {"text": text[:20] + "..." if len(text) > 20 else text})
     if text:
-        page.keyboard.type(text[0])
-        time.sleep(random.uniform(0.6, 1.2))
-        for char in text[1:]:
+        index = 0
+        while index < len(text):
+            char = text[index]
+            if char == '\r':
+                if index + 1 < len(text) and text[index + 1] == '\n':
+                    index += 1
+                press_message_line_break(page)
+                time.sleep(random.uniform(0.08, 0.18) if is_priority else random.uniform(0.12, 0.3))
+                index += 1
+                continue
+            if char == '\n':
+                press_message_line_break(page)
+                time.sleep(random.uniform(0.08, 0.18) if is_priority else random.uniform(0.12, 0.3))
+                index += 1
+                continue
+
             if is_priority:
                 delay = random.uniform(0.05, 0.15)
                 if char in [' ', '.', ',', '!', '?']:
@@ -69,6 +87,7 @@ def type_like_human(page, text, is_priority=False):
                     delay += random.uniform(0.1, 0.3)
             page.keyboard.type(char)
             time.sleep(delay)
+            index += 1
     logging.info("Digitação concluída.")
 def check_invalid_number_modal(page):
     try:

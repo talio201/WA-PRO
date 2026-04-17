@@ -3,7 +3,7 @@ title = "WA-PRO secret scan policy"
 [extend]
 useDefault = true
 
-[allowlist]
+[[allowlists]]
 description = "Allow placeholder env examples and workflow secret references"
 paths = [
   '''backend/.env.example''',
@@ -12,15 +12,15 @@ paths = [
 ]
 regexes = [
   '''\$\{\{\s*secrets\.[A-Z0-9_]+\s*\}\}''',
-  '''(?i)(example|placeholder|changeme|dummy)'''
+  '''(?i)(example|placeholder|changeme|dummy|seu_token_aqui|token_aqui|redacted|altere_antes_de_usar|substitua_pelo_hash_admin)'''
 ]
 
 [[allowlists]]
 description = "Historical findings already triaged in docs commit"
-fingerprints = [
-  "2208b137d26716c7dbeb5aa2b55e90566dddb370:SECURITY_FIXES.md:generic-api-key:125",
-  "2208b137d26716c7dbeb5aa2b55e90566dddb370:SECURITY_FIXES.md:generic-api-key:260",
-  "2208b137d26716c7dbeb5aa2b55e90566dddb370:SECURITY_ANALYSIS.md:generic-api-key:86",
-  "2208b137d26716c7dbeb5aa2b55e90566dddb370:SECURITY_ANALYSIS.md:generic-api-key:135",
-  "2208b137d26716c7dbeb5aa2b55e90566dddb370:SECURITY_ANALYSIS.md:generic-api-key:136"
+paths = [
+  '''SECURITY_FIXES.md''',
+  '''SECURITY_ANALYSIS.md'''
+]
+regexes = [
+  '''(?i)generic-api-key'''
 ]

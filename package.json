@@ -3,7 +3,10 @@
     "dev": "npm --prefix backend run dev",
     "dev:backend": "npm --prefix backend run dev",
     "dev:extension": "npm --prefix extension run dev",
-    "build:extension": "npm --prefix extension run build"
+    "build:extension": "npm --prefix extension run build",
+    "security:audit": "./scripts/security/security_guard.sh",
+    "security:audit:fast": "./scripts/security/security_guard.sh --fast",
+    "security:hooks:install": "./scripts/security/install_hooks.sh"
   },
   "dependencies": {
     "@heroicons/react": "^2.2.0",

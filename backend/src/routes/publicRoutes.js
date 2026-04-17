@@ -39,5 +39,6 @@ router.get('/installations/:activationCode/status', publicReadLimiter, publicAct
 router.post('/installations/session', activationSessionLimiter, publicActivationController.createSession);
 router.post('/installations/heartbeat', activationWriteLimiter, publicActivationController.heartbeat);
 router.get('/runtime-config', publicReadLimiter, publicActivationController.getPublicRuntimeConfig);
+router.post('/auth/local-login', activationWriteLimiter, publicActivationController.localLogin);
 
 module.exports = router;

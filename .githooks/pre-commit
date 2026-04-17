@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT_DIR="$(git rev-parse --show-toplevel)"
+cd "$ROOT_DIR"
+
+forbidden='(^|/)(\.env(\..*)?$|id_rsa(\.pub)?$|id_ed25519(\.pub)?$|ed25519(\.pub)?$|.*\.(pem|key|p12|pfx|jks|kdbx|ovpn|crt|cer)$|.*credentials.*|.*secret.*)'
+staged_files=$(git diff --cached --name-only)
+
+if echo "$staged_files" | grep -E "$forbidden" | grep -Ev '(^|/)\.env\.example$' >/dev/null 2>&1; then
+  echo "[pre-commit] Arquivo sensivel detectado no staged. Commit bloqueado."
+  echo "$staged_files" | grep -E "$forbidden" | grep -Ev '(^|/)\.env\.example$' || true
+  exit 1
+fi
+
+if command -v gitleaks >/dev/null 2>&1; then
+  gitleaks protect --staged --redact --config .gitleaks.toml
+else
+  echo "[pre-commit] WARN: gitleaks nao encontrado; instale para scan de segredos no commit."
+fi
