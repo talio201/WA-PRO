@@ -92,9 +92,11 @@ jobs:
              REBUILD_WEBAPP=false
              RESTART_BOT=false
              
-             # Fetch and update without disruption
+             # Fetch and replace any dirty remote checkout state before updating.
+             # This host is a deployment target, so it should always match origin/main.
              git fetch origin main
-             git pull --ff-only origin main
+             git reset --hard origin/main
+             git clean -fd
 
              if should_match '^(backend/|webapp/|docker-compose\.yml|deploy/|scripts/|\.github/workflows/)'; then
                REBUILD_BACKEND=true
