@@ -3,7 +3,7 @@ import {
   getContacts,
   addContact,
   deleteContact,
-  importContactsXlsx,
+  importContactsCsv,
   getLeadAnalytics,
   updateContactCrm,
 } from "../utils/api.js";
@@ -103,7 +103,7 @@ export default function Contacts() {
     try {
       setImporting(true);
       setError(null);
-      const result = await importContactsXlsx(file);
+      const result = await importContactsCsv(file);
       alert(`Importacao concluida! ${result.imported} contatos adicionados e ${result.ignored_duplicates || 0} duplicados ignorados.`);
       fetchContacts();
     } catch (err) {
@@ -193,7 +193,7 @@ export default function Contacts() {
         <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto mt-4 md:mt-0 z-10 flex-shrink-0">
            <input 
               type="file" 
-              accept=".xlsx, .xls, .csv" 
+              accept=".csv" 
               className="hidden" 
               ref={fileInputRef}
               onChange={handleImport} 
@@ -204,7 +204,7 @@ export default function Contacts() {
              className="w-full sm:w-auto flex items-center justify-center gap-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white px-6 py-3 rounded-2xl font-semibold transition-all shadow-lg shadow-emerald-900/40 hover:shadow-emerald-900/60 disabled:opacity-50 hover:-translate-y-0.5 active:translate-y-0"
            >
              <ArrowUpTrayIcon className={`w-5 h-5 ${importing ? "animate-bounce" : ""}`} />
-             {importing ? "Lendo Planilha..." : "Importar Excel"}
+             {importing ? "Lendo CSV..." : "Importar CSV"}
            </button>
         </div>
       </div>

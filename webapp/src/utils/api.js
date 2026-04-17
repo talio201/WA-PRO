@@ -97,7 +97,7 @@ export const getLeadAnalytics = async () => requestJson('/contacts/analytics', {
 export const addContact = async (payload) => requestJson('/contacts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }, 'Failed to add contact');
 export const updateContactCrm = async (id, payload = {}) => requestJson(`/contacts/${id}/crm`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }, 'Failed to update lead CRM');
 export const deleteContact = async (id) => requestJson(`/contacts/${id}`, { method: 'DELETE' }, 'Failed to delete contact');
-export const importContactsXlsx = async (file) => {
+export const importContactsCsv = async (file) => {
   const fd = new FormData(); fd.append('file', file);
   return requestJson('/contacts/import', { method: 'POST', body: fd }, 'Failed to import contacts');
 };

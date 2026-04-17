@@ -91,12 +91,41 @@ jobs:
              REBUILD_WORKER=false
              REBUILD_WEBAPP=false
              RESTART_BOT=false
+
+             RUNTIME_PATHS=("backend/data" "backend/uploads" "python_bot/whatsapp_session")
+             BACKUP_ROOT="/tmp/emidia-runtime-backup"
+
+             backup_runtime_data() {
+               rm -rf "$BACKUP_ROOT"
+               mkdir -p "$BACKUP_ROOT"
+               for rel_path in "${RUNTIME_PATHS[@]}"; do
+                 if [ -e "$rel_path" ]; then
+                   mkdir -p "$(dirname "$BACKUP_ROOT/$rel_path")"
+                   cp -a "$rel_path" "$BACKUP_ROOT/$rel_path"
+                 fi
+               done
+             }
+
+             restore_runtime_data() {
+               for rel_path in "${RUNTIME_PATHS[@]}"; do
+                 if [ -e "$BACKUP_ROOT/$rel_path" ]; then
+                   mkdir -p "$(dirname "$rel_path")"
+                   rm -rf "$rel_path"
+                   cp -a "$BACKUP_ROOT/$rel_path" "$rel_path"
+                 fi
+               done
+             }
              
              # Fetch and replace any dirty remote checkout state before updating.
              # This host is a deployment target, so it should always match origin/main.
+             backup_runtime_data
              git fetch origin main
              git reset --hard origin/main
-             git clean -fd
+             git clean -fd \
+               -e backend/data \
+               -e backend/uploads \
+               -e python_bot/whatsapp_session
+             restore_runtime_data
 
              if should_match '^(backend/|webapp/|docker-compose\.yml|deploy/|scripts/|\.github/workflows/)'; then
                REBUILD_BACKEND=true
@@ -178,6 +207,7 @@ jobs:
 
                echo "Rolling back to $PREV_SHA"
                git checkout --force "$PREV_SHA"
+               restore_runtime_data
                docker compose rm -sf backend backend_worker python_bot || true
                docker compose up -d --build backend backend_worker
                if [ "$RESTART_BOT" = true ]; then

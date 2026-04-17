@@ -28,10 +28,8 @@ const fileFilter = (req, file, cb) => {
     file.mimetype.startsWith("image/") ||
     file.mimetype.startsWith("video/") ||
     file.mimetype.startsWith("audio/") ||
-    file.mimetype.includes("spreadsheet") ||
-    file.mimetype.includes("excel") ||
     file.mimetype.includes("csv") ||
-    file.originalname.match(/\.(jpg|jpeg|png|gif|mp4|mp3|wav|xlsx|xls|csv)$/)
+    file.originalname.match(/\.(jpg|jpeg|png|gif|mp4|mp3|wav|csv)$/)
   ) {
     cb(null, true);
   } else {

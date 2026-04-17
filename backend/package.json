@@ -22,8 +22,7 @@
     "ioredis": "^5.4.1",
     "mongoose": "^7.0.3",
     "multer": "^2.0.2",
-    "ws": "^8.18.3",
-    "xlsx": "^0.18.5"
+    "ws": "^8.18.3"
   },
   "devDependencies": {
     "nodemon": "^2.0.22",

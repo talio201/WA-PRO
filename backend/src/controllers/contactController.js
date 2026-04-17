@@ -1,5 +1,4 @@
 const Contact = require("../models/Contact");
-const XLSX = require("xlsx");
 const { buildServerErrorResponse } = require("../utils/httpError");
 const { normalizePhone } = require("../utils/phone");
 const {
@@ -28,6 +27,74 @@ function mergeContactWithLead(contact = {}, lead = null) {
 
 function resolveOwnerId(req) {
   return String(req.agentId || req.user?.id || "").trim();
+}
+
+function normalizeHeader(value) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\s+/g, "_");
+}
+
+function detectDelimiter(headerLine) {
+  const commaCount = (headerLine.match(/,/g) || []).length;
+  const semicolonCount = (headerLine.match(/;/g) || []).length;
+  return semicolonCount > commaCount ? ";" : ",";
+}
+
+function parseDelimitedLine(line, delimiter) {
+  const values = [];
+  let current = "";
+  let inQuotes = false;
+
+  for (let index = 0; index < line.length; index += 1) {
+    const character = line[index];
+
+    if (character === '"') {
+      if (inQuotes && line[index + 1] === '"') {
+        current += '"';
+        index += 1;
+      } else {
+        inQuotes = !inQuotes;
+      }
+      continue;
+    }
+
+    if (character === delimiter && !inQuotes) {
+      values.push(current);
+      current = "";
+      continue;
+    }
+
+    current += character;
+  }
+
+  values.push(current);
+  return values;
+}
+
+function parseCsvBuffer(buffer) {
+  const text = String(buffer || "")
+    .replace(/^\uFEFF/, "")
+    .trim();
+
+  if (!text) return [];
+
+  const lines = text.split(/\r?\n/).filter((line) => String(line).trim().length > 0);
+  if (lines.length === 0) return [];
+
+  const delimiter = detectDelimiter(lines[0]);
+  const headers = parseDelimitedLine(lines[0], delimiter).map(normalizeHeader);
+
+  return lines.slice(1).map((line) => {
+    const values = parseDelimitedLine(line, delimiter);
+    return headers.reduce((row, header, index) => {
+      if (header) row[header] = values[index] ?? "";
+      return row;
+    }, {});
+  });
 }
 
 exports.getContacts = async (req, res) => {
@@ -98,12 +165,15 @@ exports.importContacts = async (req, res) => {
     }
 
     if (!req.file) {
-      return res.status(400).json({ msg: "Please upload an excel file" });
+      return res.status(400).json({ msg: "Please upload a CSV file" });
     }
 
-    const workbook = XLSX.read(req.file.buffer, { type: "buffer" });
-    const sheetName = workbook.SheetNames[0];
-    const rawData = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName]);
+    const fileName = String(req.file.originalname || "").toLowerCase();
+    if (!fileName.endsWith(".csv")) {
+      return res.status(400).json({ msg: "Please upload a CSV file" });
+    }
+
+    const rawData = parseCsvBuffer(req.file.buffer);
 
     const toInsert = [];
     const duplicated = [];
