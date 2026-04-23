@@ -1644,11 +1644,15 @@ exports.getNextJob = async (req, res) => {
       query.agentId = ownerId;
     }
     const activeCampaigns = await Campaign.find(query);
+    console.log(`[DEBUG getNextJob] Owner: ${ownerId}, Found ${activeCampaigns?.length || 0} active campaigns.`);
+    
     const activeCampaignIds = (Array.isArray(activeCampaigns) ? activeCampaigns : []).map((c) => c._id || c.id);
     const activeCampaignIdSet = new Set(
       activeCampaignIds.map((id) => String(id)),
     );
+    
     if (activeCampaignIds.length === 0) {
+      console.log(`[DEBUG getNextJob] No active campaigns for ${ownerId}. Query: ${JSON.stringify(query)}`);
       return res.json({ job: null });
     }
     let eligibleCampaignIds = activeCampaignIds;
