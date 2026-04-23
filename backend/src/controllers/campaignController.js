@@ -261,7 +261,14 @@ exports.createCampaign = async (req, res) => {
 exports.getCampaigns = async (req, res) => {
   try {
     const ownerId = resolveOwnerId(req);
-    const campaigns = await Campaign.find({ agentId: ownerId }).sort({ createdAt: -1 });
+    // Busca aceitando tanto o ID curto quanto o ID longo (prefixo)
+    const query = {
+      $or: [
+        { agentId: ownerId },
+        { agentId: { $like: `${ownerId}%` } }
+      ]
+    };
+    const campaigns = await Campaign.find(query).sort({ createdAt: -1 });
     res.json(campaigns);
   } catch (err) {
     console.error(err.message);

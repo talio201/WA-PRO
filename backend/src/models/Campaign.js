@@ -80,11 +80,21 @@ class CampaignModel {
   static async find(query = {}) {
     let q = supabaseAdmin.from("campaigns").select("*");
     
-    if (query.agentId) {
-      if (typeof query.agentId === 'object' && query.agentId.$like) {
-        q = q.ilike("agent_id", query.agentId.$like.replace('%', '*'));
-      } else {
-        q = q.eq("agent_id", query.agentId);
+    if (query.$or) {
+      // Simula suporte básico para $or (muito usado no dashboard)
+      const conditions = query.$or.map(cond => {
+        const key = Object.keys(cond)[0];
+        const val = cond[key];
+        return `${key === 'agentId' ? 'agent_id' : key}.eq.${val}`;
+      }).join(',');
+      q = q.or(conditions);
+    } else {
+      if (query.agentId) {
+        if (typeof query.agentId === 'object' && query.agentId.$like) {
+          q = q.ilike("agent_id", query.agentId.$like.replace('%', '*'));
+        } else {
+          q = q.eq("agent_id", query.agentId);
+        }
       }
     }
     if (query.tenantId) q = q.eq("tenant_id", query.tenantId);
