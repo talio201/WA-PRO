@@ -252,17 +252,17 @@ exports.bootstrapAdminAccess = async (req, res) => {
     if (!configuredSecret) {
       if (hasConfiguredAdmins) {
         console.log('[DEBUG bootstrapAdminAccess] DENIED: No secret configured but admins exist');
-        return res.status(403).json({ msg: genericDeniedMsg });
+        return res.status(403).json({ msg: 'Acesso restrito.' });
       }
       console.log('[DEBUG bootstrapAdminAccess] Allowing bootstrap: no secret configured + no admins exist');
     } else {
       if (!bootstrapSecret) {
         console.log('[DEBUG bootstrapAdminAccess] DENIED: Secret required but not provided');
-        return res.status(403).json({ msg: genericDeniedMsg });
+        return res.status(403).json({ msg: 'Acesso restrito.' });
       }
       if (bootstrapSecret !== configuredSecret) {
         console.log('[DEBUG bootstrapAdminAccess] DENIED: Invalid secret provided');
-        return res.status(403).json({ msg: genericDeniedMsg });
+        return res.status(403).json({ msg: 'Acesso restrito.' });
       }
       console.log('[DEBUG bootstrapAdminAccess] Valid secret provided');
     }

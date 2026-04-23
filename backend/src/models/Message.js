@@ -77,8 +77,11 @@ class MessageModel {
       search_terms: item.searchTerms || item.search_terms || [],
       name: item.name,
       variables: item.variables || {},
+      processed_message: item.processedMessage || item.processed_message || '',
       status: item.status || 'pending',
-      direction: item.direction || 'outbound'
+      direction: item.direction || 'outbound',
+      attempt_count: item.attemptCount || item.attempt_count || 0,
+      audit: item.audit || []
     }));
 
     const { data, error } = await supabaseAdmin
@@ -95,10 +98,27 @@ class MessageModel {
     
     if (query.agentId) q = q.eq("agent_id", query.agentId);
     if (query.tenantId) q = q.eq("tenant_id", query.tenantId);
-    if (query.campaignId) q = q.eq("campaign_id", query.campaignId);
-    if (query.campaign) q = q.eq("campaign_id", query.campaign);
-    if (query.status) q = q.eq("status", query.status);
+    
+    // Handle campaign filtering with $in support
+    if (query.campaign) {
+      if (query.campaign.$in) {
+        q = q.in("campaign_id", query.campaign.$in);
+      } else {
+        q = q.eq("campaign_id", query.campaign);
+      }
+    } else if (query.campaignId) {
+      q = q.eq("campaign_id", query.campaignId);
+    }
+
+    if (query.status) {
+      if (query.status.$in) {
+        q = q.in("status", query.status.$in);
+      } else {
+        q = q.eq("status", query.status);
+      }
+    }
     if (query.phone) q = q.eq("phone", query.phone);
+    if (query._id) q = q.eq("id", query._id);
 
     const { data, error } = await q.order("created_at", { ascending: false });
     if (error) throw error;
@@ -106,15 +126,21 @@ class MessageModel {
   }
 
   static findOneAndUpdate(query, update, options) {
-    // This is a complex mock for Mongoose/LocalDB style findOneAndUpdate
     const operation = (async () => {
       let q = supabaseAdmin.from("messages").select("*");
       if (query.agentId) q = q.eq("agent_id", query.agentId);
-      if (query.campaign) q = q.eq("campaign_id", query.campaign);
+      
+      if (query.campaign) {
+        if (query.campaign.$in) q = q.in("campaign_id", query.campaign.$in);
+        else q = q.eq("campaign_id", query.campaign);
+      }
+      
       if (query.status) q = q.eq("status", query.status);
       if (query._id) q = q.eq("id", query._id);
+      if (query.attemptCount !== undefined) q = q.eq("attempt_count", query.attemptCount);
 
-      const { data: existing } = await q.limit(1).single();
+      const { data: results } = await q.limit(1);
+      const existing = results && results.length > 0 ? results[0] : null;
       if (!existing) return null;
 
       const payload = {};
@@ -123,6 +149,7 @@ class MessageModel {
       if (update.sentAt) payload.sent_at = update.sentAt;
       if (update.processedMessage) payload.processed_message = update.processedMessage;
       if (update.$inc && update.$inc.attemptCount) payload.attempt_count = (existing.attempt_count || 0) + update.$inc.attemptCount;
+      if (update.attemptCount !== undefined) payload.attempt_count = update.attemptCount;
 
       const { data: updated, error } = await supabaseAdmin
         .from("messages")

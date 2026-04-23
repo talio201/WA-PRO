@@ -275,8 +275,8 @@ function requireActiveSaasAccount(req, res, next) {
   if (req.authKind === 'api-key' || req.authKind === 'bot-client') return next(); // API key authenticated
   if (req.authKind === 'installation-session') {
     return res.status(403).json({
-      msg: 'Instalação legada não autorizada. Faça login via Supabase.',
-      accountStatus: 'legacy_blocked',
+      msg: 'Acesso não autorizado. Por favor, realize o login novamente.',
+      code: 'auth_required',
     });
   }
   
@@ -323,8 +323,8 @@ async function enforceDemoOutboundPolicy(req, res, next) {
     const planTerm = String(req.saasUser?.planTerm || '').trim().toLowerCase();
     if (planTerm !== 'demo') return next();
 
-    const agentCampaigns = await Campaign.find({ agentId: req.agentId }).select('_id');
-    const campaignIds = (Array.isArray(agentCampaigns) ? agentCampaigns : []).map((item) => item._id);
+    const agentCampaigns = await Campaign.find({ agentId: req.agentId });
+    const campaignIds = (Array.isArray(agentCampaigns) ? agentCampaigns : []).map((item) => item._id || item.id);
     if (!campaignIds.length) return next();
 
     const allOutbound = await Message.find({

@@ -361,11 +361,17 @@ def wait_with_command_poll(seconds, browser, user_data_dir):
         if cmd_result == "skip_delay_once":
             return True
     return False
+# Cache global para evitar re-notificar a mesma mensagem inbound no mesmo ciclo de vida
+SEEN_MESSAGES_CACHE = set()
+
 def check_inbound_messages(page):
+    global SEEN_MESSAGES_CACHE
     try:
-        inbound_elements = page.query_selector_all('div.message-in')[-5:]
+        # Pega as mensagens recebidas (inbound)
+        inbound_elements = page.query_selector_all('div.message-in')[-10:]
         if not inbound_elements:
             return
+            
         for el in inbound_elements:
             try:
                 text_el = el.query_selector('.copyable-text span[dir="ltr"]')
@@ -374,23 +380,50 @@ def check_inbound_messages(page):
                 text = text_el.inner_text().strip()
                 if not text:
                     continue
+                
                 meta_el = el.query_selector('[data-pre-plain-text]')
                 meta_text = meta_el.get_attribute('data-pre-plain-text') if meta_el else ""
+                
+                # Fingerprint único para esta mensagem neste chat
+                msg_id = f"{meta_text}|{text}"
+                if msg_id in SEEN_MESSAGES_CACHE:
+                    continue
+                
                 phone_candidate = "Desconhecido"
                 if meta_text and "]" in meta_text:
+                    # Extrai o nome/número do remetente da meta-tag do WhatsApp
                     contact_part = meta_text.split(']')[-1].strip().replace(':', '').strip()
                     phone_candidate = ''.join(filter(str.isdigit, contact_part))
+                
+                # Se não conseguiu extrair número, tenta pegar o nome do chat aberto
+                if not phone_candidate or len(phone_candidate) < 5:
+                    header_el = page.query_selector('#main header span[title]')
+                    if header_el:
+                        chat_name = header_el.get_attribute('title')
+                        phone_candidate = ''.join(filter(str.isdigit, chat_name))
+
                 payload = {
                     "phone": phone_candidate,
                     "name": "",
                     "text": text,
-                    "source": "python_worker"
+                    "source": "python_worker",
+                    "at": new_date_iso() # Adiciona timestamp atual
                 }
-                requests.post(f"{API_BASE_URL}/messages/inbound", json=payload, headers=API_HEADERS)
-            except Exception as e:
+                
+                res = requests.post(f"{API_BASE_URL}/messages/inbound", json=payload, headers=API_HEADERS, timeout=5)
+                if res.status_code == 200 or res.status_code == 201:
+                    SEEN_MESSAGES_CACHE.add(msg_id)
+                    # Mantém o cache pequeno (últimas 100 mensagens)
+                    if len(SEEN_MESSAGES_CACHE) > 100:
+                        SEEN_MESSAGES_CACHE.pop()
+            except Exception:
                 pass
-    except Exception as e:
-        pass 
+    except Exception:
+        pass
+
+def new_date_iso():
+    from datetime import datetime
+    return datetime.utcnow().isoformat() + "Z"
 def scrape_history_for_job(page, phone):
     logging.info(f"Iniciando raspagem de historico para o numero {phone}")
     dom_success = False

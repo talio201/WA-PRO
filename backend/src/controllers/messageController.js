@@ -332,7 +332,8 @@ async function resolveRelatedCampaignId({
 }) {
   if (preferredCampaignId) {
     const CampaignModel = require("../models/Campaign");
-    const check = await CampaignModel.findOne({ _id: preferredCampaignId, agentId: ownerAgentId });
+    const matches = await CampaignModel.find({ _id: preferredCampaignId, agentId: ownerAgentId });
+    const check = Array.isArray(matches) && matches.length > 0 ? matches[0] : null;
     if (check) return preferredCampaignId;
   }
   const history = Array.isArray(relatedMessages) ? relatedMessages : [];
@@ -1403,16 +1404,27 @@ exports.registerInboundMessage = async (req, res) => {
     if (!relatedCampaignId) {
       relatedCampaignId = await getOrCreateSystemCampaignId(ownerId || "system");
     }
-    const recentInbound = relatedMessages
-      .filter((item) => String(item.direction || "outbound") === "inbound")
+    const recentMessages = (Array.isArray(relatedMessages) ? relatedMessages : [])
       .sort((a, b) => getMessageDateMs(b) - getMessageDateMs(a))
       .slice(0, 25);
-    const duplicate = recentInbound.find((item) => {
-      const sameText = String(item.processedMessage || "").trim() === text;
+
+    console.log(`[DEBUG Anti-Eco] Checking ${recentMessages.length} messages for phone ${normalizedPhone}. Text: "${text}"`);
+
+    const duplicate = recentMessages.find((item) => {
+      const itemText = String(item.processedMessage || "").trim();
+      const sameText = itemText === text;
       if (!sameText) return false;
-      const delta = Math.abs(getMessageDateMs(item) - messageDate.getTime());
+      
+      const itemAt = getMessageDateMs(item);
+      const candidateAt = messageDate.getTime();
+      const delta = Math.abs(itemAt - candidateAt);
+      
+      console.log(`[DEBUG Anti-Eco] Candidate Match Found! Text: "${itemText}", Delta: ${delta}ms`);
+      
+      // Se tiver o mesmo texto em menos de 2 minutos, é duplicada
       return delta <= 2 * 60 * 1000;
     });
+
     if (duplicate) {
       emitRealtimeEvent("messages.inbound.duplicate", {
         phone: normalizedPhone,
@@ -1631,8 +1643,8 @@ exports.getNextJob = async (req, res) => {
     if (ownerId && ownerId !== "bot") {
       query.agentId = ownerId;
     }
-    const activeCampaigns = await Campaign.find(query).select("_id");
-    const activeCampaignIds = activeCampaigns.map((c) => c._id);
+    const activeCampaigns = await Campaign.find(query);
+    const activeCampaignIds = (Array.isArray(activeCampaigns) ? activeCampaigns : []).map((c) => c._id || c.id);
     const activeCampaignIdSet = new Set(
       activeCampaignIds.map((id) => String(id)),
     );
@@ -1699,6 +1711,7 @@ exports.getNextJob = async (req, res) => {
       {
         status: "pending",
         attemptCount: -1,
+        campaign: { $in: eligibleCampaignIds }, // Filtro de isolamento adicionado
       },
       { status: "processing" },
       { sort: { _id: 1 }, new: true },
