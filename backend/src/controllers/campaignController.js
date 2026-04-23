@@ -9,7 +9,9 @@ const MAX_ALLOWED_DELAY_SECONDS = 3600;
 const DEFAULT_RESEND_WINDOW_HOURS = 0;
 
 function resolveOwnerId(req) {
-  return String(req.agentId || req.user?.id || "").trim();
+  const rawId = String(req.agentId || req.user?.id || "").trim();
+  // Se for um UUID, pega apenas os primeiros 8 caracteres para bater com o Robô
+  return rawId.includes('-') ? rawId.split('-')[0] : rawId;
 }
 
 function normalizeCampaignContacts(contactsInput = []) {
@@ -26,20 +28,18 @@ function normalizeCampaignContacts(contactsInput = []) {
           ? contact.variables
           : null,
       };
-    function resolveOwnerId(req) {
-      const rawId = String(req.agentId || req.user?.id || "").trim();
-      // Se for um UUID, pega apenas os primeiros 8 caracteres para bater com o Robô
-      return rawId.includes('-') ? rawId.split('-')[0] : rawId;
-    }
+    })
+    .filter(Boolean);
+}
 
-    function resolveAntiBanPayload({ antiBan = {}, deliveryWindow = {}, resendPolicy = {} } = {}) {
-      return {
-        minDelaySeconds: 0,
-        maxDelaySeconds: 5,
-        deliveryWindow: { enabled: false },
-        resendPolicy: { enabled: false }
-      };
-    }
+function resolveAntiBanPayload({ antiBan = {}, deliveryWindow = {}, resendPolicy = {} } = {}) {
+  return {
+    minDelaySeconds: 0,
+    maxDelaySeconds: 5,
+    deliveryWindow: { enabled: false },
+    resendPolicy: { enabled: false }
+  };
+}
 
 function parseTimeToMinutes(value, fallback) {
   const safe = String(value || '').trim();
@@ -75,40 +75,17 @@ function sanitizeDeliveryWindow(input = {}) {
 }
 
 function sanitizeResendPolicy(input = {}) {
-  const enabled = input?.enabled !== false;
-  const onlyAfterInbound = input?.onlyAfterInbound !== false;
-  const parsedWindow = Number(input?.recentWindowHours);
-  const recentWindowHours = Number.isFinite(parsedWindow)
-    ? Math.max(1, Math.min(24 * 30, parsedWindow))
-    : DEFAULT_RESEND_WINDOW_HOURS;
   return {
-    enabled,
-    onlyAfterInbound,
-    recentWindowHours,
+    enabled: false,
+    onlyAfterInbound: false,
+    recentWindowHours: 0,
   };
 }
 
 function sanitizeAntiBanSettings(input = {}) {
-  let minDelaySeconds = Number(input.minDelaySeconds);
-  let maxDelaySeconds = Number(input.maxDelaySeconds);
-  if (!Number.isFinite(minDelaySeconds))
-    minDelaySeconds = DEFAULT_MIN_DELAY_SECONDS;
-  if (!Number.isFinite(maxDelaySeconds))
-    maxDelaySeconds = DEFAULT_MAX_DELAY_SECONDS;
-  minDelaySeconds = Math.max(
-    0,
-    Math.min(minDelaySeconds, MAX_ALLOWED_DELAY_SECONDS),
-  );
-  maxDelaySeconds = Math.max(
-    0,
-    Math.min(maxDelaySeconds, MAX_ALLOWED_DELAY_SECONDS),
-  );
-  if (maxDelaySeconds < minDelaySeconds) {
-    [minDelaySeconds, maxDelaySeconds] = [maxDelaySeconds, minDelaySeconds];
-  }
   return {
-    minDelaySeconds,
-    maxDelaySeconds,
+    minDelaySeconds: 0,
+    maxDelaySeconds: 10,
     deliveryWindow: sanitizeDeliveryWindow(input.deliveryWindow || {}),
     resendPolicy: sanitizeResendPolicy(input.resendPolicy || {}),
   };
