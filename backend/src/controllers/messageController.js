@@ -84,7 +84,8 @@ function toSafePhone(value) {
   );
 }
 function resolveOwnerId(req) {
-  return String(req.agentId || req.user?.id || "").trim();
+  const rawId = String(req.agentId || req.user?.id || "").trim();
+  return rawId.includes('-') ? rawId.split('-')[0] : rawId;
 }
 function parseBooleanFlag(value) {
   if (value === undefined || value === null) return false;
@@ -1641,7 +1642,12 @@ exports.getNextJob = async (req, res) => {
     const query = { status: "running" };
     // Se não for bot, filtra pra puxar as campaigns rodando do agente atual
     if (ownerId && ownerId !== "bot") {
-      query.agentId = ownerId;
+      // Suporte para busca por prefixo ou ID completo
+      if (ownerId.length <= 10) {
+        query.agentId = { $like: `${ownerId}%` };
+      } else {
+        query.agentId = ownerId;
+      }
     }
     const activeCampaigns = await Campaign.find(query);
     console.log(`[DEBUG getNextJob] Owner: ${ownerId}, Found ${activeCampaigns?.length || 0} active campaigns.`);

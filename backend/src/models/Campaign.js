@@ -80,7 +80,13 @@ class CampaignModel {
   static async find(query = {}) {
     let q = supabaseAdmin.from("campaigns").select("*");
     
-    if (query.agentId) q = q.eq("agent_id", query.agentId);
+    if (query.agentId) {
+      if (typeof query.agentId === 'object' && query.agentId.$like) {
+        q = q.ilike("agent_id", query.agentId.$like.replace('%', '*'));
+      } else {
+        q = q.eq("agent_id", query.agentId);
+      }
+    }
     if (query.tenantId) q = q.eq("tenant_id", query.tenantId);
     if (query.status) q = q.eq("status", query.status);
     if (query._id) q = q.eq("id", query._id);

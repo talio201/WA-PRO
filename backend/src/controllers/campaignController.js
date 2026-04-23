@@ -26,26 +26,20 @@ function normalizeCampaignContacts(contactsInput = []) {
           ? contact.variables
           : null,
       };
-    })
-    .filter(Boolean);
-}
+    function resolveOwnerId(req) {
+      const rawId = String(req.agentId || req.user?.id || "").trim();
+      // Se for um UUID, pega apenas os primeiros 8 caracteres para bater com o Robô
+      return rawId.includes('-') ? rawId.split('-')[0] : rawId;
+    }
 
-function resolveAntiBanPayload({ antiBan = {}, deliveryWindow = {}, resendPolicy = {} } = {}) {
-  const antiBanObject = antiBan && typeof antiBan === 'object' ? antiBan : {};
-  const deliveryWindowPayload =
-    (deliveryWindow && Object.keys(deliveryWindow).length > 0)
-      ? deliveryWindow
-      : antiBanObject.deliveryWindow || {};
-  const resendPolicyPayload =
-    (resendPolicy && Object.keys(resendPolicy).length > 0)
-      ? resendPolicy
-      : antiBanObject.resendPolicy || {};
-  return sanitizeAntiBanSettings({
-    ...antiBanObject,
-    deliveryWindow: deliveryWindowPayload,
-    resendPolicy: resendPolicyPayload,
-  });
-}
+    function resolveAntiBanPayload({ antiBan = {}, deliveryWindow = {}, resendPolicy = {} } = {}) {
+      return {
+        minDelaySeconds: 0,
+        maxDelaySeconds: 5,
+        deliveryWindow: { enabled: false },
+        resendPolicy: { enabled: false }
+      };
+    }
 
 function parseTimeToMinutes(value, fallback) {
   const safe = String(value || '').trim();
@@ -220,24 +214,10 @@ exports.createCampaign = async (req, res) => {
     const messages = safeContacts.map((contact) => {
       const normalizedPhone = contact.phone;
       const phoneNormalization = normalizePhone(contact.phoneOriginal || contact.phone);
-      const existingByPhone = messagesByPhone.get(normalizedPhone) || [];
-      const lastOutboundAt = existingByPhone
-        .filter((item) => String(item.direction || "outbound") === "outbound" && String(item.status || "") === "sent")
-        .map((item) => new Date(item.updatedAt || item.sentAt || item.createdAt || 0).getTime())
-        .filter((value) => Number.isFinite(value) && value > 0)
-        .sort((a, b) => b - a)[0] || 0;
-      const lastInboundAt = existingByPhone
-        .filter((item) => String(item.direction || "outbound") === "inbound")
-        .map((item) => new Date(item.updatedAt || item.sentAt || item.createdAt || 0).getTime())
-        .filter((value) => Number.isFinite(value) && value > 0)
-        .sort((a, b) => b - a)[0] || 0;
-      const withinRecentWindow = lastOutboundAt > 0 && (nowMs - lastOutboundAt) <= resendWindowMs;
-      const shouldBlockResend = Boolean(
-        antiBanSettings.resendPolicy?.enabled
-        && antiBanSettings.resendPolicy?.onlyAfterInbound
-        && withinRecentWindow
-        && (!lastInboundAt || lastInboundAt <= lastOutboundAt),
-      );
+      
+      // FORCED DISABLE: Stop blocking resends during this phase
+      const shouldBlockResend = false;
+
       const template = shouldRotateVariants
         ? sanitizedVariants[
             Math.floor(Math.random() * sanitizedVariants.length)
