@@ -6,7 +6,7 @@ const { emitRealtimeEvent } = require("../realtime/realtime");
 const DEFAULT_MIN_DELAY_SECONDS = 0;
 const DEFAULT_MAX_DELAY_SECONDS = 120;
 const MAX_ALLOWED_DELAY_SECONDS = 3600;
-const DEFAULT_RESEND_WINDOW_HOURS = 72;
+const DEFAULT_RESEND_WINDOW_HOURS = 0;
 
 function resolveOwnerId(req) {
   return String(req.agentId || req.user?.id || "").trim();
