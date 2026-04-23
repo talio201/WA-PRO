@@ -268,8 +268,13 @@ exports.getCampaigns = async (req, res) => {
         { agentId: { $like: `${ownerId}%` } }
       ]
     };
-    const campaigns = await Campaign.find(query).sort({ createdAt: -1 });
-    res.json(campaigns);
+    const campaigns = await Campaign.find(query);
+    const sortedCampaigns = (Array.isArray(campaigns) ? campaigns : []).sort((a, b) => {
+      const aTime = new Date(a.createdAt || 0).getTime();
+      const bTime = new Date(b.createdAt || 0).getTime();
+      return bTime - aTime;
+    });
+    res.json(sortedCampaigns);
   } catch (err) {
     console.error(err.message);
     const errorResponse = buildServerErrorResponse(err);
