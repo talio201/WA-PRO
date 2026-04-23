@@ -330,7 +330,11 @@ async function resolveRelatedCampaignId({
   relatedMessages = [],
   ownerAgentId = "",
 }) {
-  if (preferredCampaignId) return preferredCampaignId;
+  if (preferredCampaignId) {
+    const CampaignModel = require("../models/Campaign");
+    const check = await CampaignModel.findOne({ _id: preferredCampaignId, agentId: ownerAgentId });
+    if (check) return preferredCampaignId;
+  }
   const history = Array.isArray(relatedMessages) ? relatedMessages : [];
   const fromHistory =
     [...history]
@@ -578,8 +582,9 @@ exports.getHelpdeskQueues = async (req, res) => {
 
     let allMessages = await Message.find({});
     if (ownerId && ownerId !== "bot") {
+      const strCampaignIds = agentCampaignIds.map(String);
       allMessages = allMessages.filter((item) =>
-        agentCampaignIds.includes(item.campaign),
+        strCampaignIds.includes(String(item.campaign)),
       );
     }
 
@@ -1939,7 +1944,12 @@ exports.getMessageAudit = async (req, res) => {
 };
 exports.updateMessage = async (req, res) => {
   try {
-    const message = await Message.findById(req.params.id);
+    const ownerId = resolveOwnerId(req);
+    const query = { _id: req.params.id };
+    if (ownerId !== "admin" && ownerId !== "system" && ownerId !== "bot") {
+      query.agentId = ownerId;
+    }
+    const message = await Message.findOne(query);
     if (!message) {
       return res.status(404).json({ msg: "Message not found" });
     }
@@ -1963,7 +1973,12 @@ exports.updateMessage = async (req, res) => {
 };
 exports.retryMessage = async (req, res) => {
   try {
-    const message = await Message.findById(req.params.id);
+    const ownerId = resolveOwnerId(req);
+    const query = { _id: req.params.id };
+    if (ownerId !== "admin" && ownerId !== "system" && ownerId !== "bot") {
+      query.agentId = ownerId;
+    }
+    const message = await Message.findOne(query);
     if (!message) {
       return res.status(404).json({ msg: "Message not found" });
     }

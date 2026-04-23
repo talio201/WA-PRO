@@ -1,93 +1,55 @@
 # Dependencies
 node_modules/
 backend/node_modules/
-extension/node_modules/
+webapp/node_modules/
+python_bot/venv/
 
-# Build artifacts
-dist/
-extension/dist/
-
-# Runtime data
-backend/uploads/
-backend/data/db.json
-backend/data/admin-settings.json
-
-# Environment and credentials
+# Environment and Secrets
 .env
 .env.*
 !.env.example
-backend/.env
-backend/.env.*
-!backend/.env.example
-extension/.env
-extension/.env.*
-python_bot/.env.*
-
-# Secrets and credentials (strict)
-*.pem
-*.key
-*.p12
-*.pfx
-*.crt
-*.cer
-*.jks
-*.keystore
-*.kdbx
-*.ovpn
-*.asc
-*.gpg
-*.kubeconfig
-id_rsa
-id_rsa.pub
-id_ed25519
-id_ed25519.pub
-*secret*
-*token*
-*credential*
-*credentials*
-*apikey*
-*api_key*
-*service-account*.json
-*service_account*.json
+*.local
 secrets.*
 credentials.*
-
-# Local databases and dumps
+*.pem
+*.key
+*.cert
 *.sqlite
-*.sqlite3
 *.db
-*.bak
+*.sql
+*.backup
 *.dump
-*.sql.gz
-*.tgz
-*.zip
-*.7z
 
-# macOS
-.DS_Store
+# WhatsApp Session Data (CRITICAL: DO NOT COMMIT)
+auth_info/
+whatsapp_session/
+sessions/
+python_bot/whatsapp_session/
+python_bot/sessions/
 
-# Local debug logs
-send_flow.log
+# Build artifacts
+dist/
+build/
+.next/
+out/
+
+# IDE & OS Caches
+.idea/
+.vscode/
 *.log
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
-pnpm-debug.log*
+.DS_Store
+Thumbs.db
 
-extension/.git
-extension/.git_nested_backup
+# Production Data
+backend/data/*.json
+backend/uploads/
+webapp/public/runtimeConfig.js
 
-# Python Environment & Puppeteer Sessions
-python_bot/whatsapp_session/
-python_bot/__pycache__/
-python_bot/*.pyc
-python_bot/.env
-python_bot/venv/
-
-# SSH Keys
-ed25519
-ed25519.pub
-
-# Python/cache artifacts
+# Python artifacts
 __pycache__/
 *.py[cod]
+*$py.class
+.pytest_cache/

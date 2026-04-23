@@ -1,72 +1,189 @@
-const LocalDB = require("../config/localDb");
+const { supabaseAdmin } = require("../config/supabase");
+
 class MessageModel {
-  static insertMany(items) {
-    const db = new LocalDB("messages");
-    return db.insertMany(items);
+  constructor(data = {}) {
+    Object.assign(this, data);
   }
-  static find(query) {
-    const db = new LocalDB("messages");
-    return db.find(query);
+
+  static fromDb(row) {
+    if (!row) return null;
+    const model = new MessageModel({
+      id: row.id,
+      _id: row.id,
+      agentId: row.agent_id,
+      tenantId: row.tenant_id,
+      campaignId: row.campaign_id,
+      campaign: row.campaign_id, // Compatibility
+      phone: row.phone,
+      phoneOriginal: row.phone_original,
+      searchTerms: row.search_terms,
+      name: row.name,
+      variables: row.variables,
+      processedMessage: row.processed_message,
+      status: row.status,
+      direction: row.direction,
+      attemptCount: row.attempt_count,
+      error: row.error,
+      lastError: row.last_error,
+      audit: row.audit,
+      sentAt: row.sent_at,
+      lastAttemptAt: row.last_attempt_at,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at
+    });
+
+    model.save = async function saveMessage() {
+      const payload = {
+        agent_id: model.agentId,
+        tenant_id: model.tenantId,
+        campaign_id: model.campaignId || model.campaign,
+        phone: model.phone,
+        phone_original: model.phoneOriginal,
+        search_terms: model.searchTerms,
+        name: model.name,
+        variables: model.variables,
+        processed_message: model.processedMessage,
+        status: model.status,
+        direction: model.direction,
+        attempt_count: model.attemptCount,
+        error: model.error,
+        last_error: model.lastError,
+        audit: model.audit,
+        sent_at: model.sentAt,
+        last_attempt_at: model.lastAttemptAt
+      };
+      const { data: updated, error } = await supabaseAdmin
+        .from("messages")
+        .update(payload)
+        .eq("id", model.id)
+        .select()
+        .single();
+      
+      if (error) throw error;
+      Object.assign(model, MessageModel.fromDb(updated));
+      return model;
+    };
+
+    return model;
   }
+
+  static async insertMany(items) {
+    const payloads = items.map(item => ({
+      agent_id: item.agentId || item.agent_id,
+      tenant_id: item.tenantId || item.tenant_id || item.agentId || item.agent_id,
+      campaign_id: item.campaignId || item.campaign,
+      phone: item.phone,
+      phone_original: item.phoneOriginal || item.phone_original,
+      search_terms: item.searchTerms || item.search_terms || [],
+      name: item.name,
+      variables: item.variables || {},
+      status: item.status || 'pending',
+      direction: item.direction || 'outbound'
+    }));
+
+    const { data, error } = await supabaseAdmin
+      .from("messages")
+      .insert(payloads)
+      .select();
+
+    if (error) throw error;
+    return (data || []).map(row => MessageModel.fromDb(row));
+  }
+
+  static async find(query = {}) {
+    let q = supabaseAdmin.from("messages").select("*");
+    
+    if (query.agentId) q = q.eq("agent_id", query.agentId);
+    if (query.tenantId) q = q.eq("tenant_id", query.tenantId);
+    if (query.campaignId) q = q.eq("campaign_id", query.campaignId);
+    if (query.campaign) q = q.eq("campaign_id", query.campaign);
+    if (query.status) q = q.eq("status", query.status);
+    if (query.phone) q = q.eq("phone", query.phone);
+
+    const { data, error } = await q.order("created_at", { ascending: false });
+    if (error) throw error;
+    return (data || []).map(row => MessageModel.fromDb(row));
+  }
+
   static findOneAndUpdate(query, update, options) {
-    const db = new LocalDB("messages");
-    const operation = db.findOneAndUpdate(query, update, options);
+    // This is a complex mock for Mongoose/LocalDB style findOneAndUpdate
+    const operation = (async () => {
+      let q = supabaseAdmin.from("messages").select("*");
+      if (query.agentId) q = q.eq("agent_id", query.agentId);
+      if (query.campaign) q = q.eq("campaign_id", query.campaign);
+      if (query.status) q = q.eq("status", query.status);
+      if (query._id) q = q.eq("id", query._id);
+
+      const { data: existing } = await q.limit(1).single();
+      if (!existing) return null;
+
+      const payload = {};
+      if (update.status) payload.status = update.status;
+      if (update.error !== undefined) payload.error = update.error;
+      if (update.sentAt) payload.sent_at = update.sentAt;
+      if (update.processedMessage) payload.processed_message = update.processedMessage;
+      if (update.$inc && update.$inc.attemptCount) payload.attempt_count = (existing.attempt_count || 0) + update.$inc.attemptCount;
+
+      const { data: updated, error } = await supabaseAdmin
+        .from("messages")
+        .update(payload)
+        .eq("id", existing.id)
+        .select()
+        .single();
+      
+      if (error) throw error;
+      return MessageModel.fromDb(updated);
+    })();
+
     const buildThenable = (promise) => ({
       then: (onFulfilled, onRejected) => promise.then(onFulfilled, onRejected),
       catch: (onRejected) => promise.catch(onRejected),
     });
+
     return {
       populate: (field, selectExpression = "") => {
-        const populated = Promise.resolve(operation).then(async (doc) => {
+        const populated = operation.then(async (doc) => {
           if (!doc || field !== "campaign") return doc;
           const Campaign = require("./Campaign");
-          const campaign = await Campaign.findById(doc.campaign);
+          const campaign = await Campaign.findById(doc.campaignId || doc.campaign);
           if (!campaign) {
             doc.campaign = null;
             return doc;
           }
-          const selectedFields = String(selectExpression || "")
-            .split(/\s+/)
-            .map((item) => item.trim())
-            .filter(Boolean);
-          if (selectedFields.length === 0) {
-            doc.campaign = campaign;
-            return doc;
-          }
-          const projection = { _id: campaign._id };
-          selectedFields.forEach((fieldName) => {
-            if (Object.prototype.hasOwnProperty.call(campaign, fieldName)) {
-              projection[fieldName] = campaign[fieldName];
-            }
-          });
-          doc.campaign = projection;
+          // Simple projection logic
+          doc.campaign = campaign;
           return doc;
         });
         return buildThenable(populated);
       },
-      then: (onFulfilled, onRejected) =>
-        Promise.resolve(operation).then(onFulfilled, onRejected),
-      catch: (onRejected) => Promise.resolve(operation).catch(onRejected),
+      then: (onFulfilled, onRejected) => operation.then(onFulfilled, onRejected),
+      catch: (onRejected) => operation.catch(onRejected),
     };
   }
-  static findById(id) {
-    const db = new LocalDB("messages");
-    return db.findById(id).then((doc) => {
-      if (!doc) return null;
-      doc.save = async function saveMessage() {
-        const dbInstance = new LocalDB("messages");
-        const payload = { ...doc };
-        delete payload.save;
-        const updated = await dbInstance.findByIdAndUpdate(doc._id, payload);
-        Object.assign(doc, updated || {});
-        return doc;
-      };
-      return doc;
-    });
+
+  static async findById(id) {
+    if (!id) return null;
+    const { data, error } = await supabaseAdmin
+      .from("messages")
+      .select("*")
+      .eq("id", id)
+      .single();
+    
+    if (error || !data) return null;
+    return MessageModel.fromDb(data);
   }
-  static deleteMany(query) {
-    const db = new LocalDB("messages");
-    return db.deleteMany(query);
+
+  static async deleteMany(query = {}) {
+    let q = supabaseAdmin.from("messages").delete();
+    if (query.agentId) q = q.eq("agent_id", query.agentId);
+    if (query.tenantId) q = q.eq("tenant_id", query.tenantId);
+    if (query.campaignId) q = q.eq("campaign_id", query.campaignId);
+    if (query.campaign) q = q.eq("campaign_id", query.campaign);
+    
+    const { error } = await q;
+    if (error) throw error;
+    return true;
   }
 }
+
 module.exports = MessageModel;

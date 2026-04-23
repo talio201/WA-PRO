@@ -329,8 +329,8 @@ exports.bootstrapAdminAccess = async (req, res) => {
  */
 exports.localLogin = async (req, res) => {
   try {
-    if (!isLocalDevAuthEnabled()) {
-      return res.status(404).json({ msg: 'Endpoint not available.' });
+    if (process.env.NODE_ENV === 'production' || !isLocalDevAuthEnabled()) {
+      return res.status(404).json({ msg: 'Endpoint not available in production.' });
     }
 
     const email = safeString(req.body?.email).toLowerCase();

@@ -1,61 +1,99 @@
-const LocalDB = require("../config/localDb");
+const { supabaseAdmin } = require("../config/supabase");
 
 class SupportProtocolModel {
   constructor(data = {}) {
     Object.assign(this, data);
   }
 
-  save() {
-    const db = new LocalDB("support_protocols");
-    if (this._id) {
-      const payload = { ...this };
-      delete payload.save;
-      return db.findByIdAndUpdate(this._id, payload).then((saved) => {
-        Object.assign(this, saved || {});
-        return this;
-      });
-    }
-    const createPayload = {
+  static fromDb(row) {
+    if (!row) return null;
+    return new SupportProtocolModel({
+      id: row.id,
+      _id: row.id,
+      tenantId: row.tenant_id,
+      phone: row.phone,
+      campaignId: row.campaign_id,
+      protocolNumber: row.protocol_number,
+      customerName: row.customer_name,
+      subject: row.subject,
+      description: row.description,
+      priority: row.priority,
+      status: row.status,
+      assignedTo: row.assigned_to,
+      openedBy: row.opened_by,
+      openedAt: row.opened_at,
+      closedAt: row.closed_at,
+      metadata: row.metadata,
+      updatedAt: row.updated_at
+    });
+  }
+
+  async save() {
+    const payload = {
+      tenant_id: this.tenantId,
       phone: this.phone || "",
-      campaignId: this.campaignId || null,
-      protocolNumber: this.protocolNumber || "",
-      customerName: this.customerName || "",
+      campaign_id: this.campaignId || null,
+      protocol_number: this.protocolNumber || "",
+      customer_name: this.customerName || "",
       subject: this.subject || "",
       description: this.description || "",
       priority: this.priority || "normal",
       status: this.status || "open",
-      assignedTo: this.assignedTo || "",
-      openedBy: this.openedBy || "",
-      openedAt: this.openedAt || new Date(),
-      closedAt: this.closedAt || null,
-      updatedAt: this.updatedAt || new Date(),
-      metadata: this.metadata || {},
+      assigned_to: this.assignedTo || "",
+      opened_by: this.openedBy || "",
+      opened_at: this.openedAt || new Date(),
+      closed_at: this.closedAt || null,
+      metadata: this.metadata || {}
     };
-    return db.create(createPayload).then((saved) => {
-      Object.assign(this, saved || {});
+
+    if (this.id || this._id) {
+      const id = this.id || this._id;
+      const { data, error } = await supabaseAdmin
+        .from("support_protocols")
+        .update(payload)
+        .eq("id", id)
+        .select()
+        .single();
+      if (error) throw error;
+      Object.assign(this, SupportProtocolModel.fromDb(data));
       return this;
-    });
+    }
+
+    const { data, error } = await supabaseAdmin
+      .from("support_protocols")
+      .insert(payload)
+      .select()
+      .single();
+    if (error) throw error;
+    Object.assign(this, SupportProtocolModel.fromDb(data));
+    return this;
   }
 
-  static find(query = {}) {
-    const db = new LocalDB("support_protocols");
-    return db.find(query);
+  static async find(query = {}) {
+    let q = supabaseAdmin.from("support_protocols").select("*");
+    if (query.tenantId) q = q.eq("tenant_id", query.tenantId);
+    if (query.phone) q = q.eq("phone", query.phone);
+    if (query.status) q = q.eq("status", query.status);
+    
+    const { data, error } = await q.order("opened_at", { ascending: false });
+    if (error) throw error;
+    return (data || []).map(row => SupportProtocolModel.fromDb(row));
   }
 
-  static findById(id) {
-    const db = new LocalDB("support_protocols");
-    return db.findById(id).then((doc) => {
-      if (!doc) return null;
-      doc.save = async function saveSupportProtocol() {
-        const dbInstance = new LocalDB("support_protocols");
-        const payload = { ...doc };
-        delete payload.save;
-        const updated = await dbInstance.findByIdAndUpdate(doc._id, payload);
-        Object.assign(doc, updated || {});
-        return doc;
-      };
-      return doc;
-    });
+  static async findById(id) {
+    if (!id) return null;
+    const { data, error } = await supabaseAdmin
+      .from("support_protocols")
+      .select("*")
+      .eq("id", id)
+      .single();
+    if (error || !data) return null;
+    const model = SupportProtocolModel.fromDb(data);
+    
+    model.save = async function saveSupportProtocol() {
+      return model.save();
+    };
+    return model;
   }
 }
 

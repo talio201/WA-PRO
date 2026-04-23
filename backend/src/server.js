@@ -272,7 +272,7 @@ app.get('/api/account/status', (req, res) => {
 
 function requireActiveSaasAccount(req, res, next) {
   // Allow API keys (bot authentication)
-  if (req.permissions?.allowCampaigns === true) return next(); // API key authenticated
+  if (req.authKind === 'api-key' || req.authKind === 'bot-client') return next(); // API key authenticated
   if (req.authKind === 'installation-session') {
     return res.status(403).json({
       msg: 'Instalação legada não autorizada. Faça login via Supabase.',

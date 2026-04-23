@@ -84,7 +84,14 @@ const requireAuth = async (req, res, next) => {
     }
     if (authResult?.kind === 'api-key') {
       req.authKind = authResult.kind;
-      req.agentId = authResult.agentId;
+      // Force requirement of x-agent-id header when using master API key to prevent 'bot' collision
+      if (!agentId || agentId === 'bot') {
+        return res.status(400).json({ 
+          msg: "Missing or invalid x-agent-id header. For multi-tenant isolation, provide a unique agentId.",
+          code: "AGENT_ID_REQUIRED"
+        });
+      }
+      req.agentId = agentId;
       req.permissions = authResult.permissions || {};
       return next();
     }

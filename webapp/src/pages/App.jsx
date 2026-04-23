@@ -1,37 +1,33 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { ChartBarSquareIcon, ChatBubbleLeftRightIcon, RocketLaunchIcon, UsersIcon, Cog6ToothIcon } from '@heroicons/react/24/outline';
+import React, { useEffect, useState } from 'react';
+import { 
+  ChartBarSquareIcon, 
+  ChatBubbleLeftRightIcon, 
+  RocketLaunchIcon, 
+  UsersIcon, 
+  Cog6ToothIcon,
+  ChevronLeftIcon,
+  ChevronRightIcon,
+  ArrowRightOnRectangleIcon,
+  QrCodeIcon
+} from '@heroicons/react/24/outline';
 import { useAuth } from '../auth/AuthContext.jsx';
 import { fetchBotStatus } from '../utils/api.js';
 
-// Import pages directly from local directory
+// Import pages
+import Dashboard from './Dashboard.jsx';
 import Campaigns from './Campaigns.jsx';
 import NewCampaign from './NewCampaign.jsx';
 import Inbox from './Inbox.jsx';
 import Contacts from './Contacts.jsx';
-
-// Webapp-native Settings (lighter version without Chrome-specific features)
 import Settings from './Settings.jsx';
 
 const tabs = [
-  { id: 'dashboard', label: 'Dashboard', icon: <ChartBarSquareIcon className="w-6 h-6" /> },
-  { id: 'inbox', label: 'Atendimentos', icon: <ChatBubbleLeftRightIcon className="w-6 h-6" /> },
-  { id: 'new-campaign', label: 'Nova Campanha', icon: <RocketLaunchIcon className="w-6 h-6" /> },
-  { id: 'contacts', label: 'Contatos', icon: <UsersIcon className="w-6 h-6" /> },
-  { id: 'settings', label: 'Configurações', icon: <Cog6ToothIcon className="w-6 h-6" /> },
+  { id: 'dashboard', label: 'Visão Geral', icon: <ChartBarSquareIcon className="w-5 h-5" /> },
+  { id: 'campaigns', label: 'Campanhas', icon: <RocketLaunchIcon className="w-5 h-5" /> },
+  { id: 'inbox', label: 'Atendimentos', icon: <ChatBubbleLeftRightIcon className="w-5 h-5" /> },
+  { id: 'contacts', label: 'Contatos', icon: <UsersIcon className="w-5 h-5" /> },
+  { id: 'settings', label: 'Configurações', icon: <Cog6ToothIcon className="w-5 h-5" /> },
 ];
-
-function isValidQrImageSource(value) {
-  const source = String(value || '').trim();
-  if (!source) return false;
-  if (source.startsWith('data:image/')) return true;
-  if (source.startsWith('blob:')) return true;
-  try {
-    const parsed = new URL(source);
-    return parsed.protocol === 'http:' || parsed.protocol === 'https:';
-  } catch (_error) {
-    return false;
-  }
-}
 
 export default function App() {
   const { supabase, session } = useAuth();
@@ -39,13 +35,12 @@ export default function App() {
   const [botState, setBotState] = useState({ status: 'DISCONNECTED', qrCode: null });
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
-  // Sync browser URL hash with active tab
   useEffect(() => {
     const hash = location.hash.replace('#', '');
-    if (tabs.find((t) => t.id === hash)) setActiveTab(hash);
+    if (tabs.find((t) => t.id === hash) || hash === 'new-campaign') setActiveTab(hash);
     const onHash = () => {
       const h = location.hash.replace('#', '');
-      if (tabs.find((t) => t.id === h)) setActiveTab(h);
+      if (tabs.find((t) => t.id === h) || h === 'new-campaign') setActiveTab(h);
     };
     window.addEventListener('hashchange', onHash);
     return () => window.removeEventListener('hashchange', onHash);
@@ -56,9 +51,7 @@ export default function App() {
     setActiveTab(tabId);
   };
 
-  // Poll bot status every 4 seconds
   useEffect(() => {
-    let id;
     const poll = async () => {
       try {
         const res = await fetchBotStatus();
@@ -66,7 +59,7 @@ export default function App() {
       } catch (_) {}
     };
     poll();
-    id = setInterval(poll, 4000);
+    const id = setInterval(poll, 4000);
     return () => clearInterval(id);
   }, []);
 
@@ -76,109 +69,110 @@ export default function App() {
 
   const agentLabel = session?.user?.user_metadata?.agentId ||
     session?.user?.email?.split('@')[0] ||
-    'usuário';
+    'Usuário';
 
   const renderContent = () => {
     switch (activeTab) {
-      case 'dashboard': return <Campaigns />;
+      case 'dashboard': return <Dashboard />;
+      case 'campaigns': return <Campaigns />;
       case 'inbox': return <Inbox />;
-      case 'new-campaign': return <NewCampaign onCancel={() => navigateTo('dashboard')} />;
+      case 'new-campaign': return <NewCampaign onCancel={() => navigateTo('campaigns')} />;
       case 'contacts': return <Contacts />;
       case 'settings': return <Settings />;
-      default: return <Campaigns />;
+      default: return <Dashboard />;
     }
   };
 
-  const botColor = botState.status === 'LOGGED_IN' ? 'bg-emerald-400' :
-    botState.status === 'AWAITING_QR' ? 'bg-amber-400' : 'bg-rose-400';
-  const qrImageSource = isValidQrImageSource(botState.qrCode) ? String(botState.qrCode).trim() : '';
+  const botStatusColor = botState.status === 'LOGGED_IN' ? 'bg-emerald-500' :
+    botState.status === 'AWAITING_QR' ? 'bg-amber-500 shadow-[0_0_10px_rgba(245,158,11,0.5)]' : 'bg-rose-500';
 
   return (
-    <div className="crm-app flex h-screen min-h-0 text-slate-100 overflow-hidden">
-      {/* Sidebar */}
-      <aside className={`crm-sidebar flex flex-col ${sidebarCollapsed ? 'w-16' : 'w-60'} shrink-0 min-h-0 backdrop-blur-md transition-all duration-200`}>
-        <div className={`flex items-center ${sidebarCollapsed ? 'justify-center' : 'justify-between'} px-2 py-4 border-b border-white/10`}>
-          <div>
-            <h1 className={`font-bold text-base text-slate-50 tracking-tight transition-all duration-200 ${sidebarCollapsed ? 'hidden' : ''}`}>EmidiaWhats</h1>
-            {!sidebarCollapsed && <p className="text-xs text-slate-400 mt-0.5 truncate">{agentLabel}</p>}
-          </div>
-          <button
-            className="p-2 rounded-lg hover:bg-white/10 transition ml-2 text-slate-200"
-            title={sidebarCollapsed ? 'Expandir menu' : 'Recolher menu'}
-            onClick={() => setSidebarCollapsed((v) => !v)}
+    <div className="flex h-screen bg-slate-950 text-slate-100 overflow-hidden">
+      {/* Sidebar Navigation */}
+      <aside className={`crm-sidebar flex flex-col transition-all duration-300 ease-in-out border-r border-white/5 ${sidebarCollapsed ? 'w-20' : 'w-72'} h-full relative z-20`}>
+        {/* Header */}
+        <div className="p-6 flex items-center justify-between">
+          {!sidebarCollapsed && (
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 bg-indigo-600 rounded-xl flex items-center justify-center shadow-lg shadow-indigo-600/20">
+                <RocketLaunchIcon className="w-5 h-5 text-white" />
+              </div>
+              <h1 className="font-bold text-lg tracking-tight">Emidia<span className="text-indigo-500">Pro</span></h1>
+            </div>
+          )}
+          <button 
+            onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+            className="p-2 hover:bg-white/5 rounded-xl transition-colors text-slate-400 hover:text-white"
           >
-            <span className="text-lg">{sidebarCollapsed ? '»' : '«'}</span>
+            {sidebarCollapsed ? <ChevronRightIcon className="w-5 h-5" /> : <ChevronLeftIcon className="w-5 h-5" />}
           </button>
         </div>
 
-        <nav className={`flex-1 min-h-0 overflow-y-auto py-4 space-y-0.5 ${sidebarCollapsed ? 'px-1' : 'px-2'}`}>
+        {/* User Profile */}
+        {!sidebarCollapsed && (
+          <div className="px-6 mb-8">
+            <div className="p-4 rounded-2xl bg-white/5 border border-white/5">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Operador</p>
+              <p className="text-sm font-semibold text-white mt-1 truncate">{agentLabel}</p>
+              <div className="mt-3 flex items-center gap-2">
+                <span className={`w-2 h-2 rounded-full ${botStatusColor} animate-pulse`} />
+                <span className="text-[10px] text-slate-400 font-medium">{botState.status}</span>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Tabs */}
+        <nav className="flex-1 px-4 space-y-1">
           {tabs.map((tab) => (
             <button
               key={tab.id}
               onClick={() => navigateTo(tab.id)}
-              className={`crm-nav-btn w-full text-left flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-medium transition-all ${
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all group ${
                 activeTab === tab.id
-                  ? 'crm-nav-btn-active text-white shadow-sm'
-                  : 'text-slate-300 hover:bg-white/5'
-              } ${sidebarCollapsed ? 'justify-center px-2' : ''}`}
+                  ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/20'
+                  : 'text-slate-400 hover:text-white hover:bg-white/5'
+              } ${sidebarCollapsed ? 'justify-center' : ''}`}
             >
-              <span className="text-base flex items-center justify-center">{tab.icon}</span>
-              {!sidebarCollapsed && tab.label}
+              <span className={`${activeTab === tab.id ? 'text-white' : 'text-slate-500 group-hover:text-indigo-400'} transition-colors`}>
+                {tab.icon}
+              </span>
+              {!sidebarCollapsed && <span>{tab.label}</span>}
+              {activeTab === tab.id && !sidebarCollapsed && (
+                <div className="ml-auto w-1.5 h-1.5 rounded-full bg-white shadow-[0_0_8px_white]" />
+              )}
             </button>
           ))}
         </nav>
 
-        <div className={`${sidebarCollapsed ? 'px-1' : 'px-4'} py-4 border-t border-white/10 space-y-2`}>
-          {/* Bot status */}
-          <div className={`flex items-center gap-2 text-xs text-slate-400 ${sidebarCollapsed ? 'justify-center' : ''}`}>
-            <span className={`inline-block h-2 w-2 rounded-full ${botColor}`} />
-            {!sidebarCollapsed && <span>Bot: {botState.status}</span>}
-          </div>
-          {/* QR code if awaiting */}
-          {botState.status === 'AWAITING_QR' && qrImageSource && !sidebarCollapsed && (
-            <div className="rounded-xl border border-orange-400/30 bg-slate-950/80 p-2">
-              <p className="text-xs text-orange-200 mb-1 font-semibold">Escaneie o QR no WhatsApp</p>
-              <img src={qrImageSource} alt="QR Code" className="w-full rounded-lg border border-white/10 bg-white p-2" />
+        {/* Footer Actions */}
+        <div className="p-4 border-t border-white/5 space-y-2">
+          {botState.status === 'AWAITING_QR' && botState.qrCode && !sidebarCollapsed && (
+            <div className="p-3 rounded-2xl bg-amber-500/5 border border-amber-500/20 mb-4 animate-fade-in">
+               <div className="flex items-center gap-2 mb-2 text-amber-200">
+                  <QrCodeIcon className="w-4 h-4" />
+                  <span className="text-[10px] font-bold uppercase tracking-tight">Escaneie o QR</span>
+               </div>
+               <img src={botState.qrCode} alt="WhatsApp QR" className="w-full bg-white rounded-lg p-1.5" />
             </div>
           )}
-          {/* Version + logout */}
-          {!sidebarCollapsed && <p className="text-xs text-slate-500">v2.3.0 · Web</p>}
+          
           <button
             onClick={logout}
-            className={`w-full text-xs text-slate-400 hover:text-rose-400 transition text-left px-1 ${sidebarCollapsed ? 'justify-center flex' : ''}`}
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-slate-400 hover:text-rose-400 hover:bg-rose-500/5 transition-all ${sidebarCollapsed ? 'justify-center' : ''}`}
           >
-            {!sidebarCollapsed ? 'Sair' : <span title="Sair"><svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6A2.25 2.25 0 005.25 5.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15" /><path strokeLinecap="round" strokeLinejoin="round" d="M18 12H9m0 0l3-3m-3 3l3 3" /></svg></span>}
+            <ArrowRightOnRectangleIcon className="w-5 h-5" />
+            {!sidebarCollapsed && <span>Sair da conta</span>}
           </button>
         </div>
       </aside>
 
-      {/* Main content */}
-      <main className="crm-main flex-1 overflow-x-hidden overflow-y-auto min-w-0 min-h-0 relative isolate text-slate-100">
-        {botState.status === 'AWAITING_QR' && qrImageSource && (
-          <section className="mb-3 rounded-2xl border border-orange-400/30 bg-slate-950/80 p-3 md:p-4">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <h3 className="text-orange-200 font-semibold">Conectar WhatsApp</h3>
-                <p className="text-slate-300 text-sm">Escaneie este QR Code no WhatsApp Web para ativar o envio para sua conta.</p>
-              </div>
-              <button
-                onClick={async () => {
-                  try {
-                    const res = await fetchBotStatus();
-                    if (res) setBotState({ status: res.status || 'DISCONNECTED', qrCode: res.qrCode || null });
-                  } catch (_) {}
-                }}
-                className="px-3 py-1.5 text-xs rounded-lg bg-orange-400 text-slate-950 hover:bg-orange-300"
-              >
-                Atualizar QR
-              </button>
-            </div>
-            <div className="mt-3 flex justify-center">
-              <img src={qrImageSource} alt="QR Code WhatsApp" className="w-56 max-w-full rounded-xl border border-white/10 bg-white p-2 shadow-lg" />
-            </div>
-          </section>
-        )}
-        {renderContent()}
+      {/* Main Content Area */}
+      <main className="flex-1 overflow-y-auto relative bg-slate-950">
+        <div className="absolute top-0 left-0 w-full h-96 bg-gradient-to-b from-indigo-600/10 to-transparent pointer-events-none" />
+        <div className="relative z-10 max-w-7xl mx-auto">
+           {renderContent()}
+        </div>
       </main>
     </div>
   );

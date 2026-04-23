@@ -1,17 +1,15 @@
 {
+  "name": "emidia-saas-root",
+  "version": "1.0.0",
+  "private": true,
   "scripts": {
-    "dev": "npm --prefix backend run dev",
+    "install:all": "npm install --prefix backend && npm install --prefix webapp",
     "dev:backend": "npm --prefix backend run dev",
-    "dev:extension": "npm --prefix extension run dev",
-    "build:extension": "npm --prefix extension run build",
-    "security:audit": "./scripts/security/security_guard.sh",
-    "security:audit:fast": "./scripts/security/security_guard.sh --fast",
-    "security:hooks:install": "./scripts/security/install_hooks.sh"
+    "dev:webapp": "npm --prefix webapp run dev",
+    "dev:saas": "concurrently \"npm run dev:backend\" \"npm run dev:webapp\"",
+    "clean": "npm --prefix backend run clean && npm --prefix webapp run clean"
   },
-  "dependencies": {
-    "@heroicons/react": "^2.2.0",
-    "@tailwindcss/postcss": "^4.1.18",
-    "autoprefixer": "^10.4.24",
-    "tailwindcss": "^4.1.18"
+  "devDependencies": {
+    "concurrently": "^8.2.2"
   }
 }

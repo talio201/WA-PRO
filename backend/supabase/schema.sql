@@ -133,6 +133,30 @@ create trigger trg_contacts_updated_at
 before update on public.contacts
 for each row execute function public.set_updated_at();
 
+create table if not exists public.support_protocols (
+  id uuid primary key default gen_random_uuid(),
+  tenant_id text,
+  phone text not null,
+  campaign_id uuid references public.campaigns(id) on delete set null,
+  protocol_number text not null,
+  customer_name text,
+  subject text,
+  description text,
+  priority text not null default 'normal',
+  status text not null default 'open',
+  assigned_to text,
+  opened_by text,
+  opened_at timestamptz not null default timezone('utc', now()),
+  closed_at timestamptz,
+  metadata jsonb not null default '{}'::jsonb,
+  updated_at timestamptz not null default timezone('utc', now())
+);
+
+drop trigger if exists trg_support_protocols_updated_at on public.support_protocols;
+create trigger trg_support_protocols_updated_at
+before update on public.support_protocols
+for each row execute function public.set_updated_at();
+
 create index if not exists idx_campaigns_status on public.campaigns (status);
 create index if not exists idx_campaigns_agent_id on public.campaigns (agent_id);
 create index if not exists idx_campaigns_tenant_id on public.campaigns (tenant_id);
