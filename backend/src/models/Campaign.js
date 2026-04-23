@@ -80,30 +80,24 @@ class CampaignModel {
   static async find(query = {}) {
     let q = supabaseAdmin.from("campaigns").select("*");
     
-    if (query.$or) {
-      // Simula suporte básico para $or (muito usado no dashboard)
-      const conditions = query.$or.map(cond => {
-        const key = Object.keys(cond)[0];
-        const val = cond[key];
-        return `${key === 'agentId' ? 'agent_id' : key}.eq.${val}`;
-      }).join(',');
-      q = q.or(conditions);
-    } else {
-      if (query.agentId) {
-        if (typeof query.agentId === 'object' && query.agentId.$like) {
-          q = q.ilike("agent_id", query.agentId.$like.replace('%', '*'));
-        } else {
-          q = q.eq("agent_id", query.agentId);
-        }
-      }
+    // Simplificação total para garantir visibilidade
+    let targetId = query.agentId || (query.$or ? query.$or[0].agentId : null);
+    
+    if (targetId) {
+      // Se for objeto (prefixo), limpa pra string
+      const idStr = typeof targetId === 'object' ? targetId.$like.replace('%', '') : String(targetId);
+      // Busca por ID exato ou por prefixo (os primeiros 8 caracteres)
+      q = q.or(`agent_id.eq.${idStr},agent_id.ilike.${idStr.substring(0, 8)}*`);
     }
-    if (query.tenantId) q = q.eq("tenant_id", query.tenantId);
-    if (query.status) q = q.eq("status", query.status);
+
+    if (query.status && typeof query.status === 'string') q = q.eq("status", query.status);
     if (query._id) q = q.eq("id", query._id);
-    if (query.id) q = q.eq("id", query.id);
 
     const { data, error } = await q.order("created_at", { ascending: false });
-    if (error) throw error;
+    if (error) {
+      console.error("[CampaignModel] Find Error:", error);
+      throw error;
+    }
     return (data || []).map(row => CampaignModel.fromDb(row));
   }
 
